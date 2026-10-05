@@ -1122,30 +1122,29 @@ COMMENT ON COLUMN IM_FORM_OPTION.UPDATE_DATE       IS '最後更新時間';
 COMMENT ON COLUMN IM_FORM_OPTION.UPDATE_BY         IS '最後更新人員工號';
 
 
--- 結構依《DB規範》工作表「Table Schema」的 SYS_PARAM 範例（NAME／VALUE 複合主鍵、DESCR／MEMO 必填）。
--- 與範例的差異（皆依規範條文，條文與範例不一致時以條文為準）：
---   VALUE 依規範 9 改 CHAR 語意（參數值可能含中文）；共同欄位順序依規範 6；
+-- 結構參考《DB規範》工作表「Table Schema」的 SYS_PARAM 範例（複合主鍵、說明與備註必填），欄名與型別依規範條文：
+--   欄名加 PARAM_ 實體前綴（規範 11：避免保留字或易混淆的單字欄名，NAME 在列，須加前綴）、說明用字典縮寫 DESC（規範 3）；
+--   PARAM_VALUE 依規範 9 改 CHAR 語意（參數值可能含中文）；共同欄位順序依規範 6；
 --   STATUS／CREATE_DATE 加 default、STATUS 加 CHECK；CREATE_BY／UPDATE_BY 依規範 13 存工號
--- 例外：NAME／VALUE／DESCR／MEMO 欄名沿用範例，屬規範 11（單字欄名須加實體前綴）例外，送 DBA 審時列問
 CREATE TABLE SYS_PARAM (
-    NAME                VARCHAR2(30)    NOT NULL,
-    VALUE               VARCHAR2(50 CHAR) NOT NULL,
-    DESCR               VARCHAR2(50 CHAR) NOT NULL,
-    MEMO                VARCHAR2(50 CHAR) NOT NULL,
+    PARAM_NAME          VARCHAR2(30)    NOT NULL,
+    PARAM_VALUE         VARCHAR2(50 CHAR) NOT NULL,
+    PARAM_DESC          VARCHAR2(50 CHAR) NOT NULL,
+    PARAM_MEMO          VARCHAR2(50 CHAR) NOT NULL,
     STATUS              NUMBER(1)       DEFAULT 1 NOT NULL,
     CREATE_DATE         DATE            DEFAULT SYSDATE NOT NULL,
     CREATE_BY           VARCHAR2(30)    NOT NULL,
     UPDATE_DATE         DATE,
     UPDATE_BY           VARCHAR2(30),
-    CONSTRAINT PK_SYS_PARAM        PRIMARY KEY (NAME, VALUE),
+    CONSTRAINT PK_SYS_PARAM        PRIMARY KEY (PARAM_NAME, PARAM_VALUE),
     CONSTRAINT CK_SYS_PARAM_STATUS CHECK (STATUS IN (0, 1))
 );
 
-COMMENT ON TABLE  SYS_PARAM IS '系統參數表（規範共用輔助表）。目的：站台名稱、上傳限制、流程政策、存取紀錄排除 IP 等可調參數。來源：本檔預載＋後台維護。主鍵：NAME＋VALUE。多值參數（如 EXCLUDE_IP）一值一列；ADMIN_EMAIL 由部署時填入，不預載';
-COMMENT ON COLUMN SYS_PARAM.NAME        IS '參數名稱：SITE_NAME／SITE_SHORT_NAME／TIME_ZONE／UPLOAD_MAX_MB／UPLOAD_MAX_FILES／FLOW_POLICY／EXCLUDE_IP／ADMIN_EMAIL';
-COMMENT ON COLUMN SYS_PARAM.VALUE       IS '參數值';
-COMMENT ON COLUMN SYS_PARAM.DESCR       IS '參數說明';
-COMMENT ON COLUMN SYS_PARAM.MEMO        IS '備註（值域或範例）';
+COMMENT ON TABLE  SYS_PARAM IS '系統參數表（規範共用輔助表）。目的：站台名稱、上傳限制、流程政策、存取紀錄排除 IP 等可調參數。來源：本檔預載＋後台維護。主鍵：PARAM_NAME＋PARAM_VALUE。多值參數（如 EXCLUDE_IP）一值一列；ADMIN_EMAIL 由部署時填入，不預載。欄名依規範 11 加 PARAM_ 前綴，與規範範例工作表的 NAME／VALUE／DESCR／MEMO 不同';
+COMMENT ON COLUMN SYS_PARAM.PARAM_NAME  IS '參數名稱：SITE_NAME／SITE_SHORT_NAME／TIME_ZONE／UPLOAD_MAX_MB／UPLOAD_MAX_FILES／FLOW_POLICY／EXCLUDE_IP／ADMIN_EMAIL';
+COMMENT ON COLUMN SYS_PARAM.PARAM_VALUE IS '參數值';
+COMMENT ON COLUMN SYS_PARAM.PARAM_DESC  IS '參數說明';
+COMMENT ON COLUMN SYS_PARAM.PARAM_MEMO  IS '備註（值域或範例）';
 COMMENT ON COLUMN SYS_PARAM.STATUS      IS '狀態：1 已生效／0 未生效，default 1';
 COMMENT ON COLUMN SYS_PARAM.CREATE_DATE IS '建立時間，default SYSDATE';
 COMMENT ON COLUMN SYS_PARAM.CREATE_BY   IS '建立人員工號';
@@ -1328,12 +1327,12 @@ INSERT INTO IM_FLOW_STEP (FLOW_ID, SEQ_NO, STEP_CODE, STEP_NAME, APPR_TYPE, ROLE
     ('imported', 1, 'it_manager', '紙本主管核章', 'ROLE', 'it_manager', 0, 0, 'POST_HOC', 'SYSTEM');
 
 -- 8.5 系統參數（ADMIN_EMAIL 部署時填入；EXCLUDE_IP 一 IP 一列，預設無）
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('SITE_NAME',        '機房設備異動申請系統', '站台全名',             '顯示於頁首與郵件',            'SYSTEM');
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('SITE_SHORT_NAME',  'Infra Manager',        '站台簡稱',             '顯示於瀏覽器標題',            'SYSTEM');
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('TIME_ZONE',        'Asia/Taipei',          '顯示時區',             'IANA 時區名稱',               'SYSTEM');
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('UPLOAD_MAX_MB',    '50',                   '單檔上傳上限（MB）',   '正整數',                      'SYSTEM');
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('UPLOAD_MAX_FILES', '30',                   '單次上傳檔案數上限',   '正整數',                      'SYSTEM');
-INSERT INTO SYS_PARAM (NAME, VALUE, DESCR, MEMO, CREATE_BY) VALUES ('FLOW_POLICY',      'full_only',            '簽核流程選用政策',     'full_only／by_priority',      'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('SITE_NAME',        '機房設備異動申請系統', '站台全名',             '顯示於頁首與郵件',            'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('SITE_SHORT_NAME',  'Infra Manager',        '站台簡稱',             '顯示於瀏覽器標題',            'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('TIME_ZONE',        'Asia/Taipei',          '顯示時區',             'IANA 時區名稱',               'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('UPLOAD_MAX_MB',    '50',                   '單檔上傳上限（MB）',   '正整數',                      'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('UPLOAD_MAX_FILES', '30',                   '單次上傳檔案數上限',   '正整數',                      'SYSTEM');
+INSERT INTO SYS_PARAM (PARAM_NAME, PARAM_VALUE, PARAM_DESC, PARAM_MEMO, CREATE_BY) VALUES ('FLOW_POLICY',      'full_only',            '簽核流程選用政策',     'full_only／by_priority',      'SYSTEM');
 
 
 -- 8.6 表單選項（來源：舊系統 form-schema.json）
