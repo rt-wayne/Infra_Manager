@@ -1,0 +1,22 @@
+###################################
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-04
+### 變更說明: API URL 改為 domain / port / path 分開設定，由 db.connect.api.domain.path 組合
+###           變更單 #4：DB 別名段落移到 database.properties（只留連線資訊 API 的四個 key）
+### 首次建置：複製本檔為 host.properties 後填值（host.properties 不進 git）
+###################################
+
+###################################
+###     DB 連線資訊 API
+###################################
+### 程式只讀 db.connect.api.domain.path；它由下面三個 key 以 ${} 組合而成，三個 key 只要填值即可
+###   rt-api.domain      : 協定 + 主機，例：http://<api-host>
+###   db.connect.api.port: 冒號 + port，例：:<port>（走預設 port 時留空）
+###   db.connect.api.path: 路徑，例：/dbConnect/api/v1/connection-info
+### 組合結果例：http://<api-host>:<port>/dbConnect/api/v1/connection-info
+### 四個 key 都要保留（值可空）：被 ${} 引用的 key 不存在時啟動會失敗
+### 全部留空時程式仍可啟動，第一次呼叫 DbClient 才會丟 DbConnectException
+rt-api.domain=
+db.connect.api.port=
+db.connect.api.path=
+db.connect.api.domain.path=${rt-api.domain}${db.connect.api.port}${db.connect.api.path}

@@ -1,0 +1,6 @@
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-03
+### 首次建置：複製本檔為 application.properties（不進 git）
+### 變更單 #2：spring.application.name 為 Spring 用的專案名，不影響 log 落點（log 目錄寫在 logback-spring.xml）
+spring.application.name=infra_manager_java
+server.port=8080

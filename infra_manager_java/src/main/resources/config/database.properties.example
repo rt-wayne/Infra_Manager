@@ -1,0 +1,14 @@
+###################################
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-04
+### 變更說明: 新增：DB 別名設定檔（變更單 #4，自 host.properties 移出）
+### 首次建置：複製本檔為 database.properties 後填值（database.properties 不進 git）
+###################################
+
+###################################
+###     DB 別名
+###################################
+### key 名稱使用者自訂，value 為連線資訊 API 認得的實際名稱（alias）
+### 在 DAO 以 @Value("${<key>}") 讀出後傳給 DbClient；本檔由 com.mpx.Application 載入，common.db 不讀本檔
+### 例：
+# db.connect.nova=<alias>

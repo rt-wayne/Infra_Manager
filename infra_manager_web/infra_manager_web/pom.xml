@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	============================================================
+	AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+	修改日期: 2026-10-05
+	變更說明: 新增：infra_manager_web 殼 jar（前端 Web 範本，規格 v4），以 store_web_barcode 的 pom 為底稿
+	          依賴只留 starter-web / starter-test（不用 lombok、devtools、configuration-processor、手寫 jackson）
+	          validate 階段把 src/frontend（前端 build 產物）複製到 target/classes/static
+	          artifactId / name / description 內的 infra_manager_web 由產生器換成專案名
+	          jdk25 階段 3（規格 D-33、D-36、§15.2）：Spring Boot 4.1.1、Java 25；starter 改 webmvc＋restclient＋test
+	============================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.1</version>
+		<relativePath/>
+	</parent>
+	<groupId>com.mpx</groupId>
+	<artifactId>infra_manager_web</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>infra_manager_web</name>
+	<description>infra_manager_web - Spring Boot web shell (serves Vue build, forwards /api/v1 to backend API)</description>
+	<properties>
+		<java.version>25</java.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<!-- RestTemplateBuilder 在 Boot 4 搬到 restclient 模組（RestTemplateConfig 用） -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-restclient</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<artifactId>maven-resources-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-frontend</id>
+						<phase>validate</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${basedir}/target/classes/static/</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${basedir}/src/frontend</directory>
+									<filtering>false</filtering>
+									<excludes>
+										<exclude>.gitkeep</exclude>
+									</excludes>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+</project>

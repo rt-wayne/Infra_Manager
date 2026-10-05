@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	============================================================
+	AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+	修改日期: 2026-10-05
+	變更說明: 新增：前端殼 jar 的 log 設定（規格 v4），比照 dev_template：單一檔案 appender 掛 root，按日切檔保留 30 天
+	          LOG_DIR 與檔名直接寫專案名（兩處 infra_manager_web），產生器建專案時換成新專案名
+	          jdk25：移除 scan／scanPeriod（設定檔在 jar 內無法監看，Boot 4 的 logback 會印 WARN）
+	============================================================
+-->
+<configuration debug="false">
+
+    <!-- 專案名直接寫在 LOG_DIR 與 fileNamePattern 兩處；產生器建專案時會換成新專案名 -->
+    <property name="LOG_DIR" value="/home/tomcat/log/infra_manager_web"/>
+    <property name="PATTERN_FORMAT" value="%d [%thread] [%logger{36}] %-5level - %msg%n"/>
+
+    <!--輸出到 Console-->
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PATTERN_FORMAT}</pattern>
+        </encoder>
+    </appender>
+
+    <!--輸出到檔案-->
+    <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/infra_manager_web.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PATTERN_FORMAT}</pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="console"/>
+        <appender-ref ref="file"/>
+    </root>
+
+    <!-- common.web 的 logger，只設 level；輸出走 root 的 console 與 file -->
+    <logger name="com.mpx.common.web" level="info"/>
+
+</configuration>

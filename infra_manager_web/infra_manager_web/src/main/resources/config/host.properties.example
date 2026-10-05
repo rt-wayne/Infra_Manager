@@ -1,0 +1,21 @@
+###################################
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-04
+### 變更說明: 新增：前端殼 jar 的後端 API 位址（規格 v4）
+### 首次建置：複製本檔為 host.properties 後填值（host.properties 不進 git）
+###################################
+
+###################################
+###     後端 API
+###################################
+### 程式（com.mpx.common.web.ApiForwarder）只讀 backend.api.domain.path；它由下面三個 key 以 ${} 組合而成
+###   backend.api.domain : 協定 + 主機，例：http://<api-host>
+###   backend.api.port   : 冒號 + port，例：:<port>（走預設 port 時留空）
+###   backend.api.path   : 後端 API 的根路徑，例：/<backend-context-path>/api/v1
+### 組合結果例：http://<api-host>:<port>/<backend-context-path>/api/v1
+### 四個 key 都要保留（值可空）：被 ${} 引用的 key 不存在時啟動會失敗
+### 留空時殼 jar 仍可啟動，頁面呼叫 API 時才會失敗（回 500）
+backend.api.domain=
+backend.api.port=
+backend.api.path=
+backend.api.domain.path=${backend.api.domain}${backend.api.port}${backend.api.path}

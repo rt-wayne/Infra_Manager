@@ -1,0 +1,12 @@
+# Local config files may hold environment values; only the .example templates are tracked
+*.properties
+!*.properties.example
+# Maven Wrapper 設定（非環境真檔，要進版控）
+!.mvn/wrapper/maven-wrapper.properties
+
+# Maven build output
+target/
+
+# Frontend build output (npm run build in the _frontend project writes here)
+src/frontend/*
+!src/frontend/.gitkeep

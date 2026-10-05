@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	============================================================
+	AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+	修改日期: 2026-10-05
+	變更說明: 新增：比照 px_sales_chart 精簡為單一檔案 appender，按日切檔保留 30 天（規格 §9）
+	          變更單 #1：專案名改由 spring.application.name 帶入（APP_NAME），LOG_DIR 與檔名不再寫死；
+	          檔案 appender 掛到 root，業務 log 與 common.db（logger devTemplate.db）寫進同一檔；複製後不必改本檔
+	          變更單 #2：不再由 spring.application.name 間接取得專案名，LOG_DIR 與檔名直接寫專案名；
+	          產生器建專案時換成新專案名，手動複製者改 LOG_DIR 與 fileNamePattern 兩處；spring.application.name 不再影響 log 落點
+	          jdk25：移除 scan／scanPeriod（設定檔在 jar 內無法監看，Boot 4 的 logback 會印 WARN）
+	============================================================
+-->
+<configuration debug="false">
+
+    <!-- 專案名直接寫在 LOG_DIR 與 fileNamePattern 兩處；產生器建專案時會換成新專案名 -->
+    <property name="LOG_DIR" value="/home/tomcat/log/infra_manager_java"/>
+    <property name="PATTERN_FORMAT" value="%d [%thread] [%logger{36}] %-5level - %msg%n"/>
+
+    <!--輸出到 Console-->
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PATTERN_FORMAT}</pattern>
+        </encoder>
+    </appender>
+
+    <!--輸出到檔案-->
+    <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/infra_manager_java.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PATTERN_FORMAT}</pattern>
+        </encoder>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="console"/>
+        <appender-ref ref="file"/>
+    </root>
+
+    <!-- common.db 的 logger，只設 level；輸出走 root 的 console 與 file -->
+    <logger name="devTemplate.db" level="info"/>
+
+</configuration>

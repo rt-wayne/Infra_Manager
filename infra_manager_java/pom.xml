@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	============================================================
+	AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+	修改日期: 2026-10-05
+	變更說明: 新增：dev_template（Spring Boot 開發範本，本版只含 DB 連線元件 common.db），以 px_sales_chart pom 為底稿
+	          依賴只留 web / jdbc / Oracle 驅動 / mssql-jdbc / test（規格 D-01），不用 lombok
+	          v3：description 帶專案名 dev_template，供產生器取代（規格 §14.4）
+	          v3.4：新增 mssql-jdbc（不寫版本，由 Spring Boot parent 管理），common.db 支援 ORACLE 與 MSSQL
+	          jdk25 階段 2（規格 D-33～D-36）：Spring Boot 4.1.1、Java 25；starter 改 Boot 4 模組化名稱
+	          （webmvc、restclient〔RestTemplateBuilder 所在模組〕、jdbc、test）；
+	          ojdbc8 → ojdbc17，orai18n 改 com.oracle.database.nls 同版號，版號只定義在 properties 一處；
+	          mssql-jdbc 仍交 Boot BOM 管理（實際解析 13.4.0.jre11）
+	============================================================
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>4.1.1</version>
+		<relativePath/>
+	</parent>
+	<groupId>com.mpx</groupId>
+	<artifactId>infra_manager_java</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>infra_manager_java</name>
+	<description>infra_manager_java - Spring Boot development template (common.db: DB connection info from API)</description>
+	<properties>
+		<java.version>25</java.version>
+		<!-- Oracle 驅動版號（ojdbc17 與 orai18n 必須同版，只在這裡定義一次；規格 D-34） -->
+		<oracle.jdbc.version>23.26.3.0.0</oracle.jdbc.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<!-- RestTemplateBuilder 在 Boot 4 搬到 restclient 模組（DbConnectApiClient 自建 RestTemplate 用） -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-restclient</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle.database.jdbc</groupId>
+			<artifactId>ojdbc17</artifactId>
+			<version>${oracle.jdbc.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.oracle.database.nls</groupId>
+			<artifactId>orai18n</artifactId>
+			<version>${oracle.jdbc.version}</version>
+		</dependency>
+		<!-- MSSQL 支援；版本由 spring-boot-starter-parent（BOM）管理，不手寫 -->
+		<dependency>
+			<groupId>com.microsoft.sqlserver</groupId>
+			<artifactId>mssql-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+		</plugins>
+	</build>
+</project>
