@@ -93,7 +93,7 @@ Vue 3 SPA，共 20 頁：
 | 後端 | Java 25 LTS（Temurin）+ Spring Boot 4.1.x（patch 版本 S1 動工當天確認，見 BACKLOG.md 第 39 項） |
 | 建置工具 | Maven，一律透過 Maven Wrapper（`mvnw`）執行 |
 | 前端 | Vue 3.5 + TypeScript + Vite 8 + Vue Router + Pinia；Node 24；UI 元件庫待定，見 BACKLOG.md 第 19 項 |
-| 資料庫 | Oracle 19c；schema 由 Flyway 社群版管理（社群版支援 19c）；初始 DDL 為 `db/oracle/V1__init_schema.sql`（31 張表），S1 移入 Flyway migration 目錄 |
+| 資料庫 | Oracle 19c；不使用 Flyway，建表與改表一律由開發方提供 SQL 檔（放 `db/oracle/`），由使用者以 `rd_user` 手動執行；初始 DDL 為 `db/oracle/V1__init_schema.sql`（31 張表） |
 | JDBC 驅動 | ojdbc17 + orai18n（中文字元集轉換用；引入前過套件審查） |
 | DB 憑證 | 公司套件 px-secret-resolver（來源 Azure Artifacts） |
 | 測試 | 後端 JUnit 5；前端單元測試 Vitest；端對端 Playwright |
@@ -106,7 +106,7 @@ Vue 3 SPA，共 20 頁：
 | 帳號 | 用途 |
 |---|---|
 | `rd_user` | 具建表權限，用來執行 DDL；表建在此帳號的 schema 下 |
-| `ap_user` | 應用程式連線用；對 31 張表只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 為 `db/oracle/grant_ap_user.sql`，是否加同義詞見 BACKLOG.md 第 76 項） |
+| `ap_user` | 應用程式連線用；對 31 張表只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 為 `db/oracle/grant_ap_user.sql`，不建同義詞） |
 
 #### Oracle 19c 連動規則（全系統適用）
 - 空字串 `''` 在 Oracle 等於 NULL → 規則為「DB 存 NULL、API 回 `""`」，在 JPA 轉換層統一處理
@@ -121,7 +121,7 @@ Vue 3 SPA，共 20 頁：
 ```
 backend/    Spring Boot REST API
 frontend/   Vue 3 SPA
-db/oracle/  初始 DDL（V1__init_schema.sql；S1 移入 backend 的 Flyway migration 目錄）與 ap_user 授權 SQL（grant_ap_user.sql，非 migration、由 rd_user 手動執行）
+db/oracle/  初始 DDL（V1__init_schema.sql）與 ap_user 授權 SQL（grant_ap_user.sql），皆由 rd_user 手動執行
 db/tools/   gen_table_doc.js（從 V1 DDL 重產給 DBA 審的 xlsx）
 docs/db/    Table_List_Schema.xlsx（給 DBA 審的 Table List／Table Schema，由 db/tools 產生）
 docs/plan/  規劃文件（歷史文件，不再更新）
@@ -167,8 +167,8 @@ docs/plan/  規劃文件（歷史文件，不再更新）
   - 勾選類（設備類別、申請原因、影響範圍、檢核項）以名稱對應 `IM_FORM_OPTION`，對不到者先建 `STATUS` 0 的選項再掛
   - 匯入時 `CREATE_DATE`／`CREATE_BY` 寫入原始值；代理鍵若指定原值匯入，匯入完成後須重設該表 identity 起點（步驟見 `SETUP.md`）
   - AI 報告重算 `SNAP_HASH`：對 `aiReview.appSnapshot` 與目前申請單都用「key 排序 JSON + SHA-256」重算（舊 `computeAppHash` 是 `sha1(JSON.stringify(...))`，依賴 JS key 插入順序，Java 算不出同值）；舊值保留在 `LEGACY_SHA1`。`IM_AI_REVIEW`、`IM_TMPL` 主鍵沿用舊 id
-  - 已刪除目錄匯成軟刪除（`IM_APP.STATUS` 0 + `DELETE_*` 欄位）；舊系統因「當天檔案數 + 1」取號，有 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），主鍵 `APP_ID` 不允許重複，這 4 張已刪除單須改號匯入，改號規則待定，見 BACKLOG.md 第 75 項；它們所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。舊系統附件放在 `public/uploads/<單號>/`，撞號的已刪除單與現存單共用同一資料夾，附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以資料夾判定；改號後實體檔是否搬移一併在第 75 項決定
-  - 申請單編號：舊單沿用原編號匯入（上述 4 張已刪除單除外）；依各前綴各日最大序號回填 `IM_APP_SEQ.LAST_NO`，避免切換當日新單、以及日後補匯同日紙本單撞號；回填與已刪除單改號的先後順序依第 75 項（改號規則）而定
+  - 已刪除目錄匯成軟刪除（`IM_APP.STATUS` 0 + `DELETE_*` 欄位）；舊系統因「當天檔案數 + 1」取號，有 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），主鍵 `APP_ID` 不允許重複，這 4 張已刪除單改號匯入：原單號後加後綴 `-D`（如 `IM20260505-002-D`），不從序號表取號；它們所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。舊系統附件放在 `public/uploads/<單號>/`，撞號的已刪除單與現存單共用同一資料夾，附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以資料夾判定；改號後實體檔是否搬移待定，見 BACKLOG.md 第 75 項
+  - 申請單編號：舊單沿用原編號匯入（上述 4 張已刪除單除外）；依各前綴各日最大序號回填 `IM_APP_SEQ.LAST_NO`，避免切換當日新單、以及日後補匯同日紙本單撞號；先改號、後回填，回填時排除帶 `-D` 後綴的單號
   - 舊簽核人 `Eric` 與角色代碼 `dept_manager` 不在帳號檔，對應方式待定，見 BACKLOG.md 第 60 項
   - 自由文字欄（如檢核表執行人含 `&`）一律以 JDBC 參數綁定寫入，不產生 INSERT 腳本經 SQL*Plus 執行
   - 舊版次快照沒有表單內容；`IM_APP_VER.FORM_JSON` 為 NOT NULL，舊版次匯入時填什麼待定，見 BACKLOG.md 第 69 項

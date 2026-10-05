@@ -64,7 +64,7 @@ DDL 檔：`db/oracle/V1__init_schema.sql`（建立 31 張表與預載資料，�
 
 ## 授權 ap_user 存取（執行授權 SQL）
 
-DDL 執行成功（上一節第 7 步無輸出）後才做，且 `ap_user` 須已由 DBA 建立（否則 31 行都會報 `ORA-01917`）。授權檔：`db/oracle/grant_ap_user.sql`，把 31 張表的 SELECT／INSERT／UPDATE／DELETE 授權給 `ap_user`。本檔不是 Flyway migration，新增表時要補授權並重跑。
+DDL 執行成功（上一節第 7 步無輸出）後才做，且 `ap_user` 須已由 DBA 建立（否則 31 行都會報 `ORA-01917`）。授權檔：`db/oracle/grant_ap_user.sql`，把 31 張表的 SELECT／INSERT／UPDATE／DELETE 授權給 `ap_user`。本專案不使用 Flyway，新增表時要在授權檔補一行並重跑。
 
 1. 開 cmd，切到 repo 根目錄，設定字元集並確認 log 資料夾存在（同上一節第 2、3 步的 `cd`、`NLS_LANG`、`mkdir`；`@db\oracle\...` 是相對路徑，不在根目錄會報 `SP2-0310`）
 2. 以 `rd_user` 登入（表的擁有者才能授權；密碼提示出現再手動輸入）：
@@ -83,7 +83,7 @@ DDL 執行成功（上一節第 7 步無輸出）後才做，且 `ap_user` 須�
    findstr /C:"ORA-" /C:"SP2-" C:\temp\grant_ap_user.log
    ```
 
-應用程式連線時以 `rd_user` 的 schema 名稱當前綴存取；是否另建同義詞由 DBA 審後決定。
+應用程式連線時以 `rd_user` 的 schema 名稱當前綴存取；不建同義詞。
 
 ## 匯入後重設 identity
 

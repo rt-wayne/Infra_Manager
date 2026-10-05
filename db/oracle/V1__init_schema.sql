@@ -2,7 +2,7 @@
 -- Infra Manager（Java 重寫版）Oracle 19c 初始 schema
 -- 依《DB規範_V1_20261002_JLA》16 條命名規範撰寫；業務簡碼 IM_（Infra Manager）。
 -- 以具 CREATE TABLE 權限的帳號登入後直接執行，表即建在該帳號（schema）下；
--- S1 骨架建好後整檔搬到 backend/src/main/resources/db/migration/ 交 Flyway。
+-- 本專案不使用 Flyway，建表與改表的 SQL 一律由人手動執行。
 -- 本檔為 UTF-8；若用 SQL*Plus／SQLcl 手動執行，執行前須將用戶端字元集設成 UTF-8
 -- （SQL*Plus：NLS_LANG=TRADITIONAL CHINESE_TAIWAN.AL32UTF8），否則中文會以亂碼寫入。
 --

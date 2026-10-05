@@ -29,7 +29,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 1 | S1 骨架：Spring Boot 4.1 + Vue/Vite 單一 repo（Maven，以 mvnw 執行）、`db/oracle/V1__init_schema.sql` 接上 Flyway 成為第一支 migration、`/api/health`、Vue 首頁殼、`start-new.bat`（3201）、SETUP.md 補啟動方式與 px-secret-resolver 的 Azure Artifacts 設定；**開工前先裁示：測試用 Oracle 怎麼連（本機無 Docker，預設方案為單元測試 H2 Oracle 相容模式 + 開發期連公司 19c 測試 schema，DBA 支援與測試 schema 待確認）**。完成條件：瀏覽器開 3201 看到新首頁；`mvnw test` 通過 | 1 | — |
+| 1 | S1 骨架：Spring Boot 4.1 + Vue/Vite 單一 repo（Maven，以 mvnw 執行）、資料庫不用 Flyway（建表改表一律由開發方提供 SQL、使用者以 `rd_user` 手動執行；日後 Spring Session JDBC 的 session 表等另給 SQL，並補進 `grant_ap_user.sql`）、JPA 主鍵一律用 `GenerationType.IDENTITY`（V1 為 identity 欄，用 `SEQUENCE` 會找不到序列）、`/api/health`、Vue 首頁殼、`start-new.bat`（3201）、SETUP.md 補啟動方式與 px-secret-resolver 的 Azure Artifacts 設定；**開工前先裁示：測試用 Oracle 怎麼連（本機無 Docker，預設方案為單元測試 H2 Oracle 相容模式 + 開發期連公司 19c 測試 schema，DBA 支援與測試 schema 待確認）**。完成條件：瀏覽器開 3201 看到新首頁；`mvnw test` 通過 | 1 | — |
 | 2 | S2 帳號與登入：`IM_USER`／`IM_ROLE`／`IM_USER_ROLE_MAP` 表已在 V1；users.json 匯入器（需第 60 項帳號工號對照表）；session + CSRF；登入／登出／改密碼。**開工前先裁示第 16 項（登入方式）**；若選 A 才做 scrypt 相容 encoder。完成條件：舊帳號能登入；預設密碼導向改密碼頁；匯入 22 人筆數一致 | 2 | — |
 | 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則） | 3 | — |
 | 4 | S4 唯讀列表與檢視：GET 列表（6 篩選、待我簽核置頂）、GET 檢視（關卡、附件下載權限）。完成條件：抽 5 張新舊畫面一致 | 4 | — |
@@ -85,9 +85,8 @@
 | 70 | `IM_ACCESS_LOG` 保留天數與清理排程未定（S14 前決定）。完成條件含：同步改寫 `IM_ACCESS_LOG` 表說明的「見 BACKLOG」（該句進 DB 資料字典；V1 已執行時需另開 migration） | 2026-10-05 | — |
 | 72 | `IM_LOGIN_TOKEN` 表說明寫「取代舊系統記憶體 session」，與 PRD 的 server-side session + Spring Session JDBC 設計不一致；此表是 remember-me token 還是 session 本體未定。已裁示先保留 `IM_LOGIN_TOKEN` 表，與第 16 項（登入方式）、第 28 項（remember-me）一起決定 | 2026-10-05 | — |
 | 73 | 附件根目錄的位置與設定方式未定（`IM_ATTACH.FILE_PATH` 存相對路徑；正式環境 Docker 容器要掛哪個 volume、由哪個設定鍵或環境變數指定根目錄）；S3 匯入附件並核對 sha256 時就要用到，S3 前決定 | 2026-10-05 | — |
-| 75 | 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），`APP_ID` 為主鍵不可重複，已刪除單改號匯入的規則未定：A 取同日下一個號碼（格式統一，但舊信件與紙本上的號碼對不到）／B 原號加後綴如 `IM20260505-002-D`（對得上舊信件，但格式不一致、回填 `IM_APP_SEQ` 時要排除）。其所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以 `public/uploads/<單號>/` 資料夾判定（撞號的兩張單共用同一資料夾），改號後實體檔是否搬移一併決定。回填 `IM_APP_SEQ` 的順序：改號不從序號表取號則改號後回填，從序號表取號則先回填再改號。S3 前決定 | 2026-10-05 | — |
+| 75 | 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），`APP_ID` 為主鍵不可重複，使用者已裁示改號規則為 B：原號加後綴 `-D`（如 `IM20260505-002-D`），不從序號表取號，先改號、後回填 `IM_APP_SEQ`，回填時排除帶 `-D` 後綴的單號。其所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以 `public/uploads/<單號>/` 資料夾判定（撞號的兩張單共用同一資料夾），改號後實體檔是否搬移尚未決定，S3 前決定 | 2026-10-05 | — |
 | 76 | 等 DBA 回覆：(1) 審 `docs/db/Table_List_Schema.xlsx`（31 張表、417 個欄位，使用者裁示照現狀送出；`SYS_PARAM` 已依規範條文把欄名改為 `PARAM_NAME`／`PARAM_VALUE`／`PARAM_DESC`／`PARAM_MEMO`，與規範範例工作表不同；此說明已寫進 `SYS_PARAM` 的表說明，隨 xlsx 送出）；(2) 第 61 項的 29 個縮寫（使用者裁示維持現狀）一併送。稽核性質的表（`IM_ACCESS_LOG`、`IM_APP_EVENT`、`IM_APP_VER`）使用者已裁示維持四種權限都給（清理排程見第 70 項、改號匯入見第 75 項需要 UPDATE／DELETE），不送 DBA。回覆若要改欄名，改動範圍是 V1 DDL、PRD，並須重產 xlsx（`node db/tools/gen_table_doc.js`）；改表名則授權檔也要改。`ap_user` 存取方式已裁示維持以 schema 前綴存取、不建同義詞，不送 DBA。S1 不受阻擋，但 DDL 在正式環境執行前須有回覆 | 2026-10-05 | — |
-| 77 | Flyway 與手動 DDL／授權如何銜接未定，S1 前決定：(1) Flyway 用哪個帳號執行（`ap_user` 無建表權限、也看不到 `flyway_schema_history`；用 `rd_user` 則 schema 已有表卻無執行紀錄）；(2) V1 已由 `rd_user` 手動執行時須設 baseline（宣告 V1 已執行過）；(3) `flyway_schema_history`、日後 Spring Session JDBC 的 session 表不在 31 張授權清單內，授權範圍要補；(4) S1 的 JPA 主鍵策略須用 `GenerationType.IDENTITY`（V1 為 identity 欄，用 `SEQUENCE` 策略會找不到序列） | 2026-10-05 | — |
 | 74 | 表單選項已定為後台可維護（`IM_FORM_OPTION`），但 PRD API 規格只有唯讀的 `GET /api/form-schema`；寫入 API 的端點、權限，以及可否刪除或只能停用選項未定，S14 前決定 | 2026-10-05 | — |
 
 ### 舊系統已知漏洞（依第 30 項 ⑯ 決定後處理）
