@@ -106,7 +106,7 @@ Vue 3 SPA，共 20 頁：
 | 帳號 | 用途 |
 |---|---|
 | `rd_user` | 具建表權限，用來執行 DDL；表建在此帳號的 schema 下 |
-| `ap_user` | 應用程式連線用；對 31 張表只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 與是否加同義詞見 BACKLOG.md 第 68 項） |
+| `ap_user` | 應用程式連線用；對 31 張表只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 為 `db/oracle/grant_ap_user.sql`，是否加同義詞見 BACKLOG.md 第 76 項） |
 
 #### Oracle 19c 連動規則（全系統適用）
 - 空字串 `''` 在 Oracle 等於 NULL → 規則為「DB 存 NULL、API 回 `""`」，在 JPA 轉換層統一處理
@@ -121,7 +121,9 @@ Vue 3 SPA，共 20 頁：
 ```
 backend/    Spring Boot REST API
 frontend/   Vue 3 SPA
-db/oracle/  初始 DDL（V1__init_schema.sql；S1 移入 backend 的 Flyway migration 目錄）
+db/oracle/  初始 DDL（V1__init_schema.sql；S1 移入 backend 的 Flyway migration 目錄）與 ap_user 授權 SQL（grant_ap_user.sql，非 migration、由 rd_user 手動執行）
+db/tools/   gen_table_doc.js（從 V1 DDL 重產給 DBA 審的 xlsx）
+docs/db/    Table_List_Schema.xlsx（給 DBA 審的 Table List／Table Schema，由 db/tools 產生）
 docs/plan/  規劃文件（歷史文件，不再更新）
 ```
 
@@ -239,7 +241,7 @@ docs/plan/  規劃文件（歷史文件，不再更新）
 #### 範本、表單選項、系統參數
 - `IM_TMPL` 範本：PK `TMPL_ID`（沿用舊 id）；`TMPL_NAME`；`FORM_JSON`；`OWNER_USER_ID`（IX）；`USE_CNT`、`LAST_USE_DATE`、`LAST_USE_USER_ID`
 - `IM_FORM_OPTION` 表單選項主檔：PK `FORM_OPTION_ID`；UK (`GROUP_CODE`, `OPTION_CODE`)；`GROUP_CODE` 八群組——PRIO 優先等級（附說明、時限、流程說明、範例與對應 `FLOW_ID`）、CATG 設備類別、CATG_ITEM 類別子項（`UP_FORM_OPTION_ID` 指向所屬 CATG，只有本群組可填）、REASON 申請原因、SCOPE 影響範圍、CHECK_LIST 執行檢核項、EXEC_RESULT 執行結果、SIGN_ROLE 列印表單簽名欄角色；`OPTION_NAME`、`COLOR_CODE`、`SORT_NO`。預載自舊系統 form-schema.json，之後由 admin 在後台維護；停用（`STATUS` 0）的選項不在表單顯示，既有單據仍可帶出名稱
-- `SYS_PARAM` 系統參數：PK (`NAME`, `VALUE`)；`DESCR`、`MEMO` 必填；欄名沿用規範範例，屬規範 11（單字欄名須加實體前綴）例外，送 DBA 審時列問（BACKLOG.md 第 59 項）。多值參數一值一列。參數：`SITE_NAME`、`SITE_SHORT_NAME`、`TIME_ZONE`（Asia/Taipei）、`UPLOAD_MAX_MB`（預載 50）、`UPLOAD_MAX_FILES`（預載 30）、`FLOW_POLICY`（full_only／by_priority，預載 full_only）、`EXCLUDE_IP`（預設無）、`ADMIN_EMAIL`（部署時填入，不預載）
+- `SYS_PARAM` 系統參數：PK (`NAME`, `VALUE`)；`DESCR`、`MEMO` 必填；欄名沿用規範範例，屬規範 11（單字欄名須加實體前綴）例外，已列入送 DBA 審的檔案，等回覆（BACKLOG.md 第 76 項）。多值參數一值一列。參數：`SITE_NAME`、`SITE_SHORT_NAME`、`TIME_ZONE`（Asia/Taipei）、`UPLOAD_MAX_MB`（預載 50）、`UPLOAD_MAX_FILES`（預載 30）、`FLOW_POLICY`（full_only／by_priority，預載 full_only）、`EXCLUDE_IP`（預設無）、`ADMIN_EMAIL`（部署時填入，不預載）
 
 #### 郵件、存取紀錄、外部快取
 - `IM_MAIL_OUTBOX` 郵件寄件匣：PK `MAIL_OUTBOX_ID`；IX (`MAIL_STATUS_CODE`, `CREATE_DATE`)；`TO_JSON`／`CC_JSON`／`BCC_JSON`；`MAIL_SUBJ`；`HTML_BODY`（CLOB）；`MAIL_STATUS_CODE`（PENDING／SENT／FAILED）；`TRY_CNT`；`ERROR_TEXT`；`SMTP_MSG_ID`；`SEND_DATE`；`META_JSON`
