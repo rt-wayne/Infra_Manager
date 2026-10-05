@@ -97,7 +97,7 @@ Vue 3 SPA，共 20 頁：
 | JDBC 驅動 | ojdbc17 + orai18n（中文字元集轉換用；引入前過套件審查） |
 | DB 憑證 | 公司套件 px-secret-resolver（來源 Azure Artifacts） |
 | 測試 | 後端 JUnit 5；前端單元測試 Vitest；端對端 Playwright |
-| 單元測試 DB | H2 Oracle 相容模式；開發期整合測試連公司 19c 測試 schema（本機沒有 Docker，不用 Testcontainers）。此做法 S1 開工前正式裁示，見 BACKLOG.md 第 1 項 |
+| 測試 DB | 使用者裁示（2026-10-05）：測試一律直接連使用者提供的那台公司 Oracle 19c（不用 H2、不用 Testcontainers）；連線資訊走環境變數與 px-secret-resolver，不進 repo |
 | 部署 | Docker 容器，主機作業系統 Rocky Linux 9.7 |
 
 #### 資料庫帳號
