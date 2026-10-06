@@ -16,9 +16,9 @@ package com.mpx.infra_manager_java.web;
 //           TypeMismatchException → 400；客戶端斷線（AsyncRequestNotUsableException）只記 debug；
 //           真正未預期的例外才記 error，並加記堆疊前 10 個 frame（類別.方法:行號，不含訊息）方便定位。
 //           2026-10-06 S2：加 AccessDeniedException → 403、AuthenticationException → 401（方法層安全丟出時與 filter 層同一種回應）
+//           2026-10-06 S2 回合二：summarize 的實作移到 util.Throwables（匯入器 CLI 也要用），本類別保留同名轉呼
 // ============================================================
 
-import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -43,6 +43,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.mpx.common.db.DbConnectException;
 import com.mpx.infra_manager_java.config.SecurityConfig;
 import com.mpx.infra_manager_java.util.TextTooLongException;
+import com.mpx.infra_manager_java.util.Throwables;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -146,19 +147,8 @@ public class ApiExceptionHandler {
 		return false;
 	}
 
-	/** 例外類別名 + 鏈中第一個 SQLException 的錯誤碼；不帶訊息 */
+	/** 例外類別名 + 鏈中第一個 SQLException 的錯誤碼；不帶訊息（實作在 util.Throwables，匯入器共用） */
 	static String summarize(Throwable e) {
-		StringBuilder sb = new StringBuilder(e.getClass().getSimpleName());
-		int depth = 0;
-		for (Throwable t = e.getCause(); t != null && depth < 32; t = t.getCause(), depth++) {
-			if (t instanceof SQLException sqlEx && sqlEx.getErrorCode() > 0) {
-				sb.append(" / ").append(t.getClass().getSimpleName()).append(" code=").append(sqlEx.getErrorCode());
-				break;
-			}
-			if (t.getCause() == t) {
-				break;
-			}
-		}
-		return sb.toString();
+		return Throwables.summarize(e);
 	}
 }

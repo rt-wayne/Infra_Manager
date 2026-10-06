@@ -17,10 +17,14 @@ package com.mpx.infra_manager_java.config;
 //           刪掉沒作用的 .sessionFixation()（手動登入不會經過 Spring 的登入後策略；換 session id 由 AuthService 自己做）。
 //           CsrfTokenRepository 改成 bean，AuthService 登入時輪替、登出時清掉 IM_XSRF（與 Spring 內建 formLogin 行為一致）。
 //           403（CSRF 不符、預設密碼未改、權限不足）記 log：路徑、工號、類別、來源 IP（security.md A09）。
+//           2026-10-06 S2 回合二：SecurityFilterChain、session cookie、SameSite 三個 bean 加 @ConditionalOnWebApplication(SERVLET)，
+//           匯入器以 web-application-type=none 啟動時沒有 HttpSecurity 也能起；PasswordEncoder 等純物件 bean 不設條件（匯入器要用）
 // ============================================================
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.web.server.servlet.CookieSameSiteSupplier;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.context.annotation.Bean;
@@ -106,6 +110,7 @@ public class SecurityConfig {
 	}
 
 	@Bean
+	@ConditionalOnWebApplication(type = Type.SERVLET)
 	public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, SecurityContextRepository contextRepository,
 			CsrfTokenRepository csrfRepository) throws Exception {
 		http.securityContext(sc -> sc.securityContextRepository(contextRepository))
@@ -158,6 +163,7 @@ public class SecurityConfig {
 
 	/** session cookie 屬性與閒置逾時；在 Boot 自己的 session 設定之後執行，所以會覆蓋 properties 的同名設定 */
 	@Bean
+	@ConditionalOnWebApplication(type = Type.SERVLET)
 	public ServletContextInitializer sessionCookieInitializer() {
 		return servletContext -> {
 			SessionCookieConfig cookie = servletContext.getSessionCookieConfig();
@@ -171,6 +177,7 @@ public class SecurityConfig {
 
 	/** Tomcat 層對 IM_ 開頭的 cookie 加 SameSite=Lax（Servlet 標準的 SessionCookieConfig 沒有 SameSite 欄位） */
 	@Bean
+	@ConditionalOnWebApplication(type = Type.SERVLET)
 	public CookieSameSiteSupplier imCookieSameSite() {
 		return CookieSameSiteSupplier.ofLax().whenHasNameMatching("IM_.*");
 	}

@@ -9,8 +9,11 @@ package com.mpx.infra_manager_java.config;
 //           自行宣告 MultipartConfigElement 後，Boot 的 MultipartAutoConfiguration 只讓出這一個 bean（@ConditionalOnMissingBean），
 //           StandardServletMultipartResolver 仍由 Boot 建立，所以 application.properties 的 spring.servlet.multipart.resolve-lazily=true
 //           有效：只有真的取 MultipartFile 參數的端點才會解析並落暫存檔，其他端點收到 multipart 不會寫磁碟（code review 2026-10-06）。
+//           2026-10-06 S2 回合二：加 @ConditionalOnWebApplication(SERVLET)，匯入器以 web-application-type=none 啟動時不建這些 servlet bean
 // ============================================================
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +24,7 @@ import com.mpx.infra_manager_java.web.BodyLimitFilter;
 import jakarta.servlet.MultipartConfigElement;
 
 @Configuration
+@ConditionalOnWebApplication(type = Type.SERVLET)
 public class RequestLimitConfig {
 
 	/** JSON 等非 multipart 本文上限 */

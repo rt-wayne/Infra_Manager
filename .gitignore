@@ -28,6 +28,10 @@ npm-debug.log*
 *.log
 logs/
 
+# 使用者匯入的真實資料（真帳號、真工號、舊密碼雜湊）：db/import/ 一律不進版控，只放行 *.sample.*
+db/import/*
+!db/import/*.sample.*
+
 # OS
 .DS_Store
 Thumbs.db

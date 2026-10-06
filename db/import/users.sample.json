@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "id": "wayne",
+      "name": "Wayne (測試帳號)",
+      "email": "wayne@example.com",
+      "title": "工程師",
+      "department": "資訊部",
+      "phone": "",
+      "roles": [
+        "admin"
+      ],
+      "active": true
+    }
+  ]
+}

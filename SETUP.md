@@ -156,6 +156,26 @@ DDL 執行成功（上兩節的 log 檢查都無輸出）後才做，且 `ap_use
 
 應用程式連線時以 `rd_user` 的 schema 名稱當前綴存取；不建同義詞。
 
+## 匯入使用者（舊系統 users.json）
+
+把舊 Node 系統的帳號匯進 `IM_USER`／`IM_USER_ROLE_MAP`。用的是同一個後端 jar，以非 web 模式啟動（不開 3202、不影響正在跑的服務），跑完自動結束。**每次匯入都會把檔內全員的密碼重設為「帳號小寫」（預設密碼），已改過密碼的人也會被重設**，匯入前先通知使用者。
+
+1. 先完成「建置與測試」第 1 步（`target/` 內要有 `infra_manager_java-*.jar`），且真實的 `config/host.properties`、`config/database.properties` 已就位（匯入要連公司 Oracle；`db.schema.itflow` 也要設）
+2. 準備兩個檔，放在 `db/import/`（此資料夾除 `*.sample.*` 外全部在 `.gitignore`，不管檔名怎麼取都不會進版控）：
+   - `users.real.json`：直接複製舊系統的 `data/users.json`。只讀 `id`、`name`、`email`、`title`、`department`、`phone`、`roles`、`active`，其他欄位（含舊 scrypt 雜湊、remember token）忽略
+   - `user_mapping.real.csv`：帳號工號對照，UTF-8，第一列表頭固定 `login_id,user_id`，之後每列「舊帳號,工號」（逗號分隔、不要加引號；帳號不分大小寫，工號最長 30 bytes）。範例見 `user_mapping.sample.csv`
+   對照表還沒到位時，用 repo 內的 `users.sample.json` ＋ `user_mapping.sample.csv`（只有測試帳號 `wayne`，假工號 `T0001`）
+3. 在 cmd 或 Git Bash、repo 根目錄執行（檔案路徑換成實際檔名；cmd 把 `$(ls ...)` 換成實際 jar 檔名）：
+   ```
+   cd infra_manager_java
+   java -jar $(ls target/infra_manager_java-*.jar) --spring.main.web-application-type=none --im.import.users=../db/import/users.real.json --im.import.mapping=../db/import/user_mapping.real.csv
+   ```
+4. 看最後幾行 log：
+   - `匯入完成 新增=… 更新=… 角色新增/啟用=… 角色停用=… 略過=…` 代表成功（結束碼 0），整批已 commit
+   - `對照表沒有、未匯入的帳號：…` 列出對照表缺的帳號，補進 csv 後整檔重跑即可（可重複執行，既有帳號走更新）
+   - `匯入失敗，共 N 個問題，一筆都未寫入` 後逐條列出原因（未知角色、欄位過長、帳號已屬於別的工號⋯⋯），一筆都不會寫入（結束碼 1）；修正資料後重跑
+5. 匯入規則：帳號去頭尾空白、轉小寫（中間空白保留，如 `alan kuo`）存 `LOGIN_ID`；工號由對照表決定；`''` 存 NULL；`active:false` 存 `STATUS=0`；角色以 `IM_ROLE` 主檔為準，不在主檔的角色整批失敗；既有工號走更新，檔內不再出現的角色設 `STATUS=0`；`CREATE_BY`／`UPDATE_BY` 為 `SYSTEM`
+
 ## 匯入後重設 identity
 
 匯入舊資料時若對 identity 欄位指定原值，匯入完成後要把該欄的序號推到現有最大值之後，否則下一筆新資料會撞號。此指令需要表的 ALTER 權限，**須以 `rd_user`（表的擁有者）執行**，`ap_user` 會失敗。對每一個指定過原值的 identity 欄執行（`表`、`欄` 換成實際表名與欄名）：
