@@ -7,7 +7,7 @@ package com.mpx.infra_manager_web.controller;
 //           以 MockMvc standalone 走真實路由、MockRestServiceServer 假扮後端，不啟動 Spring context、不連網
 //           驗證：cookie 只轉 IM_ 開頭（含多個 Cookie header）、X-IM-XSRF 與 X-Forwarded-For 有帶、各 method 與查詢字串、本文原樣轉
 //                （沒送 Content-Type 就不補）、3xx／4xx／5xx 原樣回（Location 不轉）、Set-Cookie 只回 IM_ 開頭、
-//                後端沒給 Content-Type 時標 octet-stream、連不上／逾時回 502 並記根因、位址未設定回 502、
+//                後端沒給 Content-Type 時標 octet-stream、連不上／逾時回 502 並記整條例外鏈、位址未設定或不合法回 502、
 //                路徑跳脫（..、%2e%2e、;）與格式錯誤（%zz、壞 Content-Type、非 /api/v1 開頭）回 400 且後端沒被呼叫、
 //                context path 不會被算進後端路徑、base 結尾斜線自動去掉、剛好打 /api/v1、HEAD 轉 OPTIONS 不轉
 //           2026-10-06 第二輪複審：補 Content-Length 有帶、非 http(s) 位址回 502、502 的 log 記整條例外鏈
@@ -336,7 +336,7 @@ class ApiProxyControllerTest {
 	}
 
 	@Test
-	void backendTimeout_returns502AndLogsRootCause(CapturedOutput output) throws Exception {
+	void backendTimeout_returns502AndLogsCauseChain(CapturedOutput output) throws Exception {
 		server.expect(requestTo(BASE + "/health"))
 				.andRespond(withException(new HttpTimeoutException("read timed out")));
 
@@ -350,7 +350,7 @@ class ApiProxyControllerTest {
 	@Test
 	void baseUrlEmptyOrInvalid_returns502WithoutCallingBackend() throws Exception {
 		for (String bad : new String[] { "", "   ", "api.example.invalid:3202", "/api", "http://", "http://user@h:1/api", "http://h:1/api?x",
-				"ftp://h:1/api", "file:///api", "http://my_host:3202/api" }) {
+				"ftp://h:1/api", "file:///api", "http://my_host:3202/api", "http://h:99999/api" }) {
 			mockMvc = mockMvcFor(bad);
 			mockMvc.perform(get("/api/v1/health"))
 					.andExpect(status().isBadGateway())

@@ -56,7 +56,8 @@ class BackendClientConfigTest {
 
 	@BeforeEach
 	void startBackend() throws IOException {
-		backend = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+		// 綁定與用戶端位址都寫 127.0.0.1：getLoopbackAddress() 在 preferIPv6Addresses 時會回 ::1，與用戶端對不上
+		backend = HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0);
 		backend.createContext("/api", exchange -> {
 			received.add(new Received(exchange.getRequestMethod(), exchange.getRequestURI().getRawPath(),
 					exchange.getProtocol(), exchange.getRequestHeaders(), exchange.getRequestBody().readAllBytes()));
@@ -137,7 +138,7 @@ class BackendClientConfigTest {
 	@Test
 	void closedPort_returns502AndLogsConnectException(CapturedOutput output) throws Exception {
 		int freePort;
-		try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+		try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
 			freePort = socket.getLocalPort();
 		}
 		mockMvc = mockMvcFor("http://127.0.0.1:" + freePort + "/api");

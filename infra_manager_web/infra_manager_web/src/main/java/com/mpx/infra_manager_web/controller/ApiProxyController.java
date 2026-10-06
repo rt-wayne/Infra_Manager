@@ -149,6 +149,7 @@ public class ApiProxyController {
 	 * 去尾斜線後解析；必須是 http／https 的絕對位址（有 host）且不含 userinfo／查詢／fragment，否則回 null。
 	 * 其他 scheme 不收：JDK HttpClient 對非 http(s) 丟 IllegalArgumentException，不是 IOException，會變成 500 而非 502。
 	 * 主機名含底線時 java.net.URI 的 getHost() 回 null，也會落到這裡回 null。
+	 * port 超過 65535 也不收：URI 解析不檢查上限，連線時 InetSocketAddress 丟 IllegalArgumentException，同樣會變 500。
 	 */
 	static URI parseBase(String baseUrl) {
 		String s = baseUrl == null ? "" : baseUrl.trim();
@@ -160,7 +161,7 @@ public class ApiProxyController {
 		}
 		try {
 			URI u = URI.create(s);
-			if (!isHttpScheme(u.getScheme()) || u.getHost() == null || u.getRawUserInfo() != null
+			if (!isHttpScheme(u.getScheme()) || u.getHost() == null || u.getPort() > 65535 || u.getRawUserInfo() != null
 					|| u.getRawQuery() != null || u.getRawFragment() != null) {
 				return null;
 			}
@@ -284,7 +285,7 @@ public class ApiProxyController {
 	}
 
 	/**
-	 * 失敗原因的類別名，由外往內以 " <- " 串起（最多 8 層、不含 Spring 的包裝層），
+	 * 失敗原因的類別名，由外往內以 " <- " 串起（最多 8 層；跳過最外層 Spring 包裝，包裝層沒有 cause 時才用它自己），
 	 * 例：ConnectException <- ClosedChannelException。只記最底層會把「後端沒在聽」顯示成「連線被中途關閉」
 	 */
 	static String causeChain(Throwable wrapper) {
