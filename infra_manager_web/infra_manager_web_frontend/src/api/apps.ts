@@ -3,9 +3,10 @@
 // 修改日期: 2026-10-06
 // 變更說明: 新增：申請單 API（S4 回合二），經殼 jar 轉發到後端 /api/apps
 //           listApps：空字串與 false 的篩選不送（後端沒帶 from／to 時預設近 90 天）；400 帶訊息、401 交給 http 的處理器
+//           S4 回合三：加 getApp（檢視頁）
 // ============================================================
 import http from './http'
-import type { AppListFilter, AppListResponse } from '../types/app'
+import type { AppDetail, AppListFilter, AppListResponse } from '../types/app'
 
 export function toListParams(filter: AppListFilter, page: number): Record<string, string> {
   const p: Record<string, string> = {}
@@ -24,4 +25,9 @@ export function toListParams(filter: AppListFilter, page: number): Record<string
 /* GET /apps */
 export function listApps(filter: AppListFilter, page: number): Promise<AppListResponse> {
   return http.get<AppListResponse>('/apps', { params: toListParams(filter, page) }).then(r => r.data)
+}
+
+/* GET /apps/{id}；單號格式由後端檢查（不符或查無 404「找不到申請單」） */
+export function getApp(appId: string): Promise<AppDetail> {
+  return http.get<AppDetail>('/apps/' + encodeURIComponent(appId)).then(r => r.data)
 }

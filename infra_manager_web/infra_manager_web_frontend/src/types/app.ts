@@ -3,6 +3,8 @@
 // 修改日期: 2026-10-06
 // 變更說明: 新增：申請單列表的型別（S4 回合二）；對應後端 model.changerequest.AppListItem／AppListResponse
 //           狀態、來源後端只回代碼，中文名稱在這裡對應；優先等級名稱與顏色由後端帶
+//           S4 回合三：狀態中文改用舊系統畫面用語（回合二自訂的「審核中／核准／待治理審查／結案／退件」與舊系統不一致）；
+//           補檢視頁型別 AppDetail（對應後端 model.changerequest.AppDetail）與關卡、事件、版次、作業方式等代碼的中文對照
 // ============================================================
 
 export type AppStatus =
@@ -18,14 +20,15 @@ export type AppSource = 'ONLINE' | 'IMPORTED'
 
 export type AppPriority = 'P1' | 'P2' | 'P3' | 'P4'
 
+/** 與舊系統 views/partials/status-pill.ejs 用語一致 */
 export const STATUS_LABELS: Record<AppStatus, string> = {
   DRAFT: '草稿',
-  IN_REVIEW: '審核中',
-  APPROVED: '核准',
+  IN_REVIEW: '簽核中',
+  APPROVED: '已核准(待執行)',
   IN_EXECUTION: '執行中',
-  PENDING_REVIEW: '待治理審查',
-  EXECUTED: '結案',
-  REJECTED: '退件'
+  PENDING_REVIEW: '待治理審核',
+  EXECUTED: '已結案',
+  REJECTED: '已退件'
 }
 
 export const SOURCE_LABELS: Record<AppSource, string> = {
@@ -80,4 +83,250 @@ export interface AppListFilter {
   from: string
   /** yyyy-MM-dd */
   to: string
+}
+
+/** 代碼對中文；查不到就原樣顯示 */
+export function labelOf(map: Record<string, string>, code: string | null | undefined): string {
+  if (!code) return ''
+  return map[code] ?? code
+}
+
+export const WORK_MODE_LABELS: Record<string, string> = {
+  ONSITE: '現場處理',
+  REMOTE: '遠端連線處理'
+}
+
+export const LOC_SOURCE_LABELS: Record<string, string> = {
+  IMPACT: '機房盤點連動',
+  MANUAL: '手動填寫'
+}
+
+export const STEP_STATUS_LABELS: Record<string, string> = {
+  WAITING: '未輪到',
+  PENDING: '待簽核',
+  APPROVED: '同意',
+  REJECTED: '退件',
+  SKIPPED: '跳過',
+  CANCELLED: '已取消'
+}
+
+export const APPR_STATUS_LABELS: Record<string, string> = {
+  PENDING: '進行中',
+  APPROVED: '全數核准',
+  REJECTED: '退件',
+  RECALLED: '申請人撤回',
+  CANCELLED: '已取消'
+}
+
+export const VERSION_CLOSE_LABELS: Record<string, string> = {
+  REJECTED: '簽核退件',
+  EXEC_REJECTED: '執行階段退回',
+  GOV_RETURNED: '治理複驗退回',
+  RECALLED: '撤回後改版'
+}
+
+export const EVENT_LABELS: Record<string, string> = {
+  SUBMIT: '送審',
+  RECALL: '撤回',
+  EXEC_REJECT: '執行階段退回',
+  GOV_PASS: '治理複驗通過',
+  GOV_RETURN: '治理複驗退回',
+  RESUBMIT: '補件重送',
+  DELETE: '刪除',
+  RESTORE: '還原'
+}
+
+export const ATTACH_OWNER_LABELS: Record<string, string> = {
+  APP: '申請單',
+  STEP: '簽核關卡',
+  EVENT: '狀態事件',
+  AI: 'AI 審查'
+}
+
+export interface AppApplicant {
+  userId: string | null
+  name: string | null
+  deptName: string | null
+  tel: string | null
+  email: string | null
+}
+
+export interface AppSupplier {
+  name: string | null
+  contact: string | null
+  tel: string | null
+  headCount: number | null
+}
+
+/** groupCode：CATG／CATG_ITEM／REASON／SCOPE；upCode 只有 CATG_ITEM 有；otherText 只有 CATG 的「其他」補充有 */
+export interface AppOption {
+  groupCode: string
+  code: string
+  name: string
+  upCode: string | null
+  otherText: string | null
+}
+
+export interface AppEquipment {
+  seqNo: number | null
+  name: string | null
+  assetNo: string | null
+  modelNo: string | null
+  serialNo: string | null
+  purpose: string | null
+  mgmtIp: string | null
+}
+
+export interface AppPlanStep {
+  seqNo: number | null
+  text: string | null
+}
+
+export interface AppSchedule {
+  start: string | null
+  end: string | null
+  estHours: number | null
+}
+
+export interface AppLocation {
+  sourceCode: string | null
+  areaName: string | null
+  rackName: string | null
+  uRange: string | null
+  siteId: string | null
+  rackId: string | null
+  uStart: number | null
+  uEnd: number | null
+  omitReason: string | null
+}
+
+export interface AppCheckItem {
+  seqNo: number | null
+  code: string | null
+  name: string | null
+  done: boolean
+  doneAt: string | null
+  executor: string | null
+}
+
+export interface AppExecution {
+  verNo: number | null
+  actualStart: string | null
+  actualEnd: string | null
+  resultCode: string | null
+  resultName: string | null
+  exception: boolean
+  exceptionDesc: string | null
+  followUp: boolean
+  followUpDesc: string | null
+  memo: string | null
+  executorName: string | null
+  closedAt: string | null
+}
+
+export interface AppStep {
+  seqNo: number | null
+  stepCode: string | null
+  stepName: string | null
+  /** SEQUENTIAL／POST_HOC */
+  stepMode: string | null
+  notifyOnly: boolean
+  statusCode: string | null
+  deciderName: string | null
+  decidedAt: string | null
+  memo: string | null
+  candidateNames: string[]
+}
+
+/** apprId 為 null：沒有簽核實例（草稿、已收回），steps 由流程定義展開、全部 WAITING */
+export interface AppApproval {
+  apprId: number | null
+  statusCode: string | null
+  startedAt: string | null
+  closedAt: string | null
+  steps: AppStep[]
+}
+
+export interface AppAttachment {
+  attachId: number
+  ownerType: string | null
+  ownerId: string | null
+  fileName: string | null
+  byteQty: number | null
+  mimeType: string | null
+  uploadedAt: string | null
+}
+
+export interface AppVersion {
+  verNo: number | null
+  closeStatusCode: string | null
+  reason: string | null
+  snapAt: string | null
+}
+
+export interface AppEvent {
+  eventId: number
+  verNo: number | null
+  code: string | null
+  userName: string | null
+  at: string | null
+  memo: string | null
+}
+
+export interface AppPermissions {
+  canDecide: boolean
+  canResubmit: boolean
+  canRecall: boolean
+  canExecute: boolean
+  canReview: boolean
+  canDelete: boolean
+  canAiReview: boolean
+  canSubmit: boolean
+  canEditDraft: boolean
+  /** ADMIN／APPLICANT_PRE_REVIEW，canDelete 為 true 時才有 */
+  deleteMode: string | null
+}
+
+/** GET /apps/{id} 回應；日期時間 yyyy-MM-dd HH:mm、日期 yyyy-MM-dd（台灣時間） */
+export interface AppDetail {
+  appId: string
+  title: string | null
+  prioCode: string | null
+  prioName: string | null
+  prioColor: string | null
+  statusCode: string
+  sourceCode: string | null
+  flowId: string | null
+  flowName: string | null
+  verNo: number | null
+  applicant: AppApplicant
+  applyDate: string | null
+  selfExec: boolean
+  supplierExec: boolean
+  workModeCode: string | null
+  remoteMethod: string | null
+  supplier: AppSupplier
+  workSubject: string | null
+  impactDesc: string | null
+  workDetail: string | null
+  riskDesc: string | null
+  rollbackPlan: string | null
+  categories: AppOption[]
+  reasons: AppOption[]
+  otherReason: string | null
+  scopes: AppOption[]
+  equipments: AppEquipment[]
+  planSteps: AppPlanStep[]
+  schedule: AppSchedule
+  location: AppLocation
+  resubmitMemo: string | null
+  checklist: AppCheckItem[]
+  execution: AppExecution | null
+  approval: AppApproval
+  attachments: AppAttachment[]
+  versions: AppVersion[]
+  events: AppEvent[]
+  permissions: AppPermissions
+  createdAt: string | null
+  updatedAt: string | null
 }

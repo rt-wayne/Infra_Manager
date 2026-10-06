@@ -5,7 +5,8 @@
             篩選：狀態／優先／來源／只看待我簽核／關鍵字（≤100 字）／建立日期起迄；起日晚於迄日直接提示、不打 API
             兩個日期都不填時後端只回近 90 天（畫面有提示）；「清除」回到預設條件重查
             失敗 → toast 後端訊息並顯示錯誤文字，不顯示成「沒有符合條件」；401 由登入處理器導頁，本頁不另出 toast
-            單號暫為純文字，檢視頁（/apps/:id）在回合三補上連結；AI 審查欄位待第 17 項
+            AI 審查欄位待第 17 項
+            S4 回合三：單號改成連到檢視頁 /apps/:id；prioStyle 移到 utils/format
 -->
 <template>
   <main>
@@ -72,7 +73,7 @@
           <tbody>
             <tr v-for="row in data.items" :key="row.appId" :class="{ mine: row.mine }">
               <td>
-                <span class="id">{{ row.appId }}</span>
+                <router-link class="id" :to="{ name: APP_VIEW_ROUTE, params: { id: row.appId } }">{{ row.appId }}</router-link>
                 <span v-if="row.mine" class="badge">待我簽核</span>
               </td>
               <td>
@@ -116,6 +117,8 @@ import { listApps } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
 import { PRIORITIES, SOURCE_LABELS, STATUS_LABELS, type AppListFilter, type AppListResponse } from '../types/app'
+import { APP_VIEW_ROUTE } from '../router/names'
+import { prioStyle } from '../utils/format'
 
 const { toast } = useToast()
 
@@ -130,12 +133,6 @@ let applied: AppListFilter = emptyFilter()
 const data = ref<AppListResponse | null>(null)
 const loading = ref(false)
 const error = ref('')
-
-const HEX = /^#[0-9a-fA-F]{6}$/
-
-function prioStyle(color: string | null): Record<string, string> {
-  return color && HEX.test(color) ? { backgroundColor: color, color: '#fff' } : {}
-}
 
 async function load(page: number): Promise<void> {
   loading.value = true
@@ -211,7 +208,7 @@ main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 .c-status { width: 112px; }
 .c-step { width: 150px; }
 .c-time { width: 104px; }
-.id { font-weight: 700; color: var(--navy); }
+.id { font-weight: 700; color: var(--blue); }
 .badge { display: inline-block; margin-top: 2px; padding: 0 8px; border-radius: 999px; background: var(--teal); color: #fff; font-size: 13px; font-weight: 700; }
 .prio { display: inline-block; min-width: 36px; text-align: center; padding: 0 6px; border-radius: 6px; background: var(--line); font-weight: 700; font-size: 15px; }
 .title { font-weight: 700; }
