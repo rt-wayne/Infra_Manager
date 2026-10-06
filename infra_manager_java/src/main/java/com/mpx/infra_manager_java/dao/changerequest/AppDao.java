@@ -10,6 +10,8 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //             排序待我簽核置頂、再依建立時間新到舊；分頁 OFFSET／FETCH，每頁 AppListQuery.PAGE_SIZE。
 //           WHERE 片段依條件有無拼接，但片段全是程式常數、值一律 :name 綁定；q 以 LIKE 比對單號、標題、作業主題、
 //             申請人姓名（UPPER 後 contains，% _ \ 以 \ 跳脫）。表名經 DbSchema.table()。
+//           S4 審查修正（Claude Opus 5.5，2026-10-06）：findOptions 的類別「其他」補充改為獨立一段 UNION ALL
+//             （原本以子項的 FORM_OPTION_ID JOIN 指向類別的 IM_APP_CATG_OTHER，永遠撈不到）
 // ============================================================
 
 import java.util.HashMap;
@@ -191,17 +193,23 @@ public class AppDao {
 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
 	}
 
-	/** 類別（含子項與「其他」補充）、原因、影響範圍一次取回，依群組、排序號排序 */
+	/**
+	 * 類別子項、類別「其他」補充、原因、影響範圍一次取回，依群組、排序號排序。
+	 * IM_APP_CATG_MAP 指向 CATG_ITEM、IM_APP_CATG_OTHER 指向 CATG，兩者 FORM_OPTION_ID 不會相等，所以「其他」另成一段
+	 */
 	public List<OptionRow> findOptions(String appId) {
 		String option = schema.table("IM_FORM_OPTION");
 		String sql = "SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, PO.OPTION_CODE AS UP_OPTION_CODE,"
-				+ " OT.OTHER_TEXT, O.SORT_NO"
+				+ " CAST(NULL AS VARCHAR2(500 CHAR)) AS OTHER_TEXT, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_CATG_MAP") + " M"
 				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = M.FORM_OPTION_ID"
 				+ " LEFT JOIN " + option + " PO ON PO.FORM_OPTION_ID = O.UP_FORM_OPTION_ID"
-				+ " LEFT JOIN " + schema.table("IM_APP_CATG_OTHER")
-				+ " OT ON OT.APP_ID = M.APP_ID AND OT.FORM_OPTION_ID = M.FORM_OPTION_ID AND OT.STATUS = 1"
 				+ " WHERE M.APP_ID = :appId AND M.STATUS = 1"
+				+ " UNION ALL"
+				+ " SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, OT.OTHER_TEXT, O.SORT_NO"
+				+ " FROM " + schema.table("IM_APP_CATG_OTHER") + " OT"
+				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = OT.FORM_OPTION_ID"
+				+ " WHERE OT.APP_ID = :appId AND OT.STATUS = 1"
 				+ " UNION ALL"
 				+ " SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, NULL, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_REASON_MAP") + " M"

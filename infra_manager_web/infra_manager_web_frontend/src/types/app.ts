@@ -110,14 +110,6 @@ export const STEP_STATUS_LABELS: Record<string, string> = {
   CANCELLED: '已取消'
 }
 
-export const APPR_STATUS_LABELS: Record<string, string> = {
-  PENDING: '進行中',
-  APPROVED: '全數核准',
-  REJECTED: '退件',
-  RECALLED: '申請人撤回',
-  CANCELLED: '已取消'
-}
-
 export const VERSION_CLOSE_LABELS: Record<string, string> = {
   REJECTED: '簽核退件',
   EXEC_REJECTED: '執行階段退回',

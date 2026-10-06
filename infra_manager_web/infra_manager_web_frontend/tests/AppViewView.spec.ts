@@ -5,6 +5,8 @@
 //           驗：依路由 id 載入；狀態中文、簽核關卡與候選人、附件 KB 與停用的下載鈕；
 //           動作鈕依 permissions 顯示、點了出「此功能尚未開放」；草稿簽核欄的「尚未送審」註記；
 //           執行確認列依治理事件顯示退回；404 出 toast 並顯示錯誤；401 不另出 toast；換 id 重新載入
+//           S4 審查修正：類別「其他」補充的顯示；結果未填時例外／後續追蹤顯示 —；快速切換單號丟棄過期回應；
+//           「送審」改為只在事件紀錄表斷言（原斷言會被任何位置的同字命中）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -109,6 +111,12 @@ async function mountView(id = 'IM20261006-001') {
   return { wrapper, router }
 }
 
+/** 找表頭為 label 的那一列，回傳它的第一個資料格文字 */
+function cellOf(wrapper: Awaited<ReturnType<typeof mountView>>['wrapper'], label: string): string | undefined {
+  const row = wrapper.findAll('tr').find(tr => tr.findAll('th').some(th => th.text() === label))
+  return row?.findAll('td')[0]?.text()
+}
+
 function toastMsgs(): string[] {
   return useToast().toasts.value.map(t => t.msg)
 }
@@ -159,7 +167,8 @@ describe('AppViewView', () => {
     const download = wrapper.find('.files button')
     expect(download.attributes('disabled')).toBeDefined()
 
-    expect(text).toContain('送審')
+    const events = wrapper.findAll('table.grid').at(-1)
+    expect(events?.text()).toContain('送審')
     expect(wrapper.find('.actions').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -233,6 +242,57 @@ describe('AppViewView', () => {
 
     expect(toastMsgs()).toHaveLength(before)
     expect(wrapper.find('[role="alert"]').text()).toBe('尚未登入')
+    wrapper.unmount()
+  })
+
+  it('類別「其他」補充顯示為「類別（其他）：…」', async () => {
+    getMock.mockResolvedValue(
+      detail({
+        categories: [
+          { groupCode: 'CATG', code: 'server_storage', name: '伺服器/儲存', upCode: null, otherText: 'SAN 擴充櫃 DAE-02' },
+          { groupCode: 'CATG_ITEM', code: 'server_storage_01', name: '伺服器上架', upCode: 'server_storage', otherText: null }
+        ]
+      })
+    )
+    const { wrapper } = await mountView()
+
+    const chips = wrapper.findAll('.chips li').map(li => li.text())
+    expect(chips).toContain('伺服器/儲存（其他）：SAN 擴充櫃 DAE-02')
+    expect(chips).toContain('伺服器上架')
+    wrapper.unmount()
+  })
+
+  it('執行紀錄已建立但結果未填時，例外與後續追蹤顯示 —；填了才顯示有／無', async () => {
+    const ex = {
+      verNo: 1, actualStart: '2026-10-07 22:00', actualEnd: null, resultCode: null, resultName: null,
+      exception: false, exceptionDesc: null, followUp: false, followUpDesc: null, memo: null, executorName: '王小明', closedAt: null
+    }
+    getMock.mockResolvedValue(detail({ statusCode: 'IN_EXECUTION', execution: ex }))
+    const { wrapper } = await mountView()
+    expect(cellOf(wrapper, '例外／衍生事件')).toBe('—')
+    expect(cellOf(wrapper, '後續追蹤事項')).toBe('—')
+    wrapper.unmount()
+
+    getMock.mockResolvedValue(detail({ statusCode: 'PENDING_REVIEW', execution: { ...ex, resultCode: 'OK', resultName: '成功', followUp: true } }))
+    const second = await mountView()
+    expect(cellOf(second.wrapper, '例外／衍生事件')).toBe('無')
+    expect(cellOf(second.wrapper, '後續追蹤事項')).toBe('有')
+    second.wrapper.unmount()
+  })
+
+  it('快速切換單號時，慢回來的舊回應不會蓋掉新單', async () => {
+    let resolveOld: (d: AppDetail) => void = () => {}
+    getMock.mockImplementationOnce(() => new Promise<AppDetail>(r => { resolveOld = r }))
+    const { wrapper, router } = await mountView()
+
+    getMock.mockResolvedValueOnce(detail({ appId: 'IM20261006-002', title: '新單' }))
+    await router.push('/apps/IM20261006-002')
+    await flushPromises()
+    resolveOld(detail({ title: '舊單' }))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('新單')
+    expect(wrapper.text()).not.toContain('舊單')
     wrapper.unmount()
   })
 

@@ -7,6 +7,8 @@
             與舊畫面的差異：選項只列有勾選的（舊畫面連未勾選的也列成 ☐），作業類別不分組（後端只帶上層代碼、沒帶名稱）
             動作鈕依 permissions 顯示，S4 一律 toast「此功能尚未開放」；附件下載鈕停用（殼 jar 二進位透傳留 S6，BACKLOG 第 79 項）
             失敗 → toast 後端訊息並顯示錯誤文字（404「找不到申請單」）；401 由登入處理器導頁，本頁不另出 toast
+            S4 審查修正：類別「其他」補充顯示為「類別（其他）：…」；長字串一律可斷行（1024 寬不出水平捲軸）；
+            快速切換單號時丟棄過期回應；執行結果未填時「例外」「後續追蹤」顯示 —，不顯示成「無」
 -->
 <template>
   <main>
@@ -72,7 +74,7 @@
           <p v-if="app.categories.length === 0" class="muted">（未填）</p>
           <ul v-else class="chips">
             <li v-for="c in app.categories" :key="c.groupCode + c.code">
-              {{ c.name }}<template v-if="c.otherText">：{{ c.otherText }}</template>
+              {{ c.name }}<template v-if="c.otherText">（其他）：{{ c.otherText }}</template>
             </li>
           </ul>
         </section>
@@ -190,14 +192,14 @@
               <tr>
                 <th>例外／衍生事件</th>
                 <td colspan="3">
-                  {{ app.execution.exception ? '有' : '無' }}
+                  {{ yesNo(app.execution, app.execution.exception) }}
                   <div v-if="app.execution.exceptionDesc" class="pre">{{ app.execution.exceptionDesc }}</div>
                 </td>
               </tr>
               <tr>
                 <th>後續追蹤事項</th>
                 <td colspan="3">
-                  {{ app.execution.followUp ? '有' : '無' }}
+                  {{ yesNo(app.execution, app.execution.followUp) }}
                   <div v-if="app.execution.followUpDesc" class="pre">{{ app.execution.followUpDesc }}</div>
                 </td>
               </tr>
@@ -320,6 +322,7 @@ import {
   labelOf,
   type AppDetail,
   type AppEvent,
+  type AppExecution,
   type AppPermissions
 } from '../types/app'
 import { kb, prioStyle } from '../utils/format'
@@ -358,6 +361,12 @@ function notYet(): void {
 
 function dash(v: string | null | undefined): string {
   return v == null || v === '' ? '—' : v
+}
+
+/** 執行結果還沒填時旗標只是預設 0，不代表「無」 */
+function yesNo(ex: AppExecution, flag: boolean): string {
+  if (!ex.resultCode) return '—'
+  return flag ? '有' : '無'
 }
 
 const executorLabel = computed(() => {
@@ -421,12 +430,18 @@ const govRow = computed<SignRow>(() => {
   return { who: '', at: '', memo: '', text: '—', cls: 'gray' }
 })
 
+/** 每次載入遞增；回應回來時編號不是最新就丟掉，避免慢回來的舊單蓋掉新單 */
+let seq = 0
+
 async function load(id: string): Promise<void> {
+  const mine = ++seq
   app.value = null
   error.value = ''
   try {
-    app.value = await getApp(id)
+    const data = await getApp(id)
+    if (mine === seq) app.value = data
   } catch (e: unknown) {
+    if (mine !== seq) return
     if (isUnauthorized(e)) {
       error.value = '尚未登入'
       return
@@ -449,7 +464,8 @@ main { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px 20px; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; font-size: 16px; }
 .link { color: var(--blue); font-size: 17px; white-space: nowrap; }
 
-.card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 0 0 16px; }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin: 0 0 16px; overflow-wrap: anywhere; }
+.hero, .meta, .chips li { min-width: 0; overflow-wrap: anywhere; }
 .card h2, .paper h2 { margin: 0 0 10px; font-size: 21px; color: var(--teal-dark); }
 .paper section + section { margin-top: 22px; }
 
