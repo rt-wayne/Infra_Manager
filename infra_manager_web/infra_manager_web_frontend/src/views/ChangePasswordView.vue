@@ -3,6 +3,7 @@
   修改日期: 2026-10-06
   變更說明: 新增：改密碼頁（S2 回合三）。舊密碼＋新密碼＋再輸入一次送 POST /auth/password；
             前端只檢「兩次輸入相同」與「新密碼至少 6 字」做即時提示，其餘規則以後端 400 訊息為準（toast）
+            字數不 trim（與後端一致，code review 第 2 項）：全空白交給後端回「新密碼不得全為空白」
             預設密碼者被守衛導來此頁、改完才放行；成功後回首頁。頁上提供登出鈕讓不想改的人離開
 -->
 <template>
@@ -58,7 +59,7 @@ async function submit(): Promise<void> {
     toast('兩次輸入的新密碼不同', 'amber')
     return
   }
-  if (codePoints(newPassword.value.trim()) < 6) {
+  if (codePoints(newPassword.value) < 6) {
     toast('新密碼至少 6 個字', 'amber')
     return
   }

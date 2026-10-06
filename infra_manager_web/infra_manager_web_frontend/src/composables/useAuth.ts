@@ -5,6 +5,7 @@
 //           ensureLoaded：第一次（或被要求重查）打 GET /auth/me，順便拿到 IM_XSRF cookie
 //           login／logout／changePassword 成功後更新狀態；401 處理器：重查 /me，未登入就導 /login（帶 redirect）
 //           /me 本身打不到時視為未登入但不導頁（由守衛決定），並出 toast
+//           2026-10-06 code review 第 1 項：logout 後 loaded 改設 false，讓守衛重打 /me 取新 IM_XSRF（修「登出後第一次登入必 403」）
 // ============================================================
 import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -71,12 +72,13 @@ export function useAuth() {
     return r
   }
 
+  /** 登出後 loaded 設回 false：後端登出時會刪掉 IM_XSRF cookie，守衛導到登入頁時要重打 /me 拿新的，否則下一次登入少帶 CSRF header 會 403 */
   async function logout(): Promise<void> {
     try {
       await authApi.logout()
     } finally {
       me.value = { loggedIn: false }
-      loaded.value = true
+      loaded.value = false
     }
   }
 

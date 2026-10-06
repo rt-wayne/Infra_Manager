@@ -3,13 +3,14 @@
 // 修改日期: 2026-10-06
 // 變更說明: 新增：路由守衛測試（S2 回合三），用真的 router/index.ts、mock api/auth
 //           驗：未登入進首頁 → /login；未登入進 /apps/1 → /login?redirect=/apps/1；
-//           已登入進 /login → /；預設密碼進首頁 → /change-password；/me 打不到視為未登入並 toast
+//           已登入進 /login → /；預設密碼進首頁 → /change-password；/me 打不到視為未登入並 toast；
+//           登出後導到 /login 會重打 /me（code review 第 1 項）
 //           router 是模組單例，每個測試先用 startAt 把位置擺到與目標不同的路由（同路由的 push 不會觸發守衛）
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import router from '../src/router'
-import { getMe } from '../src/api/auth'
-import { resetAuthStateForTest } from '../src/composables/useAuth'
+import { getMe, logout } from '../src/api/auth'
+import { resetAuthStateForTest, useAuth } from '../src/composables/useAuth'
 import { useToast } from '../src/composables/useToast'
 import type { MeResponse } from '../src/types/auth'
 
@@ -70,6 +71,16 @@ describe('路由守衛', () => {
     meMock.mockResolvedValue(defaultPwd)
     await router.push('/')
     expect(router.currentRoute.value.path).toBe('/change-password')
+  })
+
+  it('登出後導到登入頁會重打 /me（後端登出時刪了 IM_XSRF，要拿新的）', async () => {
+    await startAt('/', normal)
+    vi.mocked(logout).mockResolvedValue()
+    meMock.mockResolvedValue(anonymous)
+    await useAuth().logout()
+    await router.push('/login')
+    expect(router.currentRoute.value.path).toBe('/login')
+    expect(meMock).toHaveBeenCalledTimes(1)
   })
 
   it('/me 打不到時視為未登入並出 toast', async () => {
