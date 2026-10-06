@@ -33,7 +33,7 @@
 
 ## 回合切分（依 ⑨A，順序為 二 a → 二 b → 一 → 三 → 四）
 
-### 回合二 a：唯讀支援（選項 API、系統參數、檢視 API 補欄位）
+### 回合二 a：唯讀支援（選項 API、系統參數、檢視 API 補欄位）——已完成（commit `ec19ce5`）
 - B1：一般登入者可讀的表單選項 API（含 `formOptionId`，只回 `STATUS=1`）；PRD 的 `GET /api/form-schema`（admin、後台用）不受影響
 - B3：SysParam 讀取元件（`FLOW_POLICY`、`UPLOAD_MAX_MB`、`UPLOAD_MAX_FILES`），讀不到退回 PRD 預設值
 - B2：`AppDetail` 補 `rowVerNo`，`AppDetail.Option` 補 `formOptionId`
@@ -72,6 +72,7 @@
 - 第 73 項附件根目錄未定，正式部署前一定要定
 
 ## 交接
-- 目前回合：二 a
-- 已改動：（無）
+- 目前回合：二 b（下一步：`POST /api/apps` 建草稿與編號計數器）
+- 二 a 已完成：`GET /api/form-options`（`FormOptionController`／`FormOptionService`／`FormOptionDao`）、`SysParamService`（`uploadMaxMb`／`uploadMaxFiles`／`flowPolicy`，二 b 建草稿套流程時直接用 `flowPolicy()`）、檢視 API 補 `rowVerNo`／`formOptionId`、前端型別同步；後端測試 209、前端 35
+- 二 b 已改動：（無）
 - 卡住／待確認：上方「未回答的待確認」第 1～7、9 題（目前照假設施工）
