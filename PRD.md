@@ -62,9 +62,9 @@ Vue 3 SPA，共 20 頁：
 | LoginView | 登入 |
 | ChangePasswordView | 改密碼（預設密碼登入後強制導向） |
 | HomeView | 首頁統計、我的待辦、系統狀態（後端服務／資料庫「正常」或「無法連線」） |
-| AppListView | 申請單列表與篩選 |
+| AppListView | 申請單列表與篩選；單號是連到檢視頁的連結 |
 | AppFormView | 新增／編輯草稿／補件共用表單，內含機櫃 U 位選擇器、設備可編輯表格、附件上傳 |
-| AppViewView | 檢視申請單；送審、撤回、簽核、刪除、AI 審查與追問、寄出報告 |
+| AppViewView | 檢視申請單（`/apps/:id`）；送審、撤回、簽核、刪除、AI 審查與追問、寄出報告。目前已上線唯讀檢視：仿紙本表格呈現基本資料、作業內容、類別（「其他」補充顯示為「類別（其他）：說明」）、原因、範圍、設備、步驟、排程、位置、檢核表、執行紀錄（未填結果時異常／後續追蹤顯示「—」）、簽核關卡、附件索引、版次與事件；動作鈕依 `permissions` 顯示但一律提示「此功能尚未開放」，附件下載鈕停用；查無單號顯示「找不到申請單」 |
 | ExecuteView | 執行檢核表（每項執行人選系統使用者或填自由文字）、實際紀錄、執行端退回 |
 | ReviewView | 治理審查 |
 | TemplateListView／TemplateEditView | 範本列表與編輯 |
@@ -260,7 +260,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 #### 申請單
 - `IM_APP_SEQ` 申請單編號序號：PK `APP_SEQ_ID`；UK (`SEQ_PREFIX`, `SEQ_DATE`)；`SEQ_PREFIX`（IM／HIST）；`LAST_NO`。每日每前綴獨立計數，以 `SELECT … FOR UPDATE` 取號，刪掉的號碼不再使用
 - `IM_APP` 申請單主檔：PK `APP_ID`（申請單編號，`VARCHAR2(20)`）；`APP_TITLE`；`PRIO_CODE`（P1～P4）；`FLOW_ID`；`APPLY_USER_ID`；`SOURCE_CODE`（ONLINE／IMPORTED）；`CURR_VER_NO`；`ROW_VER_NO`（樂觀鎖）
-  - **申請單狀態 `APP_STATUS_CODE` 共七種**：`DRAFT` 草稿、`IN_REVIEW` 審核中、`APPROVED` 核准、`IN_EXECUTION` 執行中、`PENDING_REVIEW` 待治理審查、`EXECUTED` 結案、`REJECTED` 退件
+  - **申請單狀態 `APP_STATUS_CODE` 共七種**：`DRAFT` 草稿、`IN_REVIEW` 簽核中、`APPROVED` 已核准(待執行)、`IN_EXECUTION` 執行中、`PENDING_REVIEW` 待治理審核、`EXECUTED` 已結案、`REJECTED` 已退件（中文為畫面用語，與舊系統一致）
   - 刪除：軟刪除，`STATUS` 0 = 已刪除，此時 `DELETE_DATE`、`DELETE_USER_ID`、`DELETE_MODE_CODE`（ADMIN 管理員刪除／APPLICANT_PRE_REVIEW 申請人於送審前自行刪除）必填；`DELETE_REASON`
   - 基本資料：`APPLY_DATE`；`APPLY_DEPT_NAME`、`APPLY_TEL`、`APPLY_EMAIL`（填單當下的申請人資料快照）；`IS_SELF_EXEC`、`IS_SUP_EXEC`；`WORK_MODE_CODE`（ONSITE／REMOTE）、`REMOTE_METHOD`；`SUP_NAME`、`SUP_CNTCT`、`SUP_TEL`、`SUP_HEAD_CNT`
   - 作業內容：`WORK_SUBJ`、`IMPACT_DESC`（CLOB）、`WORK_DETAIL`／`RISK_DESC`／`ROLL_BACK_PLAN`（CLOB）、`OTHER_REASON`、`SCHED_START_DATE`／`SCHED_END_DATE`、`EST_HOUR_QTY`、`RESUB_MEMO`（CLOB，最近一次補件說明）
