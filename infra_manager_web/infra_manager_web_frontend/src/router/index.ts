@@ -4,15 +4,44 @@
 // 變更說明: 新增：hash 模式路由（規格 v4），首頁為 ExampleView；新增畫面時在 routes 加一筆
 //           jdk25 階段 3：改 TypeScript
 //           Infra Manager S1（Claude Fable 5.1，2026-10-06）：首頁改為 HomeView；範本的 ExampleView 與 /example 路由已移除（裁示 ⑤A）
+//           Infra Manager S2 回合三（Claude Fable 5.1，2026-10-06）：加 /login、/change-password 與全域守衛：
+//           - 第一次進站先打 /auth/me（順便拿 IM_XSRF）
+//           - meta.public 以外的路由未登入 → /login?redirect=原路徑
+//           - 已登入但仍是預設密碼 → 只能到 /change-password
+//           - 已登入再進 /login → 回首頁
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import LoginView from '../views/LoginView.vue'
+import ChangePasswordView from '../views/ChangePasswordView.vue'
+import { CHANGE_PASSWORD_PATH, LOGIN_PATH, useAuth } from '../composables/useAuth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    /** true：未登入也能看（登入頁） */
+    public?: boolean
+  }
+}
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', component: HomeView }
+    { path: '/', component: HomeView },
+    { path: LOGIN_PATH, component: LoginView, meta: { public: true } },
+    { path: CHANGE_PASSWORD_PATH, component: ChangePasswordView }
   ]
+})
+
+router.beforeEach(async to => {
+  const auth = useAuth()
+  const me = await auth.ensureLoaded()
+  if (!me.loggedIn) {
+    if (to.meta.public) return true
+    return { path: LOGIN_PATH, query: to.fullPath === '/' ? {} : { redirect: to.fullPath } }
+  }
+  if (to.path === LOGIN_PATH) return { path: '/' }
+  if (me.mustChangePassword === true && to.path !== CHANGE_PASSWORD_PATH) return { path: CHANGE_PASSWORD_PATH }
+  return true
 })
 
 export default router
