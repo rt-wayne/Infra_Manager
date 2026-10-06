@@ -3,4 +3,7 @@
 ### 首次建置：複製本檔為 application.properties（不進 git）
 ### 變更單 #2：spring.application.name 為 Spring 用的專案名，不影響 log 落點（log 目錄寫在 logback-spring.xml）
 spring.application.name=infra_manager_java
-server.port=8080
+### Infra Manager：後端 API 固定 3202（殼 jar 3201、舊 Node 系統 3200）
+server.port=3202
+### Infra Manager：multipart 延後到端點真的取 MultipartFile 時才解析，避免任一 /api/* 端點收到 multipart 就寫暫存檔
+spring.servlet.multipart.resolve-lazily=true

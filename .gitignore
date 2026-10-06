@@ -32,3 +32,6 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Office 開檔鎖定檔（docs/db/*.xlsx 在 Excel 開著時產生）
+~$*

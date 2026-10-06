@@ -12,3 +12,6 @@
 ### 在 DAO 以 @Value("${<key>}") 讀出後傳給 DbClient；本檔由 com.mpx.Application 載入，common.db 不讀本檔
 ### 例：
 # db.connect.nova=<alias>
+###
+### Infra Manager 用到的 key（必填；HealthDao、AppTransactionConfig 以 @Value("${db.connect.itflow}") 讀）：
+db.connect.itflow=<alias>

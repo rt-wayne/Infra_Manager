@@ -1,5 +1,5 @@
 -- =====================================================================
--- Infra Manager：授權 ap_user 存取 V1 建立的 31 張表（SELECT／INSERT／UPDATE／DELETE）
+-- Infra Manager：授權 ap_user 存取 V1 建立的 31 張表＋V2 測試表（SELECT／INSERT／UPDATE／DELETE）
 -- 由 rd_user（表的擁有者）登入後手動執行；表由 rd_user 自己建立，授權時不需 schema 前綴。
 -- 本專案不使用 Flyway，新增表時須補授權並重跑對應行。
 -- 應用程式端以 rd_user 的 schema 前綴存取，不建同義詞。
@@ -37,3 +37,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON SYS_PARAM TO ap_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON IM_MAIL_OUTBOX TO ap_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON IM_ACCESS_LOG TO ap_user;
 GRANT SELECT, INSERT, UPDATE, DELETE ON IM_RACK_CACHE TO ap_user;
+
+-- V2 以後新增的表（各 DDL 檔尾也有同一行；這裡保留一份，重跑本檔即可補齊全部授權）
+GRANT SELECT, INSERT, UPDATE, DELETE ON IM_TX_TEST TO ap_user;

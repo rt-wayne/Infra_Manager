@@ -3,5 +3,6 @@
 ### 首次建置：複製本檔為 application.properties（不進 git）
 ### spring.application.name、context-path 為專案名；產生器建專案時換成新專案名
 spring.application.name=infra_manager_web
-server.port=8080
+### Infra Manager：殼 jar（使用者開的網址）固定 3201（後端 API 3202、舊 Node 系統 3200）
+server.port=3201
 server.servlet.context-path=/infra_manager_web

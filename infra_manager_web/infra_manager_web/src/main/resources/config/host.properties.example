@@ -11,8 +11,8 @@
 ### 程式（com.mpx.common.web.ApiForwarder）只讀 backend.api.domain.path；它由下面三個 key 以 ${} 組合而成
 ###   backend.api.domain : 協定 + 主機，例：http://<api-host>
 ###   backend.api.port   : 冒號 + port，例：:<port>（走預設 port 時留空）
-###   backend.api.path   : 後端 API 的根路徑，例：/<backend-context-path>/api/v1
-### 組合結果例：http://<api-host>:<port>/<backend-context-path>/api/v1
+###   backend.api.path   : 後端 API 的根路徑；本專案（Infra Manager）後端沒有 context-path、路徑不帶 v1，填 /api
+### 組合結果例：http://<api-host>:3202/api（殼 jar 的 /api/v1/health 會轉發到 http://<api-host>:3202/api/health）
 ### 四個 key 都要保留（值可空）：被 ${} 引用的 key 不存在時啟動會失敗
 ### 留空時殼 jar 仍可啟動，頁面呼叫 API 時才會失敗（回 500）
 backend.api.domain=
