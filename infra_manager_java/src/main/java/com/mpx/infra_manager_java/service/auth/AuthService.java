@@ -12,8 +12,16 @@ package com.mpx.infra_manager_java.service.auth;
 //           （ClientIp：殼 jar 附的 X-Forwarded-For，第 80 項定案前視為未驗證；code review 第 6 項、裁示 ②A）。
 //           2026-10-06 code review：登出處理器改用注入的 SecurityContextRepository 與 holder strategy（與登入同一個實例）；
 //           登入成功輪替 IM_XSRF、登出清掉 IM_XSRF（手動登入不會經過 Spring 內建的 CsrfAuthenticationStrategy／CsrfLogoutHandler）。
+//           2026-10-06 S2 回合二：加 changePassword。規則依序：不得全空白 → 至少 6 字（code point 計數，emoji 算 1）→
+//           UTF-8 不超過 72 bytes（bcrypt encode 超過會丟例外，matches 不會，所以登入不受影響但這裡沒驗會 500）→
+//           不得等於預設密碼（帳號，不分大小寫）→ 不得等於舊密碼 → 帳號仍啟用且是同一個工號 → 舊密碼要對。
+//           這些規則只套在「新密碼」；預設密碼（帳號小寫）本身不受 6 字限制（如 wayne）。
+//           成功後重建 session（換 session id、重查角色、補 PWD_OK、換發 IM_XSRF），不用重新登入。
+//           2026-10-06 code review：UPDATE 以舊雜湊做樂觀鎖，0 列（期間被停用或密碼已被改）回 400「帳號狀態已變更」而非 500；
+//           角色查詢移到 UPDATE 之前，DB 寫入後只剩純記憶體動作；查無／無雜湊／非啟用判斷抽成 usable() 與 login 共用。
 // ============================================================
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -55,6 +63,20 @@ public class AuthService {
 	/** 角色權限前綴，與 @PreAuthorize("hasRole('admin')") 的慣例一致 */
 	public static final String ROLE_PREFIX = "ROLE_";
 
+	/** 新密碼最少字元數（沿用舊系統） */
+	public static final int PASSWORD_MIN_CHARS = 6;
+	/** bcrypt 只看前 72 bytes，超過在 encode 時會丟例外 */
+	public static final int PASSWORD_MAX_BYTES = 72;
+
+	public static final String MSG_PWD_BLANK = "新密碼不得全為空白";
+	public static final String MSG_PWD_TOO_SHORT = "新密碼至少 " + PASSWORD_MIN_CHARS + " 個字";
+	public static final String MSG_PWD_TOO_LONG = "新密碼過長（上限英數 " + PASSWORD_MAX_BYTES + " 字，中文約 "
+			+ (PASSWORD_MAX_BYTES / 3) + " 字）";
+	public static final String MSG_PWD_EQUALS_DEFAULT = "新密碼不得與預設密碼（帳號）相同";
+	public static final String MSG_PWD_SAME_AS_OLD = "新密碼不得與舊密碼相同";
+	public static final String MSG_OLD_PWD_WRONG = "舊密碼錯誤";
+	public static final String MSG_ACCOUNT_UNAVAILABLE = "帳號狀態已變更，請重新登入";
+
 	private final UserDao userDao;
 	private final PasswordEncoder passwordEncoder;
 	private final SecurityContextRepository contextRepository;
@@ -79,7 +101,7 @@ public class AuthService {
 	public Optional<AuthUser> login(String loginId, String password, HttpServletRequest request,
 			HttpServletResponse response) {
 		Optional<UserRow> found = userDao.findByLoginId(normalizeLoginId(loginId));
-		if (found.isEmpty() || found.get().getPwdHash() == null || !Integer.valueOf(1).equals(found.get().getStatus())) {
+		if (!usable(found)) {
 			passwordEncoder.matches(password, dummyHash);
 			log.info("登入失敗 reason={} user={} srcIp={}", found.isEmpty() ? "no_user" : "inactive_or_no_hash",
 					found.map(UserRow::getUserId).orElse("-"), ClientIp.of(request));
@@ -107,6 +129,64 @@ public class AuthService {
 		if (auth != null && auth.getPrincipal() instanceof AuthUser user) {
 			log.info("登出 user={} srcIp={}", user.userId(), ClientIp.of(request));
 		}
+	}
+
+	/**
+	 * 改密碼。規則不符丟 PasswordRuleException（controller 回 400 帶訊息）；成功回重建後的使用者（mustChangePassword=false）
+	 * 並已寫入 session。UPDATE 以查到的舊雜湊當條件，期間帳號被停用或密碼已被另一個請求改掉都會是 0 列 → 一樣回
+	 * 「帳號狀態已變更，請重新登入」，不會互相覆蓋也不會 500
+	 */
+	public AuthUser changePassword(AuthUser current, String oldPassword, String newPassword,
+			HttpServletRequest request, HttpServletResponse response) {
+		checkNewPassword(current, oldPassword, newPassword, request);
+		Optional<UserRow> found = userDao.findByLoginId(current.loginId());
+		if (!usable(found) || !found.get().getUserId().equals(current.userId())) {
+			throw reject("account_unavailable", MSG_ACCOUNT_UNAVAILABLE, current, request);
+		}
+		UserRow row = found.get();
+		if (!passwordEncoder.matches(oldPassword, row.getPwdHash())) {
+			throw reject("bad_old_password", MSG_OLD_PWD_WRONG, current, request);
+		}
+		List<String> roles = userDao.findActiveRoleIds(row.getUserId());
+		int updated = userDao.updatePassword(row.getUserId(), passwordEncoder.encode(newPassword), row.getPwdHash());
+		if (updated != 1) {
+			throw reject("account_unavailable", MSG_ACCOUNT_UNAVAILABLE, current, request);
+		}
+		AuthUser user = new AuthUser(row.getUserId(), row.getLoginId(), row.getUserName(), roles, false);
+		establishSession(user, request, response);
+		log.info("改密碼成功 user={} srcIp={}", user.userId(), ClientIp.of(request));
+		return user;
+	}
+
+	/** 有這筆帳號、有雜湊、且啟用中，才可登入／改密碼 */
+	private static boolean usable(Optional<UserRow> found) {
+		return found.isPresent() && found.get().getPwdHash() != null
+				&& Integer.valueOf(1).equals(found.get().getStatus());
+	}
+
+	/** 不碰 DB 就能判斷的規則；順序固定，讓使用者一次只看到一個最該先修的問題 */
+	private void checkNewPassword(AuthUser current, String oldPassword, String newPassword, HttpServletRequest request) {
+		if (newPassword.isBlank()) {
+			throw reject("blank", MSG_PWD_BLANK, current, request);
+		}
+		if (newPassword.codePointCount(0, newPassword.length()) < PASSWORD_MIN_CHARS) {
+			throw reject("too_short", MSG_PWD_TOO_SHORT, current, request);
+		}
+		if (newPassword.getBytes(StandardCharsets.UTF_8).length > PASSWORD_MAX_BYTES) {
+			throw reject("too_long", MSG_PWD_TOO_LONG, current, request);
+		}
+		if (newPassword.equalsIgnoreCase(current.loginId())) {
+			throw reject("equals_default", MSG_PWD_EQUALS_DEFAULT, current, request);
+		}
+		if (newPassword.equals(oldPassword)) {
+			throw reject("same_as_old", MSG_PWD_SAME_AS_OLD, current, request);
+		}
+	}
+
+	private static PasswordRuleException reject(String reason, String message, AuthUser current,
+			HttpServletRequest request) {
+		log.info("改密碼失敗 reason={} user={} srcIp={}", reason, current.userId(), ClientIp.of(request));
+		return new PasswordRuleException(reason, message);
 	}
 
 	public MeResponse me(Authentication authentication) {

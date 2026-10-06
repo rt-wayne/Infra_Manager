@@ -16,10 +16,18 @@ package com.mpx.infra_manager_java.config;
 //                預設密碼者可通過、已登入者打非 /api 路徑 403、超過 72 bytes 的密碼登入是 401 不是 500、
 //                login 成功後 IM_XSRF 換新值且 logout 後被清掉、沒有 Boot 預設帳號且 AuthenticationManager 一律拒絕。
 //                真 Tomcat 的 Set-Cookie 屬性另見 SessionCookieTomcatTest。
+//           2026-10-06 S2 回合二：加 POST /api/auth/password——預設密碼者改完後同一個 session 可打其他 /api/**、
+//                規則不符 400 帶訊息、未登入 401、不帶 CSRF 403、本文缺欄位 400
+//           2026-10-06 code review：改密碼成功後舊 IM_XSRF 值打 POST 403、新值通過；新密碼超過 128 字是「過長」不是格式錯誤；
+//                UPDATE 0 列回 400「帳號狀態已變更」且 session 仍是預設密碼狀態
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -264,9 +272,94 @@ class SecurityConfigTest {
 				.andExpect(status().isUnauthorized())
 				.andExpect(content().json("{\"message\":\"" + SecurityConfig.MSG_NOT_LOGGED_IN + "\"}"));
 
-		// 本切片沒有改密碼端點（回合二），通過安全層後是 404，不是 401／403
+		// 改密碼端點只收 POST；GET 通過安全層後是 Spring MVC 的 405，不是 401／403
 		MockHttpSession session = loginAs("wayne", 1);
-		mockMvc.perform(get("/api/auth/password").session(session)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/auth/password").session(session)).andExpect(status().isMethodNotAllowed());
+	}
+
+	private MockHttpServletRequestBuilder passwordJson(MockHttpSession session, String json) throws Exception {
+		return withXsrf(post("/api/auth/password")).session(session).contentType(MediaType.APPLICATION_JSON)
+				.content(json);
+	}
+
+	@Test
+	void 預設密碼者改密碼成功後同一session可打其他api且IM_XSRF換新() throws Exception {
+		MockHttpSession session = loginAs("wayne", 1);
+		when(userDao.updatePassword(eq("E0001"), anyString(), anyString())).thenReturn(1);
+		Cookie xsrfBefore = xsrfCookie();
+
+		MvcResult result = mockMvc
+				.perform(post("/api/auth/password").session(session).cookie(xsrfBefore)
+						.header(SecurityConfig.XSRF_HEADER, xsrfBefore.getValue()).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"oldPassword\":\"wayne\",\"newPassword\":\"newpass1\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.loggedIn").value(true))
+				.andExpect(jsonPath("$.userId").value("E0001"))
+				.andExpect(jsonPath("$.mustChangePassword").value(false))
+				.andExpect(cookie().exists(SecurityConfig.XSRF_COOKIE))
+				.andReturn();
+		Cookie xsrfAfter = result.getResponse().getCookie(SecurityConfig.XSRF_COOKIE);
+		assertThat(xsrfAfter.getValue()).isNotBlank().isNotEqualTo(xsrfBefore.getValue());
+
+		// 本切片沒有其他 controller，通過 PWD_OK 閘門後是 404，不再是 403「請先修改預設密碼」
+		mockMvc.perform(get("/api/apps").session(session)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/auth/me").session(session))
+				.andExpect(jsonPath("$.mustChangePassword").value(false));
+
+		// 換發的新值要能用（logout 204 代表通過 CSRF 檢查）。注意 CookieCsrfTokenRepository 是 double-submit cookie、
+		// 無狀態：只比對 cookie 與 header 是否一致，所以「舊 cookie＋舊 header」在這裡也會過；換發的作用是讓瀏覽器
+		// 手上的 cookie 換掉，不是讓舊值失效，這點不在此鎖定
+		mockMvc.perform(post("/api/auth/logout").session(session).cookie(xsrfAfter)
+				.header(SecurityConfig.XSRF_HEADER, xsrfAfter.getValue()))
+				.andExpect(status().isNoContent());
+	}
+
+	@Test
+	void 改密碼規則不符回400帶訊息且不寫DB() throws Exception {
+		MockHttpSession session = loginAs("wayne", 1);
+
+		mockMvc.perform(passwordJson(session, "{\"oldPassword\":\"wayne\",\"newPassword\":\"abc\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().json("{\"message\":\"" + AuthService.MSG_PWD_TOO_SHORT + "\"}"));
+		mockMvc.perform(passwordJson(session, "{\"oldPassword\":\"wayne\",\"newPassword\":\"" + "x".repeat(129) + "\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().json("{\"message\":\"" + AuthService.MSG_PWD_TOO_LONG + "\"}"));
+		mockMvc.perform(passwordJson(session, "{\"oldPassword\":\"wrong\",\"newPassword\":\"newpass1\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().json("{\"message\":\"" + AuthService.MSG_OLD_PWD_WRONG + "\"}"));
+		mockMvc.perform(passwordJson(session, "{\"oldPassword\":\"wayne\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().json("{\"message\":\"請求格式錯誤\"}"));
+
+		verify(userDao, never()).updatePassword(anyString(), anyString(), anyString());
+		mockMvc.perform(get("/api/apps").session(session)).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void 改密碼更新0列回400帳號狀態已變更且仍是預設密碼狀態() throws Exception {
+		MockHttpSession session = loginAs("wayne", 1);
+		when(userDao.updatePassword(eq("E0001"), anyString(), anyString())).thenReturn(0);
+
+		mockMvc.perform(passwordJson(session, "{\"oldPassword\":\"wayne\",\"newPassword\":\"newpass1\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().json("{\"message\":\"" + AuthService.MSG_ACCOUNT_UNAVAILABLE + "\"}"));
+
+		mockMvc.perform(get("/api/apps").session(session)).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void 改密碼未登入401_不帶CSRF則403() throws Exception {
+		mockMvc.perform(withXsrf(post("/api/auth/password")).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"oldPassword\":\"a\",\"newPassword\":\"newpass1\"}"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(content().json("{\"message\":\"" + SecurityConfig.MSG_NOT_LOGGED_IN + "\"}"));
+
+		MockHttpSession session = loginAs("wayne", 1);
+		mockMvc.perform(post("/api/auth/password").session(session).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"oldPassword\":\"wayne\",\"newPassword\":\"newpass1\"}"))
+				.andExpect(status().isForbidden())
+				.andExpect(content().json("{\"message\":\"" + SecurityConfig.MSG_CSRF + "\"}"));
+		verify(userDao, never()).updatePassword(anyString(), anyString(), anyString());
 	}
 
 	@Test
