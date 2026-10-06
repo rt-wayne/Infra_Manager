@@ -5,6 +5,7 @@
             載入時呼叫 GET /health：成功 → 顯示後端 UP、DB 依回應；失敗 → 後端 DOWN 並出 toast（不顯示成查無資料）
             S2 回合三（2026-10-06）：右上角顯示登入者姓名、修改密碼連結與登出鈕；toast 區抽成 ToastHost 元件
             沿用 main.css 色票與 19px 基礎字級，不用元件庫
+            S4 回合二（Claude Opus 5.5，2026-10-06）：加「功能」卡片，連到 /apps 申請單列表
 -->
 <template>
   <main>
@@ -19,6 +20,11 @@
         <button class="quiet" type="button" :disabled="leaving" @click="doLogout">登出</button>
       </div>
     </header>
+
+    <section class="card menu">
+      <h2>功能</h2>
+      <router-link class="go" to="/apps">申請單列表</router-link>
+    </section>
 
     <section class="card">
       <h2>系統狀態</h2>
@@ -119,6 +125,8 @@ main { width: 100%; max-width: 960px; margin: 0 auto; padding: 24px 20px; }
 
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; }
 .card h2 { margin: 0 0 12px; font-size: 22px; color: var(--teal-dark); }
+.menu { margin-bottom: 16px; }
+.menu .go { display: inline-block; text-decoration: none; text-align: center; }
 
 .status { display: grid; grid-template-columns: 140px 1fr; row-gap: 8px; column-gap: 12px; margin: 0 0 16px; }
 .status dt { color: var(--gray); font-size: 17px; }

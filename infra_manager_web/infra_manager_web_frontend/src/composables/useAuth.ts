@@ -6,6 +6,8 @@
 //           login／logout／changePassword 成功後更新狀態；401 處理器：重查 /me，未登入就導 /login（帶 redirect）
 //           /me 本身打不到時視為未登入但不導頁（由守衛決定），並出 toast
 //           2026-10-06 code review 第 1 項：logout 後 loaded 改設 false，讓守衛重打 /me 取新 IM_XSRF（修「登出後第一次登入必 403」）
+//           S4 回合二（Claude Opus 5.5，2026-10-06，BACKLOG 第 92 項 ⑦）：401 處理器加 handling 鎖，同頁多支 API 同時 401
+//           只出一次「登入已過期」、只導一次頁（原本每支都出 toast）；導頁完成後才解鎖
 // ============================================================
 import { computed, ref } from 'vue'
 import type { Router } from 'vue-router'
@@ -17,6 +19,7 @@ import { useToast } from './useToast'
 const me = ref<MeResponse>({ loggedIn: false })
 const loaded = ref(false)
 let pending: Promise<MeResponse> | null = null
+let handling: Promise<void> | null = null
 
 export const LOGIN_PATH = '/login'
 export const CHANGE_PASSWORD_PATH = '/change-password'
@@ -88,16 +91,21 @@ export function useAuth() {
     return r
   }
 
-  /** main.ts 呼叫一次：API 回 401 → 重查 /me → 真的沒登入就導登入頁並記住原路徑 */
+  /** main.ts 呼叫一次：API 回 401 → 重查 /me → 真的沒登入就導登入頁並記住原路徑；同時多個 401 只處理一次 */
   function installUnauthorizedHandler(router: Router): void {
     setUnauthorizedHandler(() => {
-      void refresh().then(r => {
-        if (r.loggedIn) return
-        const current = router.currentRoute.value
-        if (current.path === LOGIN_PATH) return
-        toast('登入已過期，請重新登入', 'amber')
-        void router.push({ path: LOGIN_PATH, query: { redirect: current.fullPath } })
-      })
+      if (handling) return
+      handling = refresh()
+        .then(async r => {
+          if (r.loggedIn) return
+          const current = router.currentRoute.value
+          if (current.path === LOGIN_PATH) return
+          toast('登入已過期，請重新登入', 'amber')
+          await router.push({ path: LOGIN_PATH, query: { redirect: current.fullPath } })
+        })
+        .finally(() => {
+          handling = null
+        })
     })
   }
 
@@ -123,4 +131,5 @@ export function resetAuthStateForTest(): void {
   me.value = { loggedIn: false }
   loaded.value = false
   pending = null
+  handling = null
 }
