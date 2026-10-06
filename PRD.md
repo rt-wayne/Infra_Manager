@@ -146,21 +146,21 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 - **log 紀律**：log 不得含密碼、jdbcUrl、帳號、SQL 參數值。log 落點依範本（`/home/tomcat/log/infra_manager_java/`，Windows 對應啟動時工作目錄所在磁碟機）
 - **簽核引擎**：`ApprovalChainBuilder` 建立簽核鏈——送審時開一筆 `IM_APPR`、依 `IM_FLOW_STEP` 展開 `IM_APPR_STEP`，角色池關卡的候選人在送審當下由 `IM_USER_ROLE_MAP` 展開、固化寫入 `IM_APPR_CAND_MAP`；`DecisionPolicy` 處理同意／退件判定；補件時關閉舊 `IM_APPR`、開新一筆，並把前一版表單全文寫入 `IM_APP_VER`
 - **Transaction**：一次簽核一個 transaction——以 `IM_APP.ROW_VER_NO` 樂觀鎖鎖定申請單（衝突回 409）→ 更新 `IM_APPR_STEP` → 更新申請單狀態 → 插入 `IM_MAIL_OUTBOX` 與 `IM_APP_EVENT` → commit；寄信由 outbox worker 在 commit 後處理
-- **認證**：server-side session（HttpOnly cookie）+ CSRF token；多機部署時接 Spring Session JDBC；不用 JWT。登入方式（DB 帳密或 AD/LDAP）待定，見 BACKLOG.md 第 16 項；殼 jar 轉發時不帶瀏覽器 cookie 與 header，session 放在哪一層、怎麼傳到後端待定，見 BACKLOG.md 第 78 項
+- **認證**：本系統有自己的登入頁，不接公司統一入口或 SSO（使用者 2026-10-06 確認）。後端（3202）Spring Security server-side session：session cookie `IM_SESSION`（HttpOnly、Secure、SameSite=Lax；正式環境 3201 為 https，使用者已確認）、CSRF 採 cookie `IM_XSRF` ＋ header `X-IM-XSRF`（前端 axios 自動帶）、閒置 8 小時逾時；多機部署時接 Spring Session JDBC；不用 JWT。`GET /api/auth/me` 永遠回 200（未登入時 `loggedIn:false`），前端呼叫失敗時再查一次此端點判斷是否登入過期、是則導回登入頁。cookie 與 header 由殼 jar 自建的轉發器透傳（見「前端架構」）；後端一律自行驗 session，不信任殼 jar 轉來的身分（正式環境 3202 是否只開給殼 jar 待確認，見 BACKLOG.md 第 80 項）。登入方式（DB 帳密或 AD/LDAP）待定，見 BACKLOG.md 第 16 項
 - **授權**：`IM_USER_ROLE_MAP` 轉成 `ROLE_*` authority 管 URL 層；與資料相關的判斷用 `@PreAuthorize("@crAuthz.canDecide(#id)")`；9 個 `canX` 旗標由後端算進 DTO
 - **密碼相容**：舊格式 `scrypt$saltHex$hashHex`（N=16384、r=8、p=1、keylen=64），以自寫 encoder（BouncyCastle `SCrypt.generate`）掛在 `DelegatingPasswordEncoder`，登入成功時升級成新格式
 - **AI 審查**（是否保留待定，見 BACKLOG.md 第 17 項；金鑰存放待定，見 BACKLOG.md 第 18 項）：Anthropic Java SDK，使用 OutputConfig（structured output）／tool use／thinking；Bedrock mantle 端點拒絕 `output_config.format`，走 bedrock 通道一律落到 tool 模式；aws 通道需自訂 baseUrl + `anthropic-workspace-id` header（未驗證，S11 先做概念驗證）；報告是否過期以「key 排序 JSON + SHA-256」的申請單快照 hash 判斷；retry 用 SDK 內建 + 退避 1s／3s；遇 refusal 用 fallbackModel 重送並記 `fell_back_from`；追問的輸入為快照、報告、最近 20 則對話、新問題，max_tokens 16000；審查為非同步（回 202，前端輪詢）；提示詞與 REVIEW_SCHEMA 放 `resources`
 - **存取紀錄**：Servlet Filter 寫 `IM_ACCESS_LOG`（有上限佇列 + 批次寫入，定期清除；保留天數待定，見 BACKLOG.md 第 70 項）；loopback 改記 LAN IP；`SYS_PARAM` 的 `EXCLUDE_IP` 所列 IP 不記錄
 - **信件**：JavaMailSender + `IM_MAIL_OUTBOX`（`PENDING`／`SENT`／`FAILED`、`TRY_CNT` 重試次數）；所有信件內容（舊系統五種樣板 + 三種 inline HTML）改用 Thymeleaf 或 Mustache 樣板
-- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取；殼 jar 的 `ApiForwarder` 只轉 JSON，上傳與下載的轉發方式待定，見 BACKLOG.md 第 79 項
+- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取；殼 jar 的轉發器首版只轉 JSON／文字本文，上傳與下載的轉發方式待定，見 BACKLOG.md 第 79 項
 - **機櫃盤點快取**：Caffeine + DB 快取列（`IM_RACK_CACHE`，依快取鍵值分列，如 `SITES`、`RACKS_<站點代碼>`）；`@Scheduled` 背景刷新（stale-while-revalidate）；單一執行中旗標避免重複刷新；外部機櫃系統（Impact）斷線時回舊快取
 - **我的待辦數**：一條 SQL，靠 `IM_APPR_CAND_MAP` 的 `USER_ID` 索引
 
 #### 前端架構
 - 兩包（web_template_3.5）：
-  - **殼 jar** `infra_manager_web/infra_manager_web/`：port 3201、context path `/infra_manager_web`；服務前端靜態檔；controller 只透過範本的 `ApiForwarder` 把 `/api/v1/**` 轉給後端 `/api/**`（後端位址由殼 jar `config/host.properties` 的 `backend.api.domain.path` 指定），不解析 payload、不加 CrossOrigin。不連 DB、沒有 SQL
+  - **殼 jar** `infra_manager_web/infra_manager_web/`：port 3201、context path `/infra_manager_web`；服務前端靜態檔；由本專案自建的轉發器（`com.mpx.infra_manager_web` 下單一 controller，2026-10-06 裁示 ①B：範本 `com.mpx.common.web` 的 `ApiForwarder` 等四個類別與測試已刪除，見「給範本維護者的註記」第 2 點）把 `/api/v1/**` 全部 HTTP method 轉給後端 `/api/**`（後端位址由殼 jar `config/host.properties` 的 `backend.api.domain.path` 指定）：原樣轉 method／路徑／查詢字串／本文與 `Content-Type`，只帶 `IM_` 開頭的 cookie 與 `X-IM-XSRF` header、附 `X-Forwarded-For`；回傳後端原狀態碼（含 4xx）、本文、`Content-Type` 與 `IM_` 開頭的 `Set-Cookie`；後端連不上回 502 `{"message":"後端服務呼叫失敗"}`；connect 5 秒／read 120 秒。不解析 payload、不加 CrossOrigin。不連 DB、沒有 SQL
   - **前端** `infra_manager_web/infra_manager_web_frontend/`：Vue 3.5 + TypeScript；vue-router **hash 模式**；axios 實例 `src/api/http.ts`（baseURL `/infra_manager_web/api/v1`、timeout 120 秒，與殼 jar read timeout 一致）；API 呼叫集中在 `src/api/`、請求與回應型別放 `src/types/`、畫面放 `src/views/`、測試放 `tests/`；Vite `base` 為 `/infra_manager_web/`，build 輸出到殼 jar 的 `src/frontend`，殼 jar 打包時一併放進 jar
-- 頁面只呼叫自己殼 jar 的 `/infra_manager_web/api/v1/...`，不直接打後端 3202。入口網址 `http://localhost:3201/infra_manager_web/#/`
+- 頁面只呼叫自己殼 jar 的 `/infra_manager_web/api/v1/...`，不直接打後端 3202。本機開發入口網址 `http://localhost:3201/infra_manager_web/#/`；正式環境為 https（使用者 2026-10-06 確認）
 - 不使用 UI 元件庫，沿用範本 `main.css` 的色票（`--teal`、`--line` 等）與基礎字級（`body` 19px）；版面規範依範本 README
 - 呼叫失敗時一律提示錯誤（toast），不得把失敗顯示成「查無資料」
 - 互動元件：
@@ -175,7 +175,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 #### 給範本維護者的註記
 本系統在兩個範本之上有以下超出範本範圍的做法或對範本的需求，供範本維護者評估：
 1. **自建 TransactionManager**：後端範本 README 寫明 `DbClient` 不支援交易（沒有 `@Transactional`／TransactionManager）。本系統在業務 package 自建 `LazyAliasTransactionManager`（見「後端分層」的「交易管理」），疊在範本連線池上，`com.mpx.common` 未修改
-2. **`ApiForwarder` 把後端 4xx 轉成 500**：殼 jar 範本的 `ApiForwarder` 遇後端任何錯誤一律回 500 `{"message":"後端服務呼叫失敗"}`，後端的 400（如字數超過的 `field`／`max`／`actual`）到不了前端。已決定向範本維護者提變更單，讓 4xx 原樣轉發；變更單通過前，前端在表單送出前自行檢核字數（規則同後端：code point、換行先轉 LF）。另殼 jar 本身沒有請求本文上限、會把整份 JSON 讀進記憶體再轉發，相關待辦見 BACKLOG.md 第 80 項
+2. **殼 jar 不用範本的 `ApiForwarder`、並已刪除 `com.mpx.common.web`**（2026-10-06 使用者裁示 ①B，違反前端範本 README 鐵律第 1 條與檢查表「沒有修改 `com.mpx.common.web`」「只用 `ApiForwarder` 轉發」兩條）：範本的 `ApiForwarder` 轉發時不帶瀏覽器 cookie 與 header（登入 session 到不了後端）、只有 `get`／`post`（PUT／DELETE 轉不到）、後端任何錯誤一律轉成 500 `{"message":"後端服務呼叫失敗"}`（後端 400 的 `field`／`max`／`actual` 到不了前端）。本系統改在 `com.mpx.infra_manager_web` 自建轉發器（規格見「前端架構」），仍遵守「不解析 payload、不開 CrossOrigin、頁面只打自己殼 jar」。請範本維護者評估把「透傳指定前綴的 cookie 與 header、全部 method、4xx 原樣回」納入範本。另殼 jar 本身沒有請求本文上限，待辦見 BACKLOG.md 第 80 項
 3. **範本 pom 附帶 `mssql-jdbc`**：本系統只連 Oracle，用不到 SQL Server 驅動；但它是範本 pom 的一部分、範本 `com.mpx.common.db` 的測試可能依賴，本系統不自行移除，請範本維護者評估改為可選依賴。
 
 #### 測試策略
@@ -299,7 +299,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 
 ### API 規格
 
-全部 REST。後端（3202）的路徑前綴是 `/api`、沒有 context path；瀏覽器一律經殼 jar（3201）呼叫 `/infra_manager_web/api/v1/...`，由殼 jar 轉發到後端同名的 `/api/...`（例：`/infra_manager_web/api/v1/health` → `/api/health`），版本號只在殼 jar 這一層。下表列的是後端路徑。寫入需 session + CSRF token（session 如何穿過殼 jar 待定，見 BACKLOG.md 第 78 項）。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統的權限待 BACKLOG.md 第 26 項（未登入可看範圍）與第 30 項（舊漏洞處理）裁示後改寫本表。請求參數與回應格式各階段實作時補上。
+全部 REST。後端（3202）的路徑前綴是 `/api`、沒有 context path；瀏覽器一律經殼 jar（3201）呼叫 `/infra_manager_web/api/v1/...`，由殼 jar 轉發到後端同名的 `/api/...`（例：`/infra_manager_web/api/v1/health` → `/api/health`），版本號只在殼 jar 這一層。下表列的是後端路徑。寫入需 session + CSRF token（cookie 與 header 由殼 jar 轉發器透傳，見「後端分層」的「認證」）。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統的權限待 BACKLOG.md 第 26 項（未登入可看範圍）與第 30 項（舊漏洞處理）裁示後改寫本表。請求參數與回應格式各階段實作時補上。
 
 | 新 REST API | 功能 | 舊系統權限（對照用） | Vue 頁面 |
 |---|---|---|---|
@@ -351,7 +351,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | 500 | DB 連線、SQL、交易例外 | `{"message": "資料庫存取失敗"}` |
 | 500 | 其他未預期例外 | `{"message": "系統發生錯誤"}` |
 
-經殼 jar 轉發時，後端的 4xx 目前會被殼 jar 轉成 500 `{"message":"後端服務呼叫失敗"}`，見「給範本維護者的註記」。
+經殼 jar 轉發時，後端的狀態碼與本文原樣回給瀏覽器；殼 jar 連不上後端時回 502 `{"message":"後端服務呼叫失敗"}`（見「前端架構」的轉發器規格）。
 
 ### 環境設定
 
@@ -376,7 +376,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | | `server.port` | 3201 |
 | | `server.servlet.context-path` | `/infra_manager_web`（前端 `base` 與 axios `baseURL` 都以此為前綴） |
 | `config/host.properties` | `backend.api.domain`、`backend.api.port`、`backend.api.path` | 後端 API 的協定＋主機、port、根路徑（本系統為 `/api`） |
-| | `backend.api.domain.path` | 由前三個以 `${}` 組合，`ApiForwarder` 只讀這一個；四個鍵都要存在（值可空） |
+| | `backend.api.domain.path` | 由前三個以 `${}` 組合，殼 jar 的轉發器只讀這一個；四個鍵都要存在（值可空） |
 
 secret 一律放環境變數，不寫進 repo 內任何檔案：
 

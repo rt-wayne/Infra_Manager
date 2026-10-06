@@ -14,6 +14,8 @@
 3. 轉發層（Controller、`ApiForwarder`）**不解析 payload**、**不開 CrossOrigin**；業務邏輯放後端 API。
 4. 這兩包都沒有 SQL、沒有 DB 設定；要查資料就在後端 API 加端點，再由這裡轉發。
 
+> **本專案的例外（2026-10-06 使用者裁示 ①B）**：`com.mpx.common.web`（`ApiForwarder` 等四個類別與測試）已自本專案刪除，改用 `com.mpx.infra_manager_web` 自建的轉發器（透傳 `IM_` 開頭 cookie 與 `X-IM-XSRF`、全部 HTTP method、4xx 原樣回）。本檔其餘提到 `ApiForwarder` 之處為範本原文，以 `PRD.md`「前端架構」與「給範本維護者的註記」第 2 點為準；鐵律第 2、3、4 條與其餘規範照舊。
+
 若專案根目錄有 `CLAUDE.md`，請一併遵守其中的規則。
 
 前後端建議用不同專案名（例 `xxx_api`／`xxx_web`），避免 log 目錄撞在一起。
