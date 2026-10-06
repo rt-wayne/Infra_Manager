@@ -17,13 +17,13 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 2 | S2 帳號與登入（三回合）。**回合一** 後端認證骨架：Spring Security server-side session＋CSRF（`IM_SESSION`／`IM_XSRF`／`X-IM-XSRF`，屬性寫在程式常數）、`POST /api/auth/login`／`logout`、`GET /api/auth/me`、`/api/**` 未登入 401 不導頁、`ROLE_<角色>`＋`PWD_OK` 權限（預設密碼者打其他 API 403）、bcrypt（DelegatingPasswordEncoder）、`config.DbSchema` schema 前綴（`db.schema.itflow` 白名單）。**回合二** 改密碼 `POST /api/auth/password`＋ users.json 匯入器（**皆已完成 2026-10-06**，行為見 PRD「密碼」段；匯入器的 code review 細節 12 項延後至第 90 項；`IM_LOGIN_TOKEN` 表說明修正第 85 項也延後至下一階段）。**回合三** 前端：LoginView、ChangePasswordView、`api/auth.ts`、`types/auth.ts`、`composables/useAuth.ts`、路由守衛（未登入導登入頁、`mustChangePassword` 導改密碼頁）、axios 攔截器（失敗先查 `/me` 再導登入頁、自動帶 `X-IM-XSRF`）（**程式已完成並 commit `2387a85`，2026-10-06**，行為見 PRD「前端架構」的「登入狀態與路由守衛」段；**S2 收尾還差**：wayne 匯入測試 DB、端對端驗收、階段結束的一次 `code-reviewer`）。裁示（2026-10-06）：①A 修訂 DB 帳密＋匯入全員重設；②A `db.schema.itflow`；③A 無 remember-me；④A 不接 Spring Session JDBC；⑤A 不轉 `User-Agent`；⑥A 加 `spring-boot-starter-security`；⑦A bcrypt。完成條件：`wayne` 假帳號能登入；預設密碼導向改密碼頁且其他 API 403；後端 `/api/**` 未登入回 401 不導頁；`IM_SESSION`／`IM_XSRF` 的 `Secure` 明設、`Path=/`、不設 `Domain`；真對照表到位後匯入 22 人筆數一致 | — |
+（無；S2 已於 2026-10-06 完成，下一個是第 4 項 S4）
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：**S2 收尾**（衝刺模式，見專案 `CLAUDE.md`「基本功能衝刺期」）：(1) 解掉 wayne 匯入的 ORA-00942（見「卡住」）後照 `SETUP.md`「匯入使用者」用 sample 檔匯入 wayne；(2) `start-new.bat` 起兩個 jar，在 `http://localhost:3201/infra_manager_web/#/` 走一遍：未登入導登入頁 → wayne／wayne 登入 → 被導去改密碼 → 改完回首頁、右上角有姓名 → 登出回登入頁 → 直接打 `/infra_manager_web/api/v1/auth/me` 回 `loggedIn:false`；(3) 跑一次 `code-reviewer`（範圍：回合三前端 12 個檔，commit `2387a85`），阻擋項當場修、其餘登記到「下一階段（細節調整）」；(4) 第 2 項移出進行中、S4 開工（唯讀列表與檢視）
-- 已改動：無（回合三已 commit `2387a85` 並推送；三文件更新在下一個 commit）
-- 要記得的事：殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar（`start-new.bat` 不帶 `--no-build` 會一起做）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它
-- 卡住／待確認：**wayne 匯入測試 DB 失敗**：`SELECT ROLE_ID FROM RD_USER.IM_ROLE ORDER BY ROLE_ID` 回 ORA-00942（table or view does not exist）。兩種可能：IM_ 表不在 `RD_USER` schema（`db.schema.itflow` 設錯或 DDL 是用別的帳號跑的），或 `db/oracle/grant_ap_user.sql` 還沒以 rd_user 執行、`ap_user` 看不到表。請使用者在 sqlplus 以連線帳號查 `SELECT owner, table_name FROM all_tables WHERE table_name = 'IM_ROLE'`
+- 下一步：**S4 唯讀列表與檢視開工**（衝刺模式，見專案 `CLAUDE.md`「基本功能衝刺期」）。開工前先 `git fetch origin`＋動工前快照；先讀舊系統 `routes/apps.js` 的列表與檢視路由、`views/apps/*.ejs`，列出 6 個篩選條件與檢視頁欄位，再提需求理解與檔案清單等使用者確認。第 92 項的 ⑥⑦（401 處理器略過 `/auth/login`、toast 與導頁去重）建議在 S4 列表頁平行打 API 時順手做
+- 已改動：無
+- 要記得的事：殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201（jar 被鎖住會 clean 失敗）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
+- 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
 
 ## 下一階段（細節調整）
 
@@ -33,11 +33,12 @@
 | ID | 摘要 | 提出日 | 詳情 |
 |----|------|--------|------|
 | 90 | 帳號匯入器 code review 延後的 12 項（2026-10-06，裁示全部延後）：② 工號格式檢核（任何欄位含 `"` 整檔失敗＋字元集正則，需使用者補工號格式規則）；③ web 模式帶 `im.import.users` 時啟動即失敗並提示正確指令（約 15 行＋測試）；④ `@Transactional` 回滾測試（mock `PlatformTransactionManager`，驗 commit 一次、第二筆失敗 rollback）＋對測試 schema 實跑一次含故意失敗、確認 DB 無殘留；⑤ `UserImportRunnerTest` 每次 run 前 `exitCode.set(-1)`；⑥ 用 `ApplicationContextRunner`／`WebApplicationContextRunner` 釘住 runner 的兩個條件註解（web＋參數無 bean、非 web＋參數有 bean、非 web 無參數無 bean）；⑦ 非 UTF-8（cp950）檔案 catch `CharacterCodingException` 改訊息「不是 UTF-8 編碼，請用 Excel 的『CSV UTF-8』另存」；⑧ JSON 解析錯誤只印例外類別與 `e.getLocation()` 行列，不印 `getOriginalMessage()`（可能帶欄位值）；⑨ SETUP 第 4 步加註：重跑時 users.json 只留缺漏的帳號（否則全員密碼再被重設）；⑩ SETUP 匯入流程改為「停服務 → 匯入 → 啟服務 → 通知」（已登入 session 不受停用影響，與第 89 項同根）；⑪ `ImportFileReader.stripBom` 與兩個測試檔的 BOM 字元改 `"﻿"` 跳脫（共三處）；⑫ 對照表有、users.json 沒有的帳號印 warn；寫入 0 筆時 warn 並結束碼改 1；⑬ 移除 `ImportSummary.written()` 與無效的 `row.setIsDfltPwd(1)`＋其測試斷言（SQL 寫死 `IS_DFLT_PWD=1`）。另：runner 用 `System.exit`，日後若有 `@SpringBootTest` 以 none 模式又帶 `im.import.users` 會殺掉測試 JVM，寫測試時避開 | 2026-10-06 | — |
+| 92 | S2 回合三前端 code review 非阻擋 8 項（2026-10-06，衝刺規則登記不修）：③ `safeRedirect` 加固——拒絕 `\x00-\x1f`、`\x7f` 與空白字元（`/\t/evil.example` 目前通過檢查，瀏覽器會剝掉 tab 變 `//evil.example`；現在只走 hash 路由所以不可利用，日後若改用 `window.location` 導頁就是 open redirect），更穩的做法是改用 `router.resolve(target)` 要求 `matched.length > 0` 並回 `fullPath`；測試補 `/\evil`、`/%2F%2Fevil`、`javascript:alert(1)`、`/\t/evil`、`/login/`、`/LOGIN`；④ 守衛與 `safeRedirect` 用字串比對 `/login`，`/login/`、`/LOGIN` 不會被導回首頁——路由加 `name`、守衛比 `to.name`；⑤ 沒有「找不到頁面」路由，打錯網址畫面空白——加 `/:pathMatch(.*)*`；⑥ 登入帳密錯誤的 401 也觸發 401 處理器，多打一次 `/me`，低機率把剛登入成功的狀態蓋回未登入（競態）——處理器略過 `/auth/login`，或 `refresh()` 加版本號丟棄較早的結果；⑦ 一次 401 出兩則 toast（頁面「尚未登入」＋處理器「登入已過期」），N 個平行請求 401 會重複 toast 與導頁 N 次（S4 列表頁平行打 API 時會浮現）——處理器加「導頁中」旗標去重、頁面端 401 不自己 toast；⑨ `readCookie` 的 `decodeURIComponent` 遇壞格式丟 URIError，之後每個請求都失敗——包 try/catch 回 null；⑩ `HomeView` 與 `ChangePasswordView` 的 `doLogout` 重複——收進 `useAuth`；⑪ 測試缺口：改密碼頁、http 攔截器（是否真帶 `X-IM-XSRF`）、401 處理器、`errorMessage` 都沒測——至少補「攔截器從 cookie 讀值帶 header」一條。⑥⑦ 建議 S4 開工時順手做（列表頁會碰到），其餘基本功能完成後 | 2026-10-06 | — |
 | 91 | 真實帳號匯入（22 人）：等第 60 項對照表到位後，照 `SETUP.md`「匯入使用者」匯入並核對筆數；S2 完成條件中的「真對照表到位後匯入 22 人筆數一致」移到此項驗收 | 2026-10-06 | — |
 
 ## 已拍板待實作
 
-每階段 2～3 回合、可單獨驗收、做完 commit + push。S2～S15（第 2～15 項）依 ID 順序施工。**衝刺期 S3（歷史申請單匯入）延後到基本功能之後，施工順序改為 S2 回合三 → S4 → S6 → S7 → S9 → S10 → S5 → S8 → 其餘。**
+每階段 2～3 回合、可單獨驗收、做完 commit + push。S2～S15（第 2～15 項）依 ID 順序施工。**衝刺期 S3（歷史申請單匯入）延後到基本功能之後，施工順序改為 S4 → S6 → S7 → S9 → S10 → S5 → S8 → 其餘（S2 已於 2026-10-06 完成）。**
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
@@ -99,6 +100,8 @@
 | 87 | 瀏覽器 `User-Agent` 不轉發、不記錄（裁示 ⑤A）：殼 jar 轉發器只轉 `IM_` cookie、`X-IM-XSRF`、`Content-Type`／`Accept`，後端只看得到殼 jar 的 Java 用戶端；`IM_LOGIN_TOKEN.USER_AGENT` 與 `IM_ACCESS_LOG` 因此沒有瀏覽器資訊。日後要記得把 `User-Agent` 加進轉發清單；與第 85 項、S14 存取紀錄一起看 | 2026-10-06 | — |
 | 88 | 登入暴力嘗試防護：`POST /api/auth/login` 沒有次數限制或帳號鎖定（舊系統也沒有），bcrypt 比對耗時只是自然減速；**`POST /api/auth/password` 的「舊密碼錯誤」同樣沒有次數限制**（S2 回合二 code review 第 1 項，裁示 A 登記）——拿到別人 session 的人可用它猜出對方真正的密碼，把「session 被盜」升級成「密碼被盜」。候選：**按帳號計數、login 與 password 兩個端點共用同一個計數器**（否則攻擊者改走沒鎖的那一支），失敗 N 次後暫時鎖定（需記錄失敗次數）、或殼 jar 層限流。`security.md` A07。S15 部署前決定 | 2026-10-06 | — |
 | 89 | 停用帳號或移除角色後，已登入的 session 不會立即失效（S2 回合一 code review 第 11 項，裁示 ③A 登記）：權限在登入當下固定存進 session，之後不再查 `IM_USER.STATUS` 與角色表；閒置逾時 8 小時且無絕對逾時，持續操作的人可無限期保持登入。**改密碼也只重建本次請求的 session，同帳號在其他瀏覽器／裝置的 session 不會失效**（S2 回合二 code review 第 2 項，裁示 A 併入本項）：被盜的 session 不會因受害者改密碼而失效（OWASP 建議改密碼後讓其他 session 失效）；另一個瀏覽器若是用預設密碼登入的，會卡在「請先修改預設密碼」、再改一次又得到「舊密碼錯誤」，只能重新登入。候選：每個請求重查 `STATUS` **並一併比對 `PWD_CHANGE_DATE`**（同一次 DB 重查解決停用與改密碼兩件事；多一次 DB 查詢）、維護 session 清單供管理員踢人（接 Spring Session 後較容易，見第 86 項）、加絕對逾時。**帳號匯入器把帳號或角色設 `STATUS=0` 時同樣不影響已登入者**（S2 回合二匯入器 code review 第 ⑩ 項，作業面對策在第 90 項 ⑩）。S14 使用者管理（停用功能）開工時一起做 | 2026-10-06 | — |
+| 93 | 登出請求失敗時前端仍導回登入頁（S2 回合三 code review 第 8 項，待裁示 ①）：網路斷、殼 jar 502 或 CSRF 403 時，前端把狀態設成未登入並導回登入頁、toast「登出失敗」約 3 秒，但後端 `IM_SESSION` 仍有效；共用電腦上下一個人重新整理就進前一個人的帳號。選項 A 維持現狀、toast 改為「登出未完成，請關閉瀏覽器」（操作一致，但 toast 可能沒看到）；選項 B 失敗時留在原頁顯示錯誤讓使用者重試（不會誤以為已登出，但後端掛掉時離不開首頁，要改 PRD）。code-reviewer 建議 A。不影響基本功能，裁示後再動 | 2026-10-06 | — |
+| 94 | 瀏覽器 cookie 依主機名隔離、不依 port（S2 回合三 code review 範圍外發現）：若 3201 所在主機的其他 port 還跑著別的服務（例如舊系統 3200），瀏覽器會把 `IM_SESSION`／`IM_XSRF` 一併送給那些服務，那些服務也能寫入同名 cookie 蓋掉本站的（cookie tossing）。第 80 項（殼 jar 本文上限與 3202 來源限制）沒涵蓋這點。需使用者確認正式主機上是否還有其他 web 服務；本機開發時舊系統 3200 與新系統 3201 同時跑就符合此情境（舊系統不會寫 `IM_` cookie，實際無害）。S15 部署前決定 | 2026-10-06 | — |
 
 ### 舊系統已知漏洞（依第 30 項 ⑯ 決定後處理）
 
