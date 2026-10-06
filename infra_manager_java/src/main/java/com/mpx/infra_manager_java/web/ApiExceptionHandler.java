@@ -15,6 +15,7 @@ package com.mpx.infra_manager_java.web;
 //           catch-all，之前全被吞成 500。改為：實作 ErrorResponse 的例外照其狀態碼回固定訊息、不記 error；
 //           TypeMismatchException → 400；客戶端斷線（AsyncRequestNotUsableException）只記 debug；
 //           真正未預期的例外才記 error，並加記堆疊前 10 個 frame（類別.方法:行號，不含訊息）方便定位。
+//           2026-10-06 S2：加 AccessDeniedException → 403、AuthenticationException → 401（方法層安全丟出時與 filter 層同一種回應）
 // ============================================================
 
 import java.sql.SQLException;
@@ -28,6 +29,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.transaction.TransactionException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -38,6 +41,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 
 import com.mpx.common.db.DbConnectException;
+import com.mpx.infra_manager_java.config.SecurityConfig;
 import com.mpx.infra_manager_java.util.TextTooLongException;
 
 @RestControllerAdvice
@@ -66,6 +70,17 @@ public class ApiExceptionHandler {
 			return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(message("請求內容過大"));
 		}
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message("請求格式錯誤"));
+	}
+
+	/** 方法層安全（@PreAuthorize 等）在 controller 內丟出，不會經 filter 層的 handler；在此對齊成同樣的 401／403 JSON */
+	@ExceptionHandler(AccessDeniedException.class)
+	public ResponseEntity<Map<String, Object>> accessDenied(AccessDeniedException e) {
+		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(message(SecurityConfig.MSG_FORBIDDEN));
+	}
+
+	@ExceptionHandler(AuthenticationException.class)
+	public ResponseEntity<Map<String, Object>> notAuthenticated(AuthenticationException e) {
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(message(SecurityConfig.MSG_NOT_LOGGED_IN));
 	}
 
 	@ExceptionHandler({ DbConnectException.class, DataAccessException.class, TransactionException.class })
@@ -112,7 +127,7 @@ public class ApiExceptionHandler {
 		return sb.toString();
 	}
 
-	static Map<String, Object> message(String text) {
+	public static Map<String, Object> message(String text) {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("message", text);
 		return body;

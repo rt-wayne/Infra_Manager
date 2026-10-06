@@ -58,7 +58,7 @@ copy infra_manager_web\infra_manager_web\src\main\resources\config\host.properti
 | 真檔 | 要填的值 |
 |---|---|
 | 後端 `application.properties` | 不用改（port 3202 已寫好） |
-| 後端 `config/database.properties` | `db.connect.itflow=` 後面填本系統資料庫在連線資訊 API 的別名（向系統負責人取得） |
+| 後端 `config/database.properties` | `db.connect.itflow=` 後面填本系統資料庫在連線資訊 API 的別名（向系統負責人取得）；`db.schema.itflow=` 後面填 `IM_` 表所在的 schema（表的擁有者，例 `rd_user`；連線帳號是 `ap_user` 時仍填 `rd_user`）。兩個都沒填會啟動失敗 |
 | 後端 `config/host.properties` | `rt-api.domain`（協定＋主機）、`db.connect.api.port`（冒號＋port，走預設 port 留空）、`db.connect.api.path`（API 路徑）；`db.connect.api.domain.path` 那行不要動 |
 | 殼 jar `application.properties` | 不用改（port 3201、context path `/infra_manager_web` 已寫好） |
 | 殼 jar `config/host.properties` | `backend.api.domain=http://localhost`、`backend.api.port=:3202`、`backend.api.path=/api`；`backend.api.domain.path` 那行不要動 |

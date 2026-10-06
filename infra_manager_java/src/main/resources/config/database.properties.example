@@ -15,3 +15,7 @@
 ###
 ### Infra Manager 用到的 key（必填；HealthDao、AppTransactionConfig 以 @Value("${db.connect.itflow}") 讀）：
 db.connect.itflow=<alias>
+### S2（BACKLOG 第 77 項裁示 A）：業務表所在的 schema（表由 rd_user 建、ap_user 以 schema.表名 存取、不建同義詞）。
+### DAO 的 SQL 以此值串成表名前綴（com.mpx.infra_manager_java.config.DbSchema），啟動時白名單驗證：
+### 英文字母開頭、只能含英數／_／$／#、最長 128；未設定或不合法則啟動失敗。測試環境以 rd_user 連線時也填 rd_user
+db.schema.itflow=<schema>

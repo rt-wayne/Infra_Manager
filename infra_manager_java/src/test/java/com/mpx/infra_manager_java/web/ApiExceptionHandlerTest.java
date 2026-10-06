@@ -8,6 +8,7 @@ package com.mpx.infra_manager_java.web;
 //           2026-10-06 code review：加 chunked（Content-Length 未知）→ Jackson 讀到一半超過 → 413；
 //           交易例外 500 固定訊息；未預期例外 500 固定訊息且不帶細節；400 不帶 DB 欄名
 //           2026-10-06 複審（③A）：加 Spring MVC 自己的例外不被吞成 500：404、405、415、缺參數 400、參數型別 400
+//           2026-10-06 S2 code review：加方法層 AccessDeniedException → 403、AuthenticationException → 401 固定訊息
 // ============================================================
 
 import static org.mockito.Mockito.mock;
@@ -24,6 +25,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.mpx.infra_manager_java.config.SecurityConfig;
 import com.mpx.infra_manager_java.controller.HealthController;
 import com.mpx.infra_manager_java.model.HealthStatus;
 import com.mpx.infra_manager_java.service.HealthService;
@@ -72,6 +76,16 @@ class ApiExceptionHandlerTest {
 		@GetMapping("/api/t/num")
 		public String num(@RequestParam int n) {
 			return String.valueOf(n);
+		}
+
+		@GetMapping("/api/t/denied")
+		public String denied() {
+			throw new AccessDeniedException("方法層權限不足 secret");
+		}
+
+		@GetMapping("/api/t/unauth")
+		public String unauth() {
+			throw new InsufficientAuthenticationException("方法層未認證 secret");
 		}
 	}
 
@@ -208,6 +222,22 @@ class ApiExceptionHandlerTest {
 		mvc.perform(post("/api/t/text").contentType(MediaType.APPLICATION_JSON).content("{not json"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("請求格式錯誤"));
+	}
+
+	@Test
+	void 方法層AccessDenied回403固定訊息() throws Exception {
+		mvc.perform(get("/api/t/denied"))
+				.andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_FORBIDDEN))
+				.andExpect(content().string(Matchers.not(Matchers.containsString("secret"))));
+	}
+
+	@Test
+	void 方法層AuthenticationException回401固定訊息() throws Exception {
+		mvc.perform(get("/api/t/unauth"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_NOT_LOGGED_IN))
+				.andExpect(content().string(Matchers.not(Matchers.containsString("secret"))));
 	}
 
 	@Test

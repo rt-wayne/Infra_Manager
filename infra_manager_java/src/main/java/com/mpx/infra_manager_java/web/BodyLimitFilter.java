@@ -12,6 +12,7 @@ package com.mpx.infra_manager_java.web;
 //           2026-10-06 code review：toLowerCase 指定 Locale.ROOT；非法 charset 改丟 UnsupportedEncodingException。
 //           （Spring 讀 JSON 走 getInputStream 不走 getReader，正常流程碰不到；非法 charset 實際由 Spring 在解析
 //           Content-Type 時先擋成 415。這裡只是讓自行呼叫 getReader 的人拿到 IOException 而不是未受檢例外。）
+//           2026-10-06 S2 code review：413 的 JSON 改共用 JsonResponses.write，不再自己拼字串。
 // ============================================================
 
 import java.io.BufferedReader;
@@ -25,7 +26,6 @@ import java.nio.charset.UnsupportedCharsetException;
 import java.util.Locale;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import jakarta.servlet.FilterChain;
@@ -62,10 +62,7 @@ public class BodyLimitFilter extends OncePerRequestFilter {
 
 	/** 413 固定 JSON 訊息 */
 	public static void writeTooLarge(HttpServletResponse response) throws IOException {
-		response.setStatus(HttpStatus.PAYLOAD_TOO_LARGE.value());
-		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-		response.getWriter().write("{\"message\":\"請求內容過大\"}");
+		JsonResponses.write(response, HttpStatus.PAYLOAD_TOO_LARGE.value(), "請求內容過大");
 	}
 
 	/** 讀取本文時計數，超過上限丟 BodyTooLargeException */

@@ -12,6 +12,7 @@ JSON 使用 Jackson 3（套件 `tools.jackson`，例 `tools.jackson.databind.Obj
 1. `com.mpx.common` 底下（含 `src/test/java/com/mpx/common`）任何檔案都**不可修改**；`com.mpx.Application` 也不要改。
 2. 業務程式一律放在 `com.mpx.infra_manager_java` 底下（子套件自訂，例 `controller`、`service`、`dao`、`model`）。
 3. SQL 一律用 `:name` 具名參數綁定，**不可**用字串拼接組 SQL。
+   **本專案唯一例外（2026-10-06 裁示 ②A）**：schema 前綴是識別字、無法用 `:name` 綁定，一律經 `config.DbSchema.table("IM_XXX")` 取得（值來自 `db.schema.itflow`，啟動時白名單驗證）；DAO 內不得自行拼接任何其他片段。
 
 若專案根目錄有 `CLAUDE.md`，請一併遵守其中的規則。
 
@@ -223,7 +224,7 @@ java -jar target/infra_manager_java-0.0.1-SNAPSHOT.jar
 - [ ] 已讀完本檔。
 - [ ] 改動的檔案都不在 `com.mpx.common` 底下，也沒改 `com.mpx.Application`。
 - [ ] 業務程式都在 `com.mpx.infra_manager_java` 底下。
-- [ ] SQL 全部用 `:name` 具名參數，沒有字串拼接。
+- [ ] SQL 全部用 `:name` 具名參數，沒有字串拼接（唯一例外：schema 前綴經 `DbSchema.table()`，見鐵律 3）。
 - [ ] 新增的 properties key 已同步寫進對應的 `.example`。
 - [ ] 沒有把 `*.properties` 真檔、帳密或真實位址加進 git。
 - [ ] `./mvnw clean package` 通過，42 個 common.db 測試全過。
