@@ -139,7 +139,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 #### 後端分層
 - 範本的 `com.mpx.common` 與 `com.mpx.Application` 不修改；業務程式只放 `com.mpx.infra_manager_java` 底下
 - 分層依範本：controller（`@RestController`，路徑 `/api/<資源>`）→ service（業務邏輯，交易邊界）→ dao（`@Repository`，注入 `DbClient`，DB 別名以 `@Value("${db.connect.itflow}")` 讀取）→ model（POJO，SQL 欄位別名大寫底線對應 camelCase 屬性）。另有 `config`（Spring 設定）、`web`（filter 與例外處理）、`util`（共用工具）
-- 業務功能範圍：`identity`、`approval`（共用簽核引擎）、`changerequest`、`ai`、`mail`、`inventory`、`audit`
+- 套件切法（2026-10-06 裁示 ①B）：先依層、再依功能——`controller`／`service`／`dao`／`model` 四個頂層套件底下，各自再依功能分子套件：`identity`、`approval`（共用簽核引擎）、`changerequest`、`ai`、`mail`、`inventory`、`audit`（例如 `service.approval`、`dao.changerequest`）。S1 的 `Health*` 只有一個檔，直接放頂層套件
 - **交易管理**：範本 `DbClient.update` 為單句 autocommit、不提供 TransactionManager；本系統一張申請單要同時寫多張表，因此在 `config.AppTransactionConfig` 自建 `LazyAliasTransactionManager`（繼承 `DataSourceTransactionManager`）。它疊在範本已建好的 Hikari 連線池上（不另建池），第一次交易時才依 `db.connect.itflow` 別名取池並快取 DataSource，維持範本「連線資訊 API 位址未設仍可啟動」的行為；別名空白時啟動即失敗。`@Transactional` 範圍內的 `DbClient` 呼叫共用同一條連線、一起 commit／rollback
 - **請求本文上限**（`config.RequestLimitConfig`，常數寫在程式內）：JSON 等非 multipart 本文 1 MB（`web.BodyLimitFilter`，掛在 `/api/*`；`Content-Length` 已超過就不讀本文、未知長度則邊讀邊計數）、multipart 單檔 50 MB、整個 multipart 請求 500 MB，超過一律回 413。multipart 延後解析（`spring.servlet.multipart.resolve-lazily=true`），只有真的取 `MultipartFile` 參數的端點才會落暫存檔
 - **錯誤處理**：`web.ApiExceptionHandler` 統一把例外轉成 `{"message": …}` 回應（格式見「API 規格」），回應一律不帶內部細節；log 只記例外類別名、ORA 錯誤碼、method／path 與未預期例外的堆疊前 10 個 frame，不記例外訊息

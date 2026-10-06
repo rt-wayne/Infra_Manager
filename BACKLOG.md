@@ -86,7 +86,6 @@
 | 78 | 殼 jar 的 `ApiForwarder` 轉發時不帶瀏覽器 cookie 與 header（範本設計），後端 3202 看不到 session；S2 的登入／session／CSRF 要怎麼設計（session 放殼 jar 由它轉工號給後端、或殼 jar 透傳 cookie、或 token header）未定，S2 開工前決定，可委派 architect | 2026-10-06 | — |
 | 79 | 殼 jar 的 `ApiForwarder` 只轉 JSON（`get`／`post` 固定 JSON 本文與回應），附件上傳（multipart）與下載（二進位串流）無法經它轉發；S4 下載／S6 上傳前要決定：殼 jar 加 multipart／串流轉發、或瀏覽器直連 3202、或其他。與第 80 項一起看 | 2026-10-06 | — |
 | 80 | 殼 jar 本身沒有請求本文上限，且把整份 JSON 讀進記憶體再轉發；⑤A 的 1 MB／50 MB／500 MB 只保護後端 3202。要確認正式環境 3202 是否只允許殼 jar 來源（防火牆或 Docker 網路），並決定殼 jar 要不要也加上限（會動到範本 `ApiForwarder`，須與範本維護者協調）。另兩件要給範本維護者的事：`ApiForwarder` 把後端 4xx 一律轉成 500「後端服務呼叫失敗」（裁示 ①A：提變更單讓它原樣轉發 4xx）、業務層自建 TransactionManager 超出範本 README「不支援交易」、範本 pom 附帶的 `mssql-jdbc` 本系統用不到（裁示 ⑦A：不自行移除）。三件都已寫進 PRD「給範本維護者的註記」，剩下的是實際送出變更單 | 2026-10-06 | — |
-| 81 | S2 起後端業務套件怎麼切：A 依功能切（identity、approval…，各自含 controller／service／dao／model）／B 照範本依層切（controller／service／dao／model 下再按功能分子套件）。範本 README 只給依層切的範例、沒有規定；原 PRD 寫依功能切，S1 程式照範本依層切。S2 開工前委派 architect 比較後裁示（2026-10-06 裁示 ⑨A），裁示後更新 PRD「後端分層」 | 2026-10-06 | — |
 
 ### 舊系統已知漏洞（依第 30 項 ⑯ 決定後處理）
 
