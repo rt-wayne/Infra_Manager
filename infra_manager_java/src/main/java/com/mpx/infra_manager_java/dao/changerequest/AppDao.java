@@ -12,6 +12,7 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //             申請人姓名（UPPER 後 contains，% _ \ 以 \ 跳脫）。表名經 DbSchema.table()。
 //           S4 審查修正（Claude Opus 5.5，2026-10-06）：findOptions 的類別「其他」補充改為獨立一段 UNION ALL
 //             （原本以子項的 FORM_OPTION_ID JOIN 指向類別的 IM_APP_CATG_OTHER，永遠撈不到）
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：findById 加 ROW_VER_NO、findOptions 加 FORM_OPTION_ID（編輯頁回填）
 // ============================================================
 
 import java.util.HashMap;
@@ -177,7 +178,7 @@ public class AppDao {
 	public Optional<AppRow> findById(String appId) {
 		String sql = "SELECT A.APP_ID, A.APP_TITLE, A.PRIO_CODE, P.OPTION_NAME AS PRIO_NAME, P.COLOR_CODE AS PRIO_COLOR,"
 				+ " A.FLOW_ID, F.FLOW_NAME, A.APPLY_USER_ID, U.USER_NAME AS APPLY_USER_NAME, A.APP_STATUS_CODE,"
-				+ " A.SOURCE_CODE, A.CURR_VER_NO, A.APPLY_DATE, A.APPLY_DEPT_NAME, A.APPLY_TEL, A.APPLY_EMAIL,"
+				+ " A.SOURCE_CODE, A.CURR_VER_NO, A.ROW_VER_NO, A.APPLY_DATE, A.APPLY_DEPT_NAME, A.APPLY_TEL, A.APPLY_EMAIL,"
 				+ " A.IS_SELF_EXEC, A.IS_SUP_EXEC, A.WORK_MODE_CODE, A.REMOTE_METHOD, A.SUP_NAME, A.SUP_CNTCT, A.SUP_TEL,"
 				+ " A.SUP_HEAD_CNT, A.WORK_SUBJ, A.IMPACT_DESC, A.WORK_DETAIL, A.RISK_DESC, A.ROLL_BACK_PLAN, A.OTHER_REASON,"
 				+ " A.SCHED_START_DATE, A.SCHED_END_DATE, A.EST_HOUR_QTY, A.LOC_SOURCE_CODE, A.AREA_NAME, A.RACK_NAME,"
@@ -199,28 +200,28 @@ public class AppDao {
 	 */
 	public List<OptionRow> findOptions(String appId) {
 		String option = schema.table("IM_FORM_OPTION");
-		String sql = "SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, PO.OPTION_CODE AS UP_OPTION_CODE,"
+		String sql = "SELECT O.FORM_OPTION_ID, O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, PO.OPTION_CODE AS UP_OPTION_CODE,"
 				+ " CAST(NULL AS VARCHAR2(500 CHAR)) AS OTHER_TEXT, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_CATG_MAP") + " M"
 				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = M.FORM_OPTION_ID"
 				+ " LEFT JOIN " + option + " PO ON PO.FORM_OPTION_ID = O.UP_FORM_OPTION_ID"
 				+ " WHERE M.APP_ID = :appId AND M.STATUS = 1"
 				+ " UNION ALL"
-				+ " SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, OT.OTHER_TEXT, O.SORT_NO"
+				+ " SELECT O.FORM_OPTION_ID, O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, OT.OTHER_TEXT, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_CATG_OTHER") + " OT"
 				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = OT.FORM_OPTION_ID"
 				+ " WHERE OT.APP_ID = :appId AND OT.STATUS = 1"
 				+ " UNION ALL"
-				+ " SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, NULL, O.SORT_NO"
+				+ " SELECT O.FORM_OPTION_ID, O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, NULL, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_REASON_MAP") + " M"
 				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = M.FORM_OPTION_ID"
 				+ " WHERE M.APP_ID = :appId AND M.STATUS = 1"
 				+ " UNION ALL"
-				+ " SELECT O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, NULL, O.SORT_NO"
+				+ " SELECT O.FORM_OPTION_ID, O.GROUP_CODE, O.OPTION_CODE, O.OPTION_NAME, NULL, NULL, O.SORT_NO"
 				+ " FROM " + schema.table("IM_APP_SCOPE_MAP") + " M"
 				+ " JOIN " + option + " O ON O.FORM_OPTION_ID = M.FORM_OPTION_ID"
 				+ " WHERE M.APP_ID = :appId AND M.STATUS = 1"
-				+ " ORDER BY 1, 6, 2";
+				+ " ORDER BY 2, 7, 3";
 		return dbClient.query(itflowDb, sql, Map.of("appId", appId), OptionRow.class);
 	}
 

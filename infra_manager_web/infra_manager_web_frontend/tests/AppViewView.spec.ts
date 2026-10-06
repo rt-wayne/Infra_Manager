@@ -7,6 +7,7 @@
 //           執行確認列依治理事件顯示退回；404 出 toast 並顯示錯誤；401 不另出 toast；換 id 重新載入
 //           S4 審查修正：類別「其他」補充的顯示；結果未填時例外／後續追蹤顯示 —；快速切換單號丟棄過期回應；
 //           「送審」改為只在事件紀錄表斷言（原斷言會被任何位置的同字命中）
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：測試資料補 rowVerNo、formOptionId（型別新增必填欄位）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -59,6 +60,7 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
     flowId: 'F1',
     flowName: '一般流程',
     verNo: 1,
+    rowVerNo: 0,
     applicant: { userId: '00001', name: '王小明', deptName: '資訊部', tel: '1234', email: 'a@example.com' },
     applyDate: '2026-10-06',
     selfExec: true,
@@ -71,10 +73,10 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
     workDetail: '第一行\n第二行',
     riskDesc: '低',
     rollbackPlan: '換回舊機',
-    categories: [{ groupCode: 'CATG_ITEM', code: 'NET_SW', name: '交換器', upCode: 'NET', otherText: null }],
-    reasons: [{ groupCode: 'REASON', code: 'EOL', name: '設備汰換', upCode: null, otherText: null }],
+    categories: [{ formOptionId: 11, groupCode: 'CATG_ITEM', code: 'NET_SW', name: '交換器', upCode: 'NET', otherText: null }],
+    reasons: [{ formOptionId: 21, groupCode: 'REASON', code: 'EOL', name: '設備汰換', upCode: null, otherText: null }],
     otherReason: '順便整線',
-    scopes: [{ groupCode: 'SCOPE', code: 'NET', name: '網路', upCode: null, otherText: null }],
+    scopes: [{ formOptionId: 31, groupCode: 'SCOPE', code: 'NET', name: '網路', upCode: null, otherText: null }],
     equipments: [{ seqNo: 1, name: 'SW-01', assetNo: 'A001', modelNo: 'C9300', serialNo: 'S1', purpose: '核心', mgmtIp: '10.0.0.1' }],
     planSteps: [],
     schedule: { start: '2026-10-07 22:00', end: '2026-10-08 02:00', estHours: 4 },
@@ -249,8 +251,8 @@ describe('AppViewView', () => {
     getMock.mockResolvedValue(
       detail({
         categories: [
-          { groupCode: 'CATG', code: 'server_storage', name: '伺服器/儲存', upCode: null, otherText: 'SAN 擴充櫃 DAE-02' },
-          { groupCode: 'CATG_ITEM', code: 'server_storage_01', name: '伺服器上架', upCode: 'server_storage', otherText: null }
+          { formOptionId: 1, groupCode: 'CATG', code: 'server_storage', name: '伺服器/儲存', upCode: null, otherText: 'SAN 擴充櫃 DAE-02' },
+          { formOptionId: 2, groupCode: 'CATG_ITEM', code: 'server_storage_01', name: '伺服器上架', upCode: 'server_storage', otherText: null }
         ]
       })
     )

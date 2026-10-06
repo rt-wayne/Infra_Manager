@@ -7,13 +7,15 @@ package com.mpx.infra_manager_java.model.changerequest;
 //           檢核表、實際執行紀錄、簽核欄、附件、歷史版次、事件紀錄與 9 個權限旗標。
 //           代碼欄位回代碼、前端對應中文；選項名稱（優先等級、類別、原因、範圍、檢核項、執行結果）由伺服器帶出。
 //           日期時間一律 yyyy-MM-dd HH:mm 字串、日期 yyyy-MM-dd；附件不帶檔案路徑，下載走專用端點
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：加 rowVerNo（樂觀鎖，編輯草稿時帶回）與 Option.formOptionId
 // ============================================================
 
 import java.math.BigDecimal;
 import java.util.List;
 
 public record AppDetail(String appId, String title, String prioCode, String prioName, String prioColor,
-		String statusCode, String sourceCode, String flowId, String flowName, Integer verNo, Applicant applicant,
+		String statusCode, String sourceCode, String flowId, String flowName, Integer verNo, Long rowVerNo,
+		Applicant applicant,
 		String applyDate, boolean selfExec, boolean supplierExec, String workModeCode, String remoteMethod,
 		Supplier supplier, String workSubject, String impactDesc, String workDetail, String riskDesc,
 		String rollbackPlan, List<Option> categories, List<Option> reasons, String otherReason, List<Option> scopes,
@@ -28,7 +30,8 @@ public record AppDetail(String appId, String title, String prioCode, String prio
 	}
 
 	/** groupCode：CATG／CATG_ITEM／REASON／SCOPE；upCode 只有 CATG_ITEM 有（所屬類別代碼）；otherText 只有 CATG 的「其他」補充有 */
-	public record Option(String groupCode, String code, String name, String upCode, String otherText) {
+	public record Option(Long formOptionId, String groupCode, String code, String name, String upCode,
+			String otherText) {
 	}
 
 	public record Equipment(Integer seqNo, String name, String assetNo, String modelNo, String serialNo,

@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //                 待我簽核總數 mineCount 不受篩選影響（給列表上方的計數用）。
 //           detail：單號格式不符或查不到 → 404「找不到申請單」；簽核欄沒有實例時用流程定義展開（狀態 WAITING）；
 //                 附件只給中繼資料，下載走 AttachmentService
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：detail 帶 rowVerNo 與選項的 formOptionId
 // ============================================================
 
 import java.time.LocalDate;
@@ -148,6 +149,7 @@ public class AppQueryService {
 
 		return new AppDetail(app.getAppId(), app.getAppTitle(), app.getPrioCode(), app.getPrioName(), app.getPrioColor(),
 				app.getAppStatusCode(), app.getSourceCode(), app.getFlowId(), app.getFlowName(), app.getCurrVerNo(),
+				app.getRowVerNo(),
 				new AppDetail.Applicant(app.getApplyUserId(), app.getApplyUserName(), app.getApplyDeptName(),
 						app.getApplyTel(), app.getApplyEmail()),
 				TaiwanTime.formatDate(app.getApplyDate()), flag(app.getIsSelfExec()), flag(app.getIsSupExec()),
@@ -213,8 +215,8 @@ public class AppQueryService {
 	}
 
 	private static List<AppDetail.Option> optionsOf(List<OptionRow> rows, Set<String> groups) {
-		Function<OptionRow, AppDetail.Option> map = o -> new AppDetail.Option(o.getGroupCode(), o.getOptionCode(),
-				o.getOptionName(), o.getUpOptionCode(), o.getOtherText());
+		Function<OptionRow, AppDetail.Option> map = o -> new AppDetail.Option(o.getFormOptionId(), o.getGroupCode(),
+				o.getOptionCode(), o.getOptionName(), o.getUpOptionCode(), o.getOtherText());
 		return rows.stream().filter(o -> groups.contains(o.getGroupCode())).map(map).toList();
 	}
 

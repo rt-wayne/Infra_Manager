@@ -5,6 +5,8 @@
 //           狀態、來源後端只回代碼，中文名稱在這裡對應；優先等級名稱與顏色由後端帶
 //           S4 回合三：狀態中文改用舊系統畫面用語（回合二自訂的「審核中／核准／待治理審查／結案／退件」與舊系統不一致）；
 //           補檢視頁型別 AppDetail（對應後端 model.changerequest.AppDetail）與關卡、事件、版次、作業方式等代碼的中文對照
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：AppDetail 補 rowVerNo（樂觀鎖）、AppOption 補 formOptionId；
+//           新增 GET /form-options 回應型別 FormOptionsResponse（對應後端 model.changerequest.FormOptionsResponse）
 // ============================================================
 
 export type AppStatus =
@@ -152,6 +154,7 @@ export interface AppSupplier {
 
 /** groupCode：CATG／CATG_ITEM／REASON／SCOPE；upCode 只有 CATG_ITEM 有；otherText 只有 CATG 的「其他」補充有 */
 export interface AppOption {
+  formOptionId: number
   groupCode: string
   code: string
   name: string
@@ -291,6 +294,8 @@ export interface AppDetail {
   flowId: string | null
   flowName: string | null
   verNo: number | null
+  /** 樂觀鎖版號；PUT /apps/{id} 時原樣帶回 */
+  rowVerNo: number
   applicant: AppApplicant
   applyDate: string | null
   selfExec: boolean
@@ -321,4 +326,27 @@ export interface AppDetail {
   permissions: AppPermissions
   createdAt: string | null
   updatedAt: string | null
+}
+
+/** GET /form-options 每一項；upFormOptionId 只有 CATG_ITEM 有（指向所屬 CATG） */
+export interface FormOption {
+  formOptionId: number
+  /** PRIO／CATG／CATG_ITEM／REASON／SCOPE／CHECK_LIST／EXEC_RESULT／SIGN_ROLE */
+  groupCode: string
+  code: string
+  name: string
+  upFormOptionId: number | null
+  colorCode: string | null
+  desc: string | null
+  timeLimitDesc: string | null
+  prioFlowDesc: string | null
+  sampleDesc: string | null
+  flowId: string | null
+  sortNo: number | null
+}
+
+/** GET /form-options 回應；upload 只供前端提示，實際檢核在後端 */
+export interface FormOptionsResponse {
+  options: FormOption[]
+  upload: { maxMb: number; maxFiles: number }
 }

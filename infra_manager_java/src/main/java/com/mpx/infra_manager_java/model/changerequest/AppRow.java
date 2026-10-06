@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.model.changerequest;
 // 變更說明: 新增：IM_APP 查詢列（S4），列表與檢視共用；BeanPropertyRowMapper 需無參數建構子與 setter，
 //           SQL 別名底線轉駝峰。U_RANGE／U_START_NO／U_END_NO 以 UNIT_ 開頭的別名取回，避開 Java bean
 //           「u 開頭接大寫」的屬性名規則。DATE 欄位以 Timestamp 承接（台灣牆上時間，不換算）
+//           S6 回合二 a（Claude Opus 5.5，2026-10-06）：加 rowVerNo（樂觀鎖版本號，檢視 API 帶給編輯頁）
 // ============================================================
 
 import java.math.BigDecimal;
@@ -25,6 +26,7 @@ public class AppRow {
 	private String appStatusCode;
 	private String sourceCode;
 	private Integer currVerNo;
+	private Long rowVerNo;
 	private Timestamp applyDate;
 	private String applyDeptName;
 	private String applyTel;
@@ -88,6 +90,8 @@ public class AppRow {
 	public void setSourceCode(String sourceCode) { this.sourceCode = sourceCode; }
 	public Integer getCurrVerNo() { return currVerNo; }
 	public void setCurrVerNo(Integer currVerNo) { this.currVerNo = currVerNo; }
+	public Long getRowVerNo() { return rowVerNo; }
+	public void setRowVerNo(Long rowVerNo) { this.rowVerNo = rowVerNo; }
 	public Timestamp getApplyDate() { return applyDate; }
 	public void setApplyDate(Timestamp applyDate) { this.applyDate = applyDate; }
 	public String getApplyDeptName() { return applyDeptName; }
