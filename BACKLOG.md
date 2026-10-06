@@ -17,13 +17,13 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-（無；S2 已於 2026-10-06 完成，下一個是第 4 項 S4）
+| 4 | S4 唯讀列表與檢視：GET 列表（6 篩選、待我簽核置頂）、GET 檢視（關卡、附件下載權限）、後端附件下載端點；前端列表頁與檢視頁。2026-10-06 裁示：列表／檢視須登入（①A）、手寫種子 SQL 當驗收資料（②A）、附件只做後端端點、殼 jar 透傳留 S6（③B）、列表不做 AI 欄位（④A）。完成條件：`db/oracle/sample/S4_sample_apps.sql` 種子資料在列表頁與檢視頁全欄位正確顯示（原「抽 5 張新舊畫面一致」移到第 3 項 S3 完成後驗收） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：**S4 唯讀列表與檢視開工**（衝刺模式，見專案 `CLAUDE.md`「基本功能衝刺期」）。開工前先 `git fetch origin`＋動工前快照；先讀舊系統 `routes/apps.js` 的列表與檢視路由、`views/apps/*.ejs`，列出 6 個篩選條件與檢視頁欄位，再提需求理解與檔案清單等使用者確認。第 92 項的 ⑥⑦（401 處理器略過 `/auth/login`、toast 與導頁去重）建議在 S4 列表頁平行打 API 時順手做
-- 已改動：無
-- 要記得的事：殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201（jar 被鎖住會 clean 失敗）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
-- 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
+- 下一步：**S4 回合二 前端列表頁**：`types/app.ts`（對應後端 `AppListResponse`／`AppListItem`／`AppDetail`）、`api/apps.ts`、`views/AppListView.vue`（6 篩選＋分頁 20 筆＋待我簽核置頂標記、1024 寬不出現橫向捲軸）、`components/StatusPill.vue`／`Pager.vue`、路由 `/apps`、`HomeView` 加入口連結；順手做第 92 項 ⑥⑦（`api/http.ts` 的 401 處理器略過 `/auth/login`、toast 與導頁去重）；vitest 測試。回合三前端檢視頁 `AppViewView.vue`（唯讀；動作鈕一律 toast「此功能尚未開放」、下載鈕停用）。階段末才派 `code-reviewer`＋`test-runner`。**回合二開工前要先裁示第 83 項（殼 jar 資安回應標頭與 CSP）**——它寫明「S4 第一個唯讀頁面前決定」
+- 已改動（回合一，commit `b5e7d74`）：後端 `controller/dao/model/service` 的 `changerequest` 子套件、`util/TaiwanTime`、`web/ApiNotFoundException`／`ApiBadRequestException`、`ApiExceptionHandler`、`application.properties.example`（新鍵 `im.attach.root`，**使用者的真實 `application.properties` 要自己補這個鍵**，不補時下載端點回 500）、種子 SQL、6 個測試類別（單元測試 161 → 197）
+- 要記得的事：種子 SQL 用 SQL*Plus 以 `ap_user` 跑 `@db/oracle/sample/S4_sample_apps.sql`，開頭會問「要看到待我簽核的使用者工號」（填 wayne 的工號）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
+- 卡住／待確認：第 83 項（殼 jar 資安標頭／CSP，回合二前）；第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
 
 ## 下一階段（細節調整）
 
@@ -42,8 +42,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則） | 3 | — |
-| 4 | S4 唯讀列表與檢視：GET 列表（6 篩選、待我簽核置頂）、GET 檢視（關卡、附件下載權限）。完成條件：抽 5 張新舊畫面一致 | 4 | — |
+| 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則）。**S4 的「抽 5 張新舊畫面一致」驗收（2026-10-06 裁示 ②A）併入本項，匯入完成後對列表頁與檢視頁執行** | 3 | — |
 | 5 | S5 表單設定與範本：`IM_FORM_OPTION`（V1 已建）；範本 CRUD（修改／刪除權限**開工前先裁示第 30 項**，涉及漏洞第 43 項）。完成條件：3 份範本可見；權限規則依第 30 項裁示結果驗證 | 5 | — |
 | 6 | S6 新增、編輯草稿：AppForm（不含機櫃選擇器）、附件上傳、編號計數器。前端送出前自行檢核字數作即時提示（原 ①C 的理由「殼 jar 把 4xx 轉成 500」已因第 78 項自建轉發器消失、後端 400 可直達前端，是否仍保留前端預檢 S6 開工時再定；規則同後端 `TextLength`：code point、換行先轉 LF、2000／20000 字）。完成條件：建草稿成功；同日刪單再建不撞號（有測試） | 6 | — |
 | 7 | S7 簽核引擎：送審、同意、退件、撤回；樂觀鎖；待辦數。完成條件：full 5 關走完；兩人同時簽其中一人 409 | 7 | — |
@@ -64,7 +63,6 @@
 | 18 | ④ AI 金鑰存放（正式環境為 Docker＋Rocky Linux 9.7）：候選 A 環境變數／B Docker secret 檔案掛載／C px-secret-resolver（若支援非 DB 憑證）／D AWS Secrets Manager。原 architect 建議的 DPAPI＋WinSW 方案因正式環境非 Windows 已失效，需重新分析；遷移時解出舊 `ai.key.enc` 另見第 33 項 | 2026-10-02 | — |
 | 22 | ⑧ 正式環境容器的啟動與管理方式：A docker compose／B systemd；開發期維持 jar + bat。原 WinSW 選項因非 Windows 已失效，需重新分析。S15 開工前裁示 | 2026-10-02 | — |
 | 24 | ⑩ 三代 AI 報告：A 原樣存、Java 讀時正規化／B 原樣存 + Node 預轉顯示欄／C 全轉 v3。architect 建議 B | 2026-10-02 | — |
-| 26 | ⑫ 未登入可看：A 全部須登入／B 維持公開。architect 建議 A | 2026-10-02 | — |
 | 27 | ⑬ 切換策略：A 凍結一次切換（3201 UAT → 凍結舊系統 → 最後一次匯入 → 對帳 → 改 3200 → 舊系統唯讀）／B 並行寫入。architect 建議 A | 2026-10-02 | — |
 | 29 | ⑮ 遷移工具：A Java 匯入器／B Node 匯出 + Java 匯入。architect 建議 A（AI 部分借 Node） | 2026-10-02 | — |
 | 30 | ⑯ 既有漏洞：A 一律修正／B 完全照搬。architect 建議 A，逐項列 CHANGELOG 並公告。清單見下方「舊系統已知漏洞」第 41～54 項 | 2026-10-02 | — |
@@ -91,7 +89,7 @@
 | 75 | 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），`APP_ID` 為主鍵不可重複，使用者已裁示改號規則為 B：原號加後綴 `-D`（如 `IM20260505-002-D`），不從序號表取號，先改號、後回填 `IM_APP_SEQ`，回填時排除帶 `-D` 後綴的單號。其所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以 `public/uploads/<單號>/` 資料夾判定（撞號的兩張單共用同一資料夾），實體檔使用者已裁示為 A：匯入時把已刪除單的附件複製（不是搬移）到新的 `-D` 資料夾，資料夾名一律等於單號、無例外。共 5 個檔：已刪除的 `IM20260505-003` 的 `1777960881217_20251210_012806829_iOS.jpg` → `IM20260505-003-D`；已刪除的 `IM20260918-003` 的 `1789717904288_PA升級作業計畫.docx`、`1789718818701_paste-2026-09-18T08-06-17-1.png`、`…08-06-18-1.png`、`1789718818702_paste-2026-09-18T08-06-25-1.png` → `IM20260918-003-D`（來源皆在舊 `public/uploads/<單號>/`，與現存同號單共用資料夾）；`IM20260505-002`、`IM20260506-002` 無附件。待做：S3 匯入腳本實作此複製，並讓附件路徑欄指向新資料夾 | 2026-10-05 | — |
 | 76 | 等 DBA 回覆：(1) 審 `docs/db/Table_List_Schema.xlsx`（31 張表、417 個欄位，使用者裁示照現狀送出；`SYS_PARAM` 已依規範條文把欄名改為 `PARAM_NAME`／`PARAM_VALUE`／`PARAM_DESC`（`MEMO` 不是保留字，沿用範例原名），與規範範例工作表的 `NAME`／`VALUE`／`DESCR` 不同；此說明已寫進 `SYS_PARAM` 的表說明，隨 xlsx 送出）；(1b) 順帶問 DBA 一題：`IM_APP.SUP_NAME` 存廠商文字（舊資料 368 張單中 263 張有廠商名稱、沒有代碼，同一廠商有不同寫法，如「晉泰科技」47 次、「晉泰」40 次），機房施工廠商是否在公司廠商主檔 `CMN_SUP`（PX 廠編）內？若在，是否要改存 `SUP_ID`；(2) 第 61 項的 29 個縮寫（使用者裁示維持現狀）一併送。稽核性質的表（`IM_ACCESS_LOG`、`IM_APP_EVENT`、`IM_APP_VER`）使用者已裁示維持四種權限都給（清理排程見第 70 項、改號匯入見第 75 項需要 UPDATE／DELETE），不送 DBA。回覆若要改欄名，改動範圍是 V1 DDL、PRD，並須重產 xlsx（`node db/tools/gen_table_doc.js`）；改表名則授權檔也要改。`ap_user` 存取方式已裁示維持以 schema 前綴存取、不建同義詞，不送 DBA。S1 不受阻擋，但 DDL 在正式環境執行前須有回覆 | 2026-10-05 | — |
 | 74 | 表單選項已定為後台可維護（`IM_FORM_OPTION`），但 PRD API 規格只有唯讀的 `GET /api/form-schema`；寫入 API 的端點、權限，以及可否刪除或只能停用選項未定，S14 前決定 | 2026-10-05 | — |
-| 79 | 殼 jar 的轉發器（2026-10-06 自建完成）首版只轉 JSON／文字本文並整份讀進記憶體，附件上傳（multipart）與下載（二進位串流）要另外處理；S4 下載／S6 上傳前決定：轉發器加 multipart／串流透傳（本專案可自行改，不必再與範本維護者協調）、或瀏覽器直連 3202、或其他。**上傳現況（2026-10-06 第二輪 code review S1，裁示 ③A 暫不動設定）**：殼 jar 的 `MultipartAutoConfiguration` 預設開啟且非延後解析，`multipart/*` 請求進 controller 前 Tomcat 已把本文寫進暫存檔（單檔 1 MB、整請求 10 MB，超過回 Spring 自己的 413），轉發器 `readAllBytes()` 讀到的是空本文；解法是殼 jar 設 `spring.servlet.multipart.enabled=false`（真檔與 `.example` 同步）讓本文原樣過，但這會拿掉殼 jar 唯一的本文上限，所以要與第 80 項（殼 jar 本文上限）同時定。與第 80 項一起看 | 2026-10-06 | — |
+| 79 | 殼 jar 的轉發器（2026-10-06 自建完成）首版只轉 JSON／文字本文並整份讀進記憶體，附件上傳（multipart）與下載（二進位串流）要另外處理。**2026-10-06 S4 裁示 ③B：S4 只做後端下載端點（已完成，`GET /api/apps/{id}/attachments/{attachId}`），殼 jar 的二進位串流透傳與上傳一起在 S6 處理，S6 前前端下載鈕停用**。S6 開工前決定：轉發器加 multipart／串流透傳（本專案可自行改，不必再與範本維護者協調）、或瀏覽器直連 3202、或其他。**上傳現況（2026-10-06 第二輪 code review S1，裁示 ③A 暫不動設定）**：殼 jar 的 `MultipartAutoConfiguration` 預設開啟且非延後解析，`multipart/*` 請求進 controller 前 Tomcat 已把本文寫進暫存檔（單檔 1 MB、整請求 10 MB，超過回 Spring 自己的 413），轉發器 `readAllBytes()` 讀到的是空本文；解法是殼 jar 設 `spring.servlet.multipart.enabled=false`（真檔與 `.example` 同步）讓本文原樣過，但這會拿掉殼 jar 唯一的本文上限，所以要與第 80 項（殼 jar 本文上限）同時定。與第 80 項一起看 | 2026-10-06 | — |
 | 80 | 殼 jar 本身沒有請求本文上限；⑤A 的 1 MB／50 MB／500 MB 只保護後端 3202。轉發器已改為本專案自建（2026-10-06 完成），殼 jar 要不要也加上限可自行決定，S6 上傳前定。正式環境 3202 是否只允許殼 jar 來源（防火牆或 Docker 網路）：使用者 2026-10-06 答不知道，後端一律自行驗 session、不信任殼 jar 轉來的身分，PRD 標待確認。同一個部署議題：殼 jar 到 3202 目前是 http 明文（`host.properties.example` 的範例），`IM_SESSION` 與 `X-IM-XSRF` 在內網明碼傳輸；若 3202 不是只開給殼 jar、或兩者不在同一台／同一個 Docker 網路，要改 https 或其他保護，S15 部署前定。另一個同時定的部署議題（2026-10-06 第二輪 code review B3）：3201 的 https 若由前面的反向代理終結，殼 jar `getRemoteAddr()` 拿到的是代理 IP，轉給後端的 `X-Forwarded-For` 與存取紀錄都會變成代理 IP；要記真實來源得設 `server.forward-headers-strategy` 並限定只信任該代理的 IP，不得無條件信任。第三個（2026-10-06 第三輪 code review ⑤）：殼 jar 的 JDK HttpClient 沒指定代理、用 JVM 預設 `ProxySelector`，正式後端是內網主機名或 IP、不在預設不代理清單（`localhost|127.*|[::1]`）內，維運若用 `-Dhttp.proxyHost` 或 `JAVA_TOOL_OPTIONS` 啟動殼 jar，打後端的請求（含 `IM_SESSION`、`X-IM-XSRF`）會經公司代理；候選：`BackendClientConfig` 加 `.proxy(HttpClient.Builder.NO_PROXY)` 固定直連、或部署文件規定啟動參數要把後端主機放進 `http.nonProxyHosts`。給範本維護者的事剩兩件：業務層自建 TransactionManager 超出範本 README「不支援交易」、範本 pom 附帶的 `mssql-jdbc` 本系統用不到（裁示 ⑦A：不自行移除）；原「`ApiForwarder` 4xx 轉 500 的變更單」因自建轉發器不再需要。兩件都在 PRD「給範本維護者的註記」，剩下的是實際送出 | 2026-10-06 | — |
 | 83 | 殼 jar 沒有資安回應標頭（`security.md` A05 要求的 `X-Content-Type-Options: nosniff`、`X-Frame-Options`、`Content-Security-Policy`），靜態頁與 `/api/v1/**` 回應都沒加，而且轉發器只回 `Content-Type` 與 `IM_` cookie、會丟掉後端的 `Cache-Control: no-store`。範本原本就這樣，不是轉發器改版造成。候選：殼 jar 加一個回應 header filter（靜態頁與 API 一起加）／轉發器多透傳 `Cache-Control`／兩者都做。CSP 要配合前端 inline style 的用法一起定，S4 第一個唯讀頁面前決定 | 2026-10-06 | — |
 | 84 | AD／LDAP 登入（原第 16 項選項 B）：DB 帳密版（S2）上線後再評估要不要加；要做時先確認第 37 項（AD 帳號能否對應 `login_id`），並決定 AD 帳號與 `IM_USER` 的對應與停用同步方式 | 2026-10-06 | — |

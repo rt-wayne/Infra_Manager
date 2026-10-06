@@ -25,7 +25,7 @@
 
 - **登入與帳號**：用帳號密碼登入，帳密存在本系統資料庫（2026-10-06 裁示；AD／LDAP 之後再評估，見 BACKLOG.md 第 84 項）。切換上線時全員密碼重設為「帳號小寫」並標記為預設密碼，第一次登入會被強制改密碼才能使用其他功能；新密碼規則為至少 6 字、不得全為空白、不得等於帳號（不分大小寫）或舊密碼（預設密碼本身不受 6 字限制，帳號 5 個字的人預設密碼就是 5 個字）。沒有「記住我」，關閉瀏覽器或閒置 8 小時後要重新登入（日後要做見 BACKLOG.md 第 85 項）
 - **首頁**：看申請單統計與「我的待辦」（等我簽核的單）；並顯示系統狀態（後端服務與資料庫是否正常、後端時間），可按「重新檢查」
-- **申請單列表**：預設顯示近 90 天，可依狀態、優先等級、來源、只看我的、關鍵字、日期區間篩選；待我簽核的單排在最上面；顯示 AI 摘要與 AI 費用
+- **申請單列表**：預設顯示近 90 天（只在起訖日都沒填時套用），可依狀態、優先等級、來源、只看我的、關鍵字（單號／標題／作業主旨／申請人，上限 100 字）、日期區間篩選；待我簽核的單排在最上面；每頁 20 筆；須登入才能看（2026-10-06 裁示，全部頁面皆須登入）；列表是否顯示 AI 摘要與 AI 費用待 BACKLOG.md 第 17 項（AI 審查去留）定案
 - **新增／編輯申請單**：填寫基本資料、異動類別、原因、影響範圍、設備清單、機櫃 U 位、施工步驟、排程、風險評估與回退方案；可套用範本；可上傳附件（拖放、貼上截圖、上傳前預檢）；先存成草稿
 - **送審與撤回**：申請人送審後依簽核流程逐關進行；AI 審查啟用時，送審前必須有一份與目前內容相符的 AI 報告；還沒有人簽之前可撤回成草稿
 - **簽核**：當前關卡的候選人可同意或退件（退件必填意見），可附檔
@@ -153,7 +153,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 - **AI 審查**（是否保留待定，見 BACKLOG.md 第 17 項；金鑰存放待定，見 BACKLOG.md 第 18 項）：Anthropic Java SDK，使用 OutputConfig（structured output）／tool use／thinking；Bedrock mantle 端點拒絕 `output_config.format`，走 bedrock 通道一律落到 tool 模式；aws 通道需自訂 baseUrl + `anthropic-workspace-id` header（未驗證，S11 先做概念驗證）；報告是否過期以「key 排序 JSON + SHA-256」的申請單快照 hash 判斷；retry 用 SDK 內建 + 退避 1s／3s；遇 refusal 用 fallbackModel 重送並記 `fell_back_from`；追問的輸入為快照、報告、最近 20 則對話、新問題，max_tokens 16000；審查為非同步（回 202，前端輪詢）；提示詞與 REVIEW_SCHEMA 放 `resources`
 - **存取紀錄**：Servlet Filter 寫 `IM_ACCESS_LOG`（有上限佇列 + 批次寫入，定期清除；保留天數待定，見 BACKLOG.md 第 70 項）；loopback 改記 LAN IP；`SYS_PARAM` 的 `EXCLUDE_IP` 所列 IP 不記錄
 - **信件**：JavaMailSender + `IM_MAIL_OUTBOX`（`PENDING`／`SENT`／`FAILED`、`TRY_CNT` 重試次數）；所有信件內容（舊系統五種樣板 + 三種 inline HTML）改用 Thymeleaf 或 Mustache 樣板
-- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取；殼 jar 的轉發器首版只轉 JSON／文字本文，上傳與下載的轉發方式待定，見 BACKLOG.md 第 79 項
+- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取。附件根目錄由後端設定鍵 `im.attach.root` 指定（絕對路徑；未設定時下載端點回 500）。後端下載端點 `GET /api/apps/{id}/attachments/{attachId}`（S4 完成）：須登入、附件必須屬於該申請單（`IM_ATTACH.OWNER_ID` 為該單號，或為該單簽核關卡／事件的附件），`FILE_PATH` 解析後必須仍在根目錄之下（逸出一律 404「找不到附件」，不洩漏檔案是否存在）、索引有但檔案不在回 404「附件檔案不存在」；回應帶原始檔名（RFC 5987 UTF-8）、`IM_ATTACH.MIME_TYPE`（壞掉時退回 `application/octet-stream`）、`Content-Length` 與 `X-Content-Type-Options: nosniff`。殼 jar 的轉發器首版只轉 JSON／文字本文，二進位串流透傳與上傳一起在 S6 處理（BACKLOG.md 第 79 項），在那之前前端的下載鈕停用
 - **機櫃盤點快取**：Caffeine + DB 快取列（`IM_RACK_CACHE`，依快取鍵值分列，如 `SITES`、`RACKS_<站點代碼>`）；`@Scheduled` 背景刷新（stale-while-revalidate）；單一執行中旗標避免重複刷新；外部機櫃系統（Impact）斷線時回舊快取
 - **我的待辦數**：一條 SQL，靠 `IM_APPR_CAND_MAP` 的 `USER_ID` 索引
 
@@ -301,7 +301,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 
 ### API 規格
 
-全部 REST。後端（3202）的路徑前綴是 `/api`、沒有 context path；瀏覽器一律經殼 jar（3201）呼叫 `/infra_manager_web/api/v1/...`，由殼 jar 轉發到後端同名的 `/api/...`（例：`/infra_manager_web/api/v1/health` → `/api/health`），版本號只在殼 jar 這一層。下表列的是後端路徑。寫入需 session + CSRF token（cookie 與 header 由殼 jar 轉發器透傳，見「後端分層」的「認證」）。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統的權限待 BACKLOG.md 第 26 項（未登入可看範圍）與第 30 項（舊漏洞處理）裁示後改寫本表。請求參數與回應格式各階段實作時補上。
+全部 REST。後端（3202）的路徑前綴是 `/api`、沒有 context path；瀏覽器一律經殼 jar（3201）呼叫 `/infra_manager_web/api/v1/...`，由殼 jar 轉發到後端同名的 `/api/...`（例：`/infra_manager_web/api/v1/health` → `/api/health`），版本號只在殼 jar 這一層。下表列的是後端路徑。寫入需 session + CSRF token（cookie 與 header 由殼 jar 轉發器透傳，見「後端分層」的「認證」）。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統所有 API 一律須登入（2026-10-06 裁示，原 BACKLOG.md 第 26 項結案；例外只有 `/api/health`、`/api/auth/me`、`/api/auth/login`、`/api/auth/logout`），已實作的列表／檢視／附件下載三列已改記新系統的權限，其餘列待各階段實作時連同第 30 項（舊漏洞處理）一併改寫。請求參數與回應格式各階段實作時補上。
 
 | 新 REST API | 功能 | 舊系統權限（對照用） | Vue 頁面 |
 |---|---|---|---|
@@ -311,9 +311,10 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | POST /api/auth/login | 登入。本文 `{loginId, password}`（帳號不分大小寫、最長 64；密碼最長 128）；成功 200、本文同 `/me`，並建立 session；帳密錯／停用 401 `帳號或密碼錯誤`；缺欄位或超長 400；需 CSRF header。`mustChangePassword:true` 時前端導向改密碼頁 | 公開 | LoginView |
 | POST /api/auth/password | 改密碼。本文 `{oldPassword, newPassword}`；成功 200、本文同 `/me`（`mustChangePassword:false`）並重建 session；規則不符、舊密碼錯、帳號狀態已變更一律 400 帶訊息（規則與訊息見「密碼」段）；缺欄位 400 `請求格式錯誤`；需 CSRF header | 登入（含預設密碼者） | ChangePasswordView |
 | POST /api/auth/logout | 登出。204，未登入也 204；需 CSRF header | 公開 | — |
-| GET /api/apps?status&priority&source&mine&q&from&to | 列表（預設 90 天、待我簽核置頂、AI 摘要與費用） | 公開 | AppListView |
+| GET /api/apps?status&priority&source&mine&q&from&to&page | 列表。`status` 七種狀態碼之一、`priority` P1～P4、`source` ONLINE／IMPORTED、`mine` 待我簽核、`q` 關鍵字（trim 後上限 100 字，比對單號／標題／作業主旨／申請人姓名，不分大小寫）、`from`／`to` 申請日 `yyyy-MM-dd`（都沒填才套近 90 天；`from` 晚於 `to` 400）、`page` 從 1 起（每頁 20，超出範圍夾回）；篩選值不合法 400 帶訊息、格式錯 400 `請求格式錯誤`。回 `{items, total, page, size, mineCount}`，`items` 待我簽核者置頂、再依建立時間新到舊；每筆含單號、標題、優先度（代碼／名稱／顏色）、作業主旨、申請部門、申請人、版次、狀態、來源、目前關卡與簽核人（候選人多於一人顯示「N 人待簽」）、`mine`、建立時間。AI 摘要與費用待第 17 項 | 登入 | AppListView |
 | POST /api/apps（multipart） | 建草稿、附件、選範本、套 workflowPolicy | 登入 | AppFormView |
-| GET /api/apps/{id} | 檢視，含 9 個 canX 權限旗標 | 公開 | AppViewView |
+| GET /api/apps/{id} | 檢視。回完整表單（基本資料、申請人、廠商、分類／原因／範圍選項含其他說明、設備、計畫步驟、排程、位置、補件說明）、檢核表、執行結果、簽核鏈（未送審的草稿依流程定義展開、全部 WAITING；每關候選人姓名）、附件索引、版次、事件、`permissions`（`canDecide`、`canResubmit`、`canRecall`、`canExecute`、`canReview`、`canDelete`、`canAiReview`、`canSubmit`、`canEditDraft`、`deleteMode`）。日期時間一律 `yyyy-MM-dd HH:mm` 台灣時間字串。單號格式不合或查無（含已軟刪除）404 `查無此申請單`。`canDecide` 要求狀態為 `IN_REVIEW` 且為目前關卡候選人（修正舊系統狀態不對仍可簽的漏洞）；`canAiReview`／`canSubmit` 在 S4 固定 false，S7／S11 實作時再算 | 登入 | AppViewView |
+| GET /api/apps/{id}/attachments/{attachId} | 附件下載（規則見「後端分層」的「附件」）；`attachId` 非數字 400 `請求格式錯誤`；殼 jar 透傳 S6 才做 | 登入 | AppViewView（S6 前停用） |
 | PUT /api/apps/{id} | 草稿編輯 | 申請人或 admin | AppFormView |
 | POST /api/apps/{id}/submit | 送審（AI 啟用時須有 hash 相符報告） | 申請人或 admin | AppViewView |
 | POST /api/apps/{id}/recall | 撤回成草稿（無人簽時） | 申請人 | AppViewView |
