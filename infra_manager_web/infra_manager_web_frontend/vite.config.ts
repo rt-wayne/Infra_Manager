@@ -5,6 +5,7 @@
 //           base 與殼 jar 的 context-path 相同；build 直接輸出到殼 jar 的 src/frontend（mvn package 時打進 static）
 //           dev 時 /<專案名>/api 轉給本機殼 jar（port 同 application.properties 的 server.port）
 //           jdk25 階段 3（規格 D-41）：改 TypeScript（vite.config.ts）、Vite 8；移除 '@' alias（範本未使用，可省掉 node 型別）
+//           2026-10-06（Claude Fable 5.1，裁示 ⑥A）：dev proxy 目標改成本專案殼 jar 的 3201（原 8080 是範本預設）
 // ============================================================
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -19,7 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/infra_manager_web/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:3201',
         changeOrigin: true
       }
     }

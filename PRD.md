@@ -24,7 +24,7 @@
 ### 功能清單
 
 - **登入與帳號**：用帳號密碼登入（登入方式待定，見 BACKLOG.md 第 16 項）；第一次用預設密碼登入會被要求改密碼；改密碼規則為至少 6 字、不得等於帳號，改完後其他裝置的「記住我」失效。「記住我」是否保留舊 token 待定，見 BACKLOG.md 第 28 項
-- **首頁**：看申請單統計與「我的待辦」（等我簽核的單）
+- **首頁**：看申請單統計與「我的待辦」（等我簽核的單）；並顯示系統狀態（後端服務與資料庫是否正常、後端時間），可按「重新檢查」
 - **申請單列表**：預設顯示近 90 天，可依狀態、優先等級、來源、只看我的、關鍵字、日期區間篩選；待我簽核的單排在最上面；顯示 AI 摘要與 AI 費用
 - **新增／編輯申請單**：填寫基本資料、異動類別、原因、影響範圍、設備清單、機櫃 U 位、施工步驟、排程、風險評估與回退方案；可套用範本；可上傳附件（拖放、貼上截圖、上傳前預檢）；先存成草稿
 - **送審與撤回**：申請人送審後依簽核流程逐關進行；AI 審查啟用時，送審前必須有一份與目前內容相符的 AI 報告；還沒有人簽之前可撤回成草稿
@@ -59,22 +59,22 @@ Vue 3 SPA，共 20 頁：
 
 | 頁面 | 用途 |
 |---|---|
-| LoginPage | 登入 |
-| ChangePasswordPage | 改密碼（預設密碼登入後強制導向） |
-| HomePage | 首頁統計、我的待辦 |
-| AppListPage | 申請單列表與篩選 |
-| AppFormPage | 新增／編輯草稿／補件共用表單，內含機櫃 U 位選擇器、設備可編輯表格、附件上傳 |
-| AppViewPage | 檢視申請單；送審、撤回、簽核、刪除、AI 審查與追問、寄出報告 |
-| ExecutePage | 執行檢核表（每項執行人選系統使用者或填自由文字）、實際紀錄、執行端退回 |
-| ReviewPage | 治理審查 |
-| TemplateListPage／TemplateEditPage | 範本列表與編輯 |
-| StatsPage | 統計 |
-| AccessLogPage | 存取紀錄（admin） |
-| AdminUsersPage | 使用者管理 |
-| AdminWorkflowsPage | 簽核流程管理（關卡可拖曳排序） |
-| AdminMailPage／MailDetailPage／MailTestPage | 外寄信件紀錄、信件內容、測試信 |
-| AdminSettingsPage | 系統設定 |
-| AdminFormSchemaPage | 表單設定維護（`IM_FORM_OPTION` 的選項） |
+| LoginView | 登入 |
+| ChangePasswordView | 改密碼（預設密碼登入後強制導向） |
+| HomeView | 首頁統計、我的待辦、系統狀態（後端服務／資料庫「正常」或「無法連線」） |
+| AppListView | 申請單列表與篩選 |
+| AppFormView | 新增／編輯草稿／補件共用表單，內含機櫃 U 位選擇器、設備可編輯表格、附件上傳 |
+| AppViewView | 檢視申請單；送審、撤回、簽核、刪除、AI 審查與追問、寄出報告 |
+| ExecuteView | 執行檢核表（每項執行人選系統使用者或填自由文字）、實際紀錄、執行端退回 |
+| ReviewView | 治理審查 |
+| TemplateListView／TemplateEditView | 範本列表與編輯 |
+| StatsView | 統計 |
+| AccessLogView | 存取紀錄（admin） |
+| AdminUsersView | 使用者管理 |
+| AdminWorkflowsView | 簽核流程管理（關卡可拖曳排序） |
+| AdminMailView／MailDetailView／MailTestView | 外寄信件紀錄、信件內容、測試信 |
+| AdminSettingsView | 系統設定 |
+| AdminFormSchemaView | 表單設定維護（`IM_FORM_OPTION` 的選項） |
 | 403／錯誤頁 | 無權限與錯誤提示 |
 
 畫面上的按鈕是否顯示，依後端在申請單 DTO 內回傳的 9 個 `canX` 權限旗標決定，前端不自行判斷權限。
@@ -86,19 +86,23 @@ Vue 3 SPA，共 20 頁：
 ### 技術架構
 
 #### 技術選型
-依公司技術規範：
+以公司兩個開發範本為底：後端用 dev_template_jdk25、前端用 web_template_3.5。兩個範本各自的開發規範在 `infra_manager_java/README.md` 與 `infra_manager_web/README.md`（三條鐵律、標準分層、properties 分工、建置與執行、檢查清單），本檔不重複，只記本系統在範本之上的選擇。
 
 | 層 | 技術 |
 |---|---|
-| 後端 | Java 25 LTS（Temurin）+ Spring Boot 4.1.x（patch 版本 S1 動工當天確認，見 BACKLOG.md 第 39 項） |
-| 建置工具 | Maven，一律透過 Maven Wrapper（`mvnw`）執行 |
-| 前端 | Vue 3.5 + TypeScript + Vite 8 + Vue Router + Pinia；Node 24；UI 元件庫待定，見 BACKLOG.md 第 19 項 |
-| 資料庫 | Oracle 19c；不使用 Flyway，建表與改表一律由開發方提供 SQL 檔（放 `db/oracle/`），由使用者以 `rd_user` 手動執行；初始 DDL 為 `db/oracle/V1__init_schema.sql`（31 張表） |
-| JDBC 驅動 | ojdbc17 + orai18n（中文字元集轉換用；引入前過套件審查） |
-| DB 憑證 | 公司套件 px-secret-resolver（來源 Azure Artifacts） |
-| 測試 | 後端 JUnit 5；前端單元測試 Vitest；端對端 Playwright |
-| 測試 DB | 使用者裁示（2026-10-05）：測試一律直接連使用者提供的那台公司 Oracle 19c（不用 H2、不用 Testcontainers）；連線資訊走環境變數與 px-secret-resolver，不進 repo |
+| 後端 API | `infra_manager_java/`：Java 25 LTS（Temurin）+ Spring Boot 4.1.1，port 3202 |
+| 前端殼 jar | `infra_manager_web/infra_manager_web/`：Spring Boot 4.1 / Java 25，port 3201，context path `/infra_manager_web`；服務前端靜態檔並轉發 API |
+| 前端 | `infra_manager_web/infra_manager_web_frontend/`：Vue 3.5 + TypeScript + Vite 8 + vue-router（hash 模式）+ axios；Node 24；不使用 UI 元件庫，沿用範本 `src/assets/main.css` 的色票與基礎字級 |
+| 建置工具 | Maven，一律透過各目錄的 Maven Wrapper（`mvnw`）執行；前端用 npm |
+| 資料存取 | 範本 `com.mpx.common.db` 的 `DbClient`（`query`／`update`，`:name` 具名參數）；**無 JPA、無 Flyway** |
+| 資料庫 | Oracle 19c；建表與改表一律由開發方提供 SQL 檔（放 `db/oracle/`），由使用者以 `rd_user` 手動執行 |
+| JDBC 驅動 | ojdbc17 + orai18n（中文字元集轉換用），隨範本 pom 引入。範本 pom 另附帶 `mssql-jdbc`，本系統不使用、不移除（見「給範本維護者的註記」第 3 點） |
+| DB 連線資訊 | 執行期由範本向公司「DB 連線資訊 API」依別名取得（jdbcUrl／帳密不在程式、設定檔或環境變數），並建 Hikari 連線池 |
+| 測試 | 後端 JUnit 5（單元測試由 surefire 跑、`*IT` 整合測試由 failsafe 跑）；前端 Vitest（jsdom）；端對端 Playwright |
+| 測試 DB | 直接連使用者提供的那台公司 Oracle 19c 測試環境（不用 H2、不用 Testcontainers）；連線資訊同樣由連線資訊 API 提供，不進 repo |
 | 部署 | Docker 容器，主機作業系統 Rocky Linux 9.7 |
+
+舊 Node 系統仍在 port 3200 執行，供對照。
 
 #### 資料庫帳號
 只列帳號名稱與用途；密碼與連線字串不寫進 repo 內任何檔案。
@@ -106,12 +110,14 @@ Vue 3 SPA，共 20 頁：
 | 帳號 | 用途 |
 |---|---|
 | `rd_user` | 具建表權限，用來執行 DDL；表建在此帳號的 schema 下 |
-| `ap_user` | 應用程式連線用；對 31 張表只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 為 `db/oracle/grant_ap_user.sql`，不建同義詞） |
+| `ap_user` | 應用程式連線用；對 V1 的 31 張表與交易測試表 `IM_TX_TEST` 只有 SELECT／INSERT／UPDATE／DELETE 權限，由 `rd_user` 授權；應用程式以 schema 前綴（`rd_user.表名`）存取（授權 SQL 為 `db/oracle/grant_ap_user.sql`，不建同義詞）。正式 DAO 的 SQL 怎麼帶 schema 前綴待定，見 BACKLOG.md 第 77 項 |
+
+連線用哪個帳號，由 `config/database.properties` 的 `db.connect.itflow` 所設的別名在連線資訊 API 端決定。
 
 #### Oracle 19c 連動規則（全系統適用）
-- 空字串 `''` 在 Oracle 等於 NULL → 規則為「DB 存 NULL、API 回 `""`」，在 JPA 轉換層統一處理
+- 空字串 `''` 在 Oracle 等於 NULL → 規則為「DB 存 NULL、API 回 `""`」，在資料存取層（DAO／model）統一處理
 - JSON 欄位用 `CLOB` + `CHECK (col IS JSON)`（19c 沒有原生 JSON 型別），欄名後綴 `_JSON`
-- 字元集 AL32UTF8、字串長度模式 STANDARD：一個中文字佔 3 位元組，`VARCHAR2` 上限 4000 位元組（約 1333 個中文字），所以使用者自由輸入的長文欄位用 `CLOB`（簽核意見 `MEMO`、`IMPACT_DESC`、`RESUB_MEMO`、`EXCPT_DESC`、`FOLLOW_UP_DESC`、`VER_REASON`、事件 `MEMO` 等），系統產生的錯誤訊息／query string 限 `VARCHAR2(1000 CHAR)`，寫入前由程式端按字元（code point）截斷。由 API 驗證長度，超過回 400：本次由 `VARCHAR2` 改成 `CLOB` 的 8 欄每欄上限 2000 字（舊資料實測最長 1665 字，為簽核意見，放得下），原本就是 `CLOB` 的 4 欄（`WORK_DETAIL`、`RISK_DESC`、`ROLL_BACK_PLAN`、`EXEC_MEMO`）每欄上限 20000 字（舊資料最長為作業內容 10749 字，另有 21 張單的作業內容超過 2000 字）。字數以 code point 計、換行先統一成 LF 再計算（不直接用 `@Size`，它以 UTF-16 單位計，emoji 會算 2 字）；Spring request body 上限於 S1 另訂（BACKLOG.md 第 1 項）
+- 字元集 AL32UTF8、字串長度模式 STANDARD：一個中文字佔 3 位元組，`VARCHAR2` 上限 4000 位元組（約 1333 個中文字），所以使用者自由輸入的長文欄位用 `CLOB`（簽核意見 `MEMO`、`IMPACT_DESC`、`RESUB_MEMO`、`EXCPT_DESC`、`FOLLOW_UP_DESC`、`VER_REASON`、事件 `MEMO` 等），系統產生的錯誤訊息／query string 限 `VARCHAR2(1000 CHAR)`，寫入前由程式端按字元（code point）截斷。由 API 驗證長度，超過回 400：本次由 `VARCHAR2` 改成 `CLOB` 的 8 欄每欄上限 2000 字（舊資料實測最長 1665 字，為簽核意見，放得下），原本就是 `CLOB` 的 4 欄（`WORK_DETAIL`、`RISK_DESC`、`ROLL_BACK_PLAN`、`EXEC_MEMO`）每欄上限 20000 字（舊資料最長為作業內容 10749 字，另有 21 張單的作業內容超過 2000 字）。字數以 code point 計、換行先統一成 LF 再計算（不直接用 `@Size`，它以 UTF-16 單位計，emoji 會算 2 字），由 `util.TextLength.check` 檢核並回傳正規化後的字串（呼叫端以回傳值寫入 DB）；請求本文上限見「後端分層」的「請求本文上限」。CLOB 欄位不得用在 `DISTINCT`／`ORDER BY`／`GROUP BY`／`=` 比較（Oracle 不允許）
 - 布林用 `NUMBER(1)` + `CHECK (col IN (0, 1))`（23ai 以前沒有 boolean），欄名前綴 `IS_`
 - Oracle 字串比對分大小寫：`IM_USER.LOGIN_ID` 一律存小寫，由 CHECK 約束強制
 - 時間欄位一律 `DATE`，存台灣當地時間（不帶時區）；畫面一律以台灣時區顯示（`SYS_PARAM` 的 `TIME_ZONE` = `Asia/Taipei`）
@@ -120,31 +126,43 @@ Vue 3 SPA，共 20 頁：
 #### Repo 結構
 單一 repo（`D:\ai\Infra_Manager_Java`）：
 ```
-backend/    Spring Boot REST API
-frontend/   Vue 3 SPA
-db/oracle/  初始 DDL（V1__init_schema.sql）與 ap_user 授權 SQL（grant_ap_user.sql），皆由 rd_user 手動執行
-db/tools/   gen_table_doc.js（從 V1 DDL 重產給 DBA 審的 xlsx）
-docs/db/    Table_List_Schema.xlsx（給 DBA 審的 Table List／Table Schema，由 db/tools 產生）
-docs/plan/  規劃文件（歷史文件，不再更新）
+infra_manager_java/                        後端 API（dev_template_jdk25，port 3202）
+infra_manager_web/infra_manager_web/       前端殼 jar（web_template_3.5，port 3201）；src/frontend/ 為前端 build 產物（不進 git，只留 .gitkeep）
+infra_manager_web/infra_manager_web_frontend/  Vue 3 SPA 原始碼
+db/oracle/   DDL 與授權 SQL，皆由 rd_user 手動執行（見「資料結構」）
+db/tools/    gen_table_doc.js（從 V1 DDL 重產給 DBA 審的 xlsx）
+docs/db/     Table_List_Schema.xlsx（給 DBA 審的 Table List／Table Schema，由 db/tools 產生）
+docs/plan/   規劃文件（歷史文件，不再更新）
+start-new.bat  本機一鍵建置並啟動兩個 jar
 ```
 
 #### 後端分層
-- 套件依功能分：`identity`、`approval`（共用簽核引擎）、`changerequest`、`ai`、`mail`、`inventory`、`audit`
-- 每個套件分四層：controller（DTO）→ service（transaction 邊界）→ domain（純邏輯，不依賴 Spring）→ repository（JPA）
+- 範本的 `com.mpx.common` 與 `com.mpx.Application` 不修改；業務程式只放 `com.mpx.infra_manager_java` 底下
+- 分層依範本：controller（`@RestController`，路徑 `/api/<資源>`）→ service（業務邏輯，交易邊界）→ dao（`@Repository`，注入 `DbClient`，DB 別名以 `@Value("${db.connect.itflow}")` 讀取）→ model（POJO，SQL 欄位別名大寫底線對應 camelCase 屬性）。另有 `config`（Spring 設定）、`web`（filter 與例外處理）、`util`（共用工具）
+- 業務功能範圍：`identity`、`approval`（共用簽核引擎）、`changerequest`、`ai`、`mail`、`inventory`、`audit`
+- **交易管理**：範本 `DbClient.update` 為單句 autocommit、不提供 TransactionManager；本系統一張申請單要同時寫多張表，因此在 `config.AppTransactionConfig` 自建 `LazyAliasTransactionManager`（繼承 `DataSourceTransactionManager`）。它疊在範本已建好的 Hikari 連線池上（不另建池），第一次交易時才依 `db.connect.itflow` 別名取池並快取 DataSource，維持範本「連線資訊 API 位址未設仍可啟動」的行為；別名空白時啟動即失敗。`@Transactional` 範圍內的 `DbClient` 呼叫共用同一條連線、一起 commit／rollback
+- **請求本文上限**（`config.RequestLimitConfig`，常數寫在程式內）：JSON 等非 multipart 本文 1 MB（`web.BodyLimitFilter`，掛在 `/api/*`；`Content-Length` 已超過就不讀本文、未知長度則邊讀邊計數）、multipart 單檔 50 MB、整個 multipart 請求 500 MB，超過一律回 413。multipart 延後解析（`spring.servlet.multipart.resolve-lazily=true`），只有真的取 `MultipartFile` 參數的端點才會落暫存檔
+- **錯誤處理**：`web.ApiExceptionHandler` 統一把例外轉成 `{"message": …}` 回應（格式見「API 規格」），回應一律不帶內部細節；log 只記例外類別名、ORA 錯誤碼、method／path 與未預期例外的堆疊前 10 個 frame，不記例外訊息
+- **log 紀律**：log 不得含密碼、jdbcUrl、帳號、SQL 參數值。log 落點依範本（`/home/tomcat/log/infra_manager_java/`，Windows 對應啟動時工作目錄所在磁碟機）
 - **簽核引擎**：`ApprovalChainBuilder` 建立簽核鏈——送審時開一筆 `IM_APPR`、依 `IM_FLOW_STEP` 展開 `IM_APPR_STEP`，角色池關卡的候選人在送審當下由 `IM_USER_ROLE_MAP` 展開、固化寫入 `IM_APPR_CAND_MAP`；`DecisionPolicy` 處理同意／退件判定；補件時關閉舊 `IM_APPR`、開新一筆，並把前一版表單全文寫入 `IM_APP_VER`
 - **Transaction**：一次簽核一個 transaction——以 `IM_APP.ROW_VER_NO` 樂觀鎖鎖定申請單（衝突回 409）→ 更新 `IM_APPR_STEP` → 更新申請單狀態 → 插入 `IM_MAIL_OUTBOX` 與 `IM_APP_EVENT` → commit；寄信由 outbox worker 在 commit 後處理
-- **認證**：server-side session（HttpOnly cookie）+ CSRF token；多機部署時接 Spring Session JDBC；不用 JWT。登入方式（DB 帳密或 AD/LDAP）待定，見 BACKLOG.md 第 16 項
+- **認證**：server-side session（HttpOnly cookie）+ CSRF token；多機部署時接 Spring Session JDBC；不用 JWT。登入方式（DB 帳密或 AD/LDAP）待定，見 BACKLOG.md 第 16 項；殼 jar 轉發時不帶瀏覽器 cookie 與 header，session 放在哪一層、怎麼傳到後端待定，見 BACKLOG.md 第 78 項
 - **授權**：`IM_USER_ROLE_MAP` 轉成 `ROLE_*` authority 管 URL 層；與資料相關的判斷用 `@PreAuthorize("@crAuthz.canDecide(#id)")`；9 個 `canX` 旗標由後端算進 DTO
 - **密碼相容**：舊格式 `scrypt$saltHex$hashHex`（N=16384、r=8、p=1、keylen=64），以自寫 encoder（BouncyCastle `SCrypt.generate`）掛在 `DelegatingPasswordEncoder`，登入成功時升級成新格式
 - **AI 審查**（是否保留待定，見 BACKLOG.md 第 17 項；金鑰存放待定，見 BACKLOG.md 第 18 項）：Anthropic Java SDK，使用 OutputConfig（structured output）／tool use／thinking；Bedrock mantle 端點拒絕 `output_config.format`，走 bedrock 通道一律落到 tool 模式；aws 通道需自訂 baseUrl + `anthropic-workspace-id` header（未驗證，S11 先做概念驗證）；報告是否過期以「key 排序 JSON + SHA-256」的申請單快照 hash 判斷；retry 用 SDK 內建 + 退避 1s／3s；遇 refusal 用 fallbackModel 重送並記 `fell_back_from`；追問的輸入為快照、報告、最近 20 則對話、新問題，max_tokens 16000；審查為非同步（回 202，前端輪詢）；提示詞與 REVIEW_SCHEMA 放 `resources`
 - **存取紀錄**：Servlet Filter 寫 `IM_ACCESS_LOG`（有上限佇列 + 批次寫入，定期清除；保留天數待定，見 BACKLOG.md 第 70 項）；loopback 改記 LAN IP；`SYS_PARAM` 的 `EXCLUDE_IP` 所列 IP 不記錄
 - **信件**：JavaMailSender + `IM_MAIL_OUTBOX`（`PENDING`／`SENT`／`FAILED`、`TRY_CNT` 重試次數）；所有信件內容（舊系統五種樣板 + 三種 inline HTML）改用 Thymeleaf 或 Mustache 樣板
-- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取
+- **附件**：檔案本體存檔案系統，DB（`IM_ATTACH.FILE_PATH`）只存相對於附件根目錄的路徑；下載一律經 controller 檢查權限，不提供公開 static 路徑；檔名 UTF-8；上傳限制（`SYS_PARAM` 的 `UPLOAD_MAX_FILES`、`UPLOAD_MAX_MB`）每次請求讀取；殼 jar 的 `ApiForwarder` 只轉 JSON，上傳與下載的轉發方式待定，見 BACKLOG.md 第 79 項
 - **機櫃盤點快取**：Caffeine + DB 快取列（`IM_RACK_CACHE`，依快取鍵值分列，如 `SITES`、`RACKS_<站點代碼>`）；`@Scheduled` 背景刷新（stale-while-revalidate）；單一執行中旗標避免重複刷新；外部機櫃系統（Impact）斷線時回舊快取
 - **我的待辦數**：一條 SQL，靠 `IM_APPR_CAND_MAP` 的 `USER_ID` 索引
 
 #### 前端架構
-- Vue 3.5 + TypeScript + Vite 8 + Vue Router + Pinia；UI 元件庫待定，見 BACKLOG.md 第 19 項
+- 兩包（web_template_3.5）：
+  - **殼 jar** `infra_manager_web/infra_manager_web/`：port 3201、context path `/infra_manager_web`；服務前端靜態檔；controller 只透過範本的 `ApiForwarder` 把 `/api/v1/**` 轉給後端 `/api/**`（後端位址由殼 jar `config/host.properties` 的 `backend.api.domain.path` 指定），不解析 payload、不加 CrossOrigin。不連 DB、沒有 SQL
+  - **前端** `infra_manager_web/infra_manager_web_frontend/`：Vue 3.5 + TypeScript；vue-router **hash 模式**；axios 實例 `src/api/http.ts`（baseURL `/infra_manager_web/api/v1`、timeout 120 秒，與殼 jar read timeout 一致）；API 呼叫集中在 `src/api/`、請求與回應型別放 `src/types/`、畫面放 `src/views/`、測試放 `tests/`；Vite `base` 為 `/infra_manager_web/`，build 輸出到殼 jar 的 `src/frontend`，殼 jar 打包時一併放進 jar
+- 頁面只呼叫自己殼 jar 的 `/infra_manager_web/api/v1/...`，不直接打後端 3202。入口網址 `http://localhost:3201/infra_manager_web/#/`
+- 不使用 UI 元件庫，沿用範本 `main.css` 的色票（`--teal`、`--line` 等）與基礎字級（`body` 19px）；版面規範依範本 README
+- 呼叫失敗時一律提示錯誤（toast），不得把失敗顯示成「查無資料」
 - 互動元件：
   - DateTimePicker：固定台灣時區
   - 附件上傳：拖放、貼上截圖（自寫 paste handler）、上傳前預檢
@@ -152,10 +170,22 @@ docs/plan/  規劃文件（歷史文件，不再更新）
   - 設備清單：可編輯表格（動態增刪列）
   - 簽核流程關卡排序：拖曳排序（SortableJS 或 vuedraggable，引入前審查）
   - 統計圖表：做法待 S14 前確認舊系統是否純 CSS 圖，見 BACKLOG.md 第 38 項
-- 前端部署方式（打包進 jar，或獨立 nginx 容器反向代理）待定，見 BACKLOG.md 第 21 項
+- 正式環境的前端部署：前端 build 進殼 jar 的 static，與殼 jar 一起以單一 jar 部署（前端範本的既定架構），不另設 nginx 反向代理容器
+
+#### 給範本維護者的註記
+本系統在兩個範本之上有以下超出範本範圍的做法或對範本的需求，供範本維護者評估：
+1. **自建 TransactionManager**：後端範本 README 寫明 `DbClient` 不支援交易（沒有 `@Transactional`／TransactionManager）。本系統在業務 package 自建 `LazyAliasTransactionManager`（見「後端分層」的「交易管理」），疊在範本連線池上，`com.mpx.common` 未修改
+2. **`ApiForwarder` 把後端 4xx 轉成 500**：殼 jar 範本的 `ApiForwarder` 遇後端任何錯誤一律回 500 `{"message":"後端服務呼叫失敗"}`，後端的 400（如字數超過的 `field`／`max`／`actual`）到不了前端。已決定向範本維護者提變更單，讓 4xx 原樣轉發；變更單通過前，前端在表單送出前自行檢核字數（規則同後端：code point、換行先轉 LF）。另殼 jar 本身沒有請求本文上限、會把整份 JSON 讀進記憶體再轉發，相關待辦見 BACKLOG.md 第 80 項
+3. **範本 pom 附帶 `mssql-jdbc`**：本系統只連 Oracle，用不到 SQL Server 驅動；但它是範本 pom 的一部分、範本 `com.mpx.common.db` 的測試可能依賴，本系統不自行移除，請範本維護者評估改為可選依賴。
+
+#### 測試策略
+- **單元測試**：`./mvnw clean package`（surefire）執行，不連真 DB 或真 API；需要 DB 的類別一律 mock `DbClient`（交易管理器的測試 mock `DbConnectionManager`）。S1 骨架共 78 項（範本 `com.mpx.common.db` 42 項、業務程式 36 項）；範本的 42 項不可修改、不可刪除
+- **整合測試**：檔名 `*IT`，只在 `./mvnw verify`（failsafe）執行，直接連公司測試 Oracle（連線資訊 API 提供）。`host.properties` 的連線資訊 API 位址為空時略過（`HealthIT`、`TransactionRollbackIT`）；`TransactionRollbackIT` 另在交易測試表 `IM_TX_TEST` 尚未建立時略過，寫入的資料以隨機鍵區分、結束一律刪除
+- 不用 H2、不用 Testcontainers
+- **前端**：`npm run type-check`（vue-tsc）、`npm test`（Vitest，jsdom）
 
 #### 資料遷移（從舊 Node 系統）
-- 工具：Java 匯入器（Spring Boot `import` profile + CommandLineRunner + JPA，可重跑、可測試）。遷移工具最終選擇待定，見 BACKLOG.md 第 29 項；三代 AI 報告（v1／v2／v3）的轉換方式待定，見 BACKLOG.md 第 24 項
+- 工具：Java 匯入器（Spring Boot `import` profile + CommandLineRunner，資料存取走 `DbClient`，可重跑、可測試）。遷移工具最終選擇待定，見 BACKLOG.md 第 29 項；三代 AI 報告（v1／v2／v3）的轉換方式待定，見 BACKLOG.md 第 24 項
 - 資料量：applications 93 張 HIST（紙本歷史單）+ 263 張 IM（其中 162 張有 AI 報告）、已刪除 12 張、使用者約 22 人、範本 3 份
 - 轉換規則：
   - 時間：一律存成 `DATE` 台灣當地時間；舊資料的假 UTC（存台灣時間卻標 `Z`）由匯入程式修正
@@ -182,13 +212,22 @@ docs/plan/  規劃文件（歷史文件，不再更新）
   - 人工抽 5 張：IM20260826-005、一張 HIST，以及從非終結狀態 25 張中抽（rejected 18、in_review 3、in_execution 1、pending_review 3）
 
 #### 部署與維運
-- 部署：Docker 容器，主機作業系統 Rocky Linux 9.7；容器的啟動與管理方式（docker compose 或 systemd）待定，見 BACKLOG.md 第 22 項。開發期在本機以 jar + bat 啟動（`start-new.bat`，port 3201），本機開發不使用 Docker
-- 設定分三處：不變的放 `application.yml`；secret（session secret、機櫃 API 金鑰、SMTP 認證、AI 金鑰）放環境變數（AI 金鑰存放處待定，見 BACKLOG.md 第 18 項），DB 憑證經 px-secret-resolver 取得；畫面上可調的放 `SYS_PARAM`
+- 部署：Docker 容器，主機作業系統 Rocky Linux 9.7；容器的啟動與管理方式（docker compose 或 systemd）待定，見 BACKLOG.md 第 22 項。開發期在本機以 jar + bat 啟動（`start-new.bat`：後端 3202、殼 jar 3201），本機開發不使用 Docker
+- 設定分三處：不變的放各 jar 的 `*.properties`（真檔不進 git，進 git 的是同名 `.properties.example`，鍵值見「環境設定」）；secret（session secret、機櫃 API 金鑰、SMTP 認證、AI 金鑰）放環境變數（AI 金鑰存放處待定，見 BACKLOG.md 第 18 項）；DB 連線資訊不放本系統任何地方，由連線資訊 API 依別名提供；畫面上可調的放 `SYS_PARAM`
 - 切換：新系統以 3201 port 上 UAT，正式切換後改用 3200，舊系統保留唯讀；切換策略待定，見 BACKLOG.md 第 27 項
 
 ### 資料結構
 
-定義來源是 `db/oracle/V1__init_schema.sql`（Oracle 19c，31 張表）；完整欄位、型別、約束與欄位說明以該檔為準，本節列每張表的用途、鍵與關鍵欄位。PK 主鍵、UK 唯一鍵、IX 索引。
+DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）：
+
+| 檔案 | 內容 |
+|---|---|
+| `V1__init_schema.sql` | 業務表 31 張與預載資料 |
+| `V2__tx_test_table.sql` | 交易回滾整合測試專用表 `IM_TX_TEST`（只供 `TransactionRollbackIT` 使用，平時應為空；與業務表脫鉤） |
+| `V2a__tx_test_alter.sql` | 給已用舊版 V2 建過 `IM_TX_TEST` 的環境補共同欄位 `UPDATE_DATE`／`UPDATE_BY`；全新環境不需要 |
+| `grant_ap_user.sql` | 把上述全部表的 SELECT／INSERT／UPDATE／DELETE 授權給 `ap_user`；可重複執行，新增表時補一行 |
+
+業務表的定義來源是 `V1__init_schema.sql`（Oracle 19c，31 張表）；完整欄位、型別、約束與欄位說明以該檔為準，本節列每張表的用途、鍵與關鍵欄位。PK 主鍵、UK 唯一鍵、IX 索引。
 
 #### 命名與欄位慣例
 依公司《DB規範_V1_20261002_JLA》16 條，加上寫在 DDL 檔頭的本系統自訂慣例：
@@ -249,6 +288,9 @@ docs/plan/  規劃文件（歷史文件，不再更新）
 - `IM_ACCESS_LOG` HTTP 存取紀錄：PK `ACCESS_LOG_ID`；IX (`CREATE_DATE`)、(`USER_ID`, `CREATE_DATE`)；`USER_ID`、`LOGIN_ID`、`IP_ADDR`、`HTTP_METHOD`、`REQ_PATH`、`QUERY_TEXT`、`ACTION_CODE`、`HTTP_STATUS_CODE`、`DUR_MS_QTY`、`USER_AGENT`
 - `IM_RACK_CACHE` 外部機櫃系統回應快取：PK `RACK_CACHE_ID`（快取鍵值，由程式定義）；`RESP_JSON`；`FETCH_DATE`
 
+#### 測試專用表（V2）
+- `IM_TX_TEST` 交易回滾測試：PK `TX_TEST_ID`（identity）；`TEST_KEY`（單次測試的隨機 UUID，IX）、`MEMO`；共同欄位同業務表。只供 `TransactionRollbackIT` 寫入並自行清理，平時應為空；退場條件：改用其他方式驗證交易時刪除
+
 #### 版次表達
 每一輪送審一筆 `IM_APPR`（帶 `DOC_VER_NO`），關卡在 `IM_APPR_STEP`（待辦與統計要用）；檢核表與執行結果依 `APP_VER_NO` 分版；補件時前一版表單全文凍結到 `IM_APP_VER.FORM_JSON`（只做整份比對），目前版次的內容在 `IM_APP` 與其子表。
 
@@ -257,49 +299,89 @@ docs/plan/  規劃文件（歷史文件，不再更新）
 
 ### API 規格
 
-全部 REST，前綴 `/api`；寫入需 session + CSRF token。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統的權限待 BACKLOG.md 第 26 項（未登入可看範圍）與第 30 項（舊漏洞處理）裁示後改寫本表。請求參數與回應格式各階段實作時補上。
+全部 REST。後端（3202）的路徑前綴是 `/api`、沒有 context path；瀏覽器一律經殼 jar（3201）呼叫 `/infra_manager_web/api/v1/...`，由殼 jar 轉發到後端同名的 `/api/...`（例：`/infra_manager_web/api/v1/health` → `/api/health`），版本號只在殼 jar 這一層。下表列的是後端路徑。寫入需 session + CSRF token（session 如何穿過殼 jar 待定，見 BACKLOG.md 第 78 項）。「舊系統權限（對照用）」欄是 Node 版現況，**不是新系統的權限規則**；新系統的權限待 BACKLOG.md 第 26 項（未登入可看範圍）與第 30 項（舊漏洞處理）裁示後改寫本表。請求參數與回應格式各階段實作時補上。
 
 | 新 REST API | 功能 | 舊系統權限（對照用） | Vue 頁面 |
 |---|---|---|---|
 | GET /api/health | 健康檢查 | — | — |
-| GET /api/dashboard | 首頁統計、我的待辦 | 公開 | HomePage |
-| POST /api/auth/login | 登入、remember-me、預設密碼導向改密碼 | 公開 | LoginPage |
-| POST /api/auth/password | 改密碼（≥6 字、不得等於帳號、改完撤銷 token） | 登入 | ChangePasswordPage |
+| GET /api/dashboard | 首頁統計、我的待辦 | 公開 | HomeView |
+| POST /api/auth/login | 登入、remember-me、預設密碼導向改密碼 | 公開 | LoginView |
+| POST /api/auth/password | 改密碼（≥6 字、不得等於帳號、改完撤銷 token） | 登入 | ChangePasswordView |
 | POST /api/auth/logout | 登出 | 登入 | — |
-| GET /api/apps?status&priority&source&mine&q&from&to | 列表（預設 90 天、待我簽核置頂、AI 摘要與費用） | 公開 | AppListPage |
-| POST /api/apps（multipart） | 建草稿、附件、選範本、套 workflowPolicy | 登入 | AppFormPage |
-| GET /api/apps/{id} | 檢視，含 9 個 canX 權限旗標 | 公開 | AppViewPage |
-| PUT /api/apps/{id} | 草稿編輯 | 申請人或 admin | AppFormPage |
-| POST /api/apps/{id}/submit | 送審（AI 啟用時須有 hash 相符報告） | 申請人或 admin | AppViewPage |
-| POST /api/apps/{id}/recall | 撤回成草稿（無人簽時） | 申請人 | AppViewPage |
-| POST /api/apps/{id}/decisions | 同意／退件（退件必填意見），可附檔 | 當前關卡候選人 | AppViewPage |
-| POST /api/apps/{id}/resubmit | 退件補件 → 新版次直接進審核 | 申請人 | AppFormPage |
-| PUT /api/apps/{id}/execution | 執行檢核表與實際紀錄；有填結果進 pending_review | idc_admin 或申請人 | ExecutePage |
-| POST /api/apps/{id}/execution/reject | 執行端退回 → rejected | idc_admin 或申請人 | ExecutePage |
-| POST /api/apps/{id}/governance-review | 治理審查：pass → executed、return → rejected | governance | ReviewPage |
-| DELETE /api/apps/{id} | 軟刪除，需 confirmId | admin 或申請人（條件） | AppViewPage |
-| POST /api/apps/{id}/ai-reviews | AI 審查（非同步 202；hash 沒變略過，force 強制） | 申請人（draft）或 admin | AppViewPage |
-| POST /api/ai-reviews/{rid}/messages | AI 報告追問 | 登入 | AppViewPage |
-| POST /api/ai-reviews/{rid}/send | 寄出 AI 報告 | admin | AppViewPage |
-| /api/templates（CRUD） | 範本列表、JSON、增刪改 | 列表公開；增刪改任何登入者 | TemplateListPage、TemplateEditPage |
-| GET /api/stats | 日／週／月分桶統計 | 公開 | StatsPage |
-| GET /api/access-logs | 存取紀錄（最後 500 筆） | admin | AccessLogPage |
+| GET /api/apps?status&priority&source&mine&q&from&to | 列表（預設 90 天、待我簽核置頂、AI 摘要與費用） | 公開 | AppListView |
+| POST /api/apps（multipart） | 建草稿、附件、選範本、套 workflowPolicy | 登入 | AppFormView |
+| GET /api/apps/{id} | 檢視，含 9 個 canX 權限旗標 | 公開 | AppViewView |
+| PUT /api/apps/{id} | 草稿編輯 | 申請人或 admin | AppFormView |
+| POST /api/apps/{id}/submit | 送審（AI 啟用時須有 hash 相符報告） | 申請人或 admin | AppViewView |
+| POST /api/apps/{id}/recall | 撤回成草稿（無人簽時） | 申請人 | AppViewView |
+| POST /api/apps/{id}/decisions | 同意／退件（退件必填意見），可附檔 | 當前關卡候選人 | AppViewView |
+| POST /api/apps/{id}/resubmit | 退件補件 → 新版次直接進審核 | 申請人 | AppFormView |
+| PUT /api/apps/{id}/execution | 執行檢核表與實際紀錄；有填結果進 pending_review | idc_admin 或申請人 | ExecuteView |
+| POST /api/apps/{id}/execution/reject | 執行端退回 → rejected | idc_admin 或申請人 | ExecuteView |
+| POST /api/apps/{id}/governance-review | 治理審查：pass → executed、return → rejected | governance | ReviewView |
+| DELETE /api/apps/{id} | 軟刪除，需 confirmId | admin 或申請人（條件） | AppViewView |
+| POST /api/apps/{id}/ai-reviews | AI 審查（非同步 202；hash 沒變略過，force 強制） | 申請人（draft）或 admin | AppViewView |
+| POST /api/ai-reviews/{rid}/messages | AI 報告追問 | 登入 | AppViewView |
+| POST /api/ai-reviews/{rid}/send | 寄出 AI 報告 | admin | AppViewView |
+| /api/templates（CRUD） | 範本列表、JSON、增刪改 | 列表公開；增刪改任何登入者 | TemplateListView、TemplateEditView |
+| GET /api/stats | 日／週／月分桶統計 | 公開 | StatsView |
+| GET /api/access-logs | 存取紀錄（最後 500 筆） | admin | AccessLogView |
 | GET /api/rack-data、GET /api/rack-data/status、POST /api/rack-data/refresh | 機櫃盤點資料、快取狀態、強制刷新（是否需登入待定，見 `BACKLOG.md` 第 26 項；refresh 限 admin） | 前兩者公開；refresh admin | 機櫃選擇器 |
-| /api/admin/users | 使用者新增、修改、停用（不提供刪除） | admin | AdminUsersPage |
-| /api/admin/workflows | 簽核流程 CRUD | admin | AdminWorkflowsPage |
-| /api/admin/mail | 外寄紀錄、失敗紀錄、信件內容、測試信 | admin | AdminMailPage、MailDetailPage、MailTestPage |
-| PUT /api/admin/settings | 系統設定 | admin | AdminSettingsPage |
-| GET /api/form-schema | 表單設定讀取（後台維護用的寫入 API 待定，見 BACKLOG.md 第 74 項） | admin | AdminFormSchemaPage |
+| /api/admin/users | 使用者新增、修改、停用（不提供刪除） | admin | AdminUsersView |
+| /api/admin/workflows | 簽核流程 CRUD | admin | AdminWorkflowsView |
+| /api/admin/mail | 外寄紀錄、失敗紀錄、信件內容、測試信 | admin | AdminMailView、MailDetailView、MailTestView |
+| PUT /api/admin/settings | 系統設定 | admin | AdminSettingsView |
+| GET /api/form-schema | 表單設定讀取（後台維護用的寫入 API 待定，見 BACKLOG.md 第 74 項） | admin | AdminFormSchemaView |
+
+#### GET /api/health
+- 請求：無參數
+- 回應：HTTP 一律 200，`{"status": "UP", "db": "UP" | "DOWN", "time": "yyyy-MM-dd HH:mm:ss"}`。`status` 固定 `UP`（程式活著）；`db` 為對 `db.connect.itflow` 別名執行 `SELECT 1 FROM DUAL` 的結果；`time` 為台灣時間。DB 失敗不回錯誤碼，讓前端分辨「後端連不上」（請求本身失敗）與「後端活著但 DB 連不上」（200 且 `db` 為 `DOWN`）
+- 結果快取 5 秒；快取過期時同時只有一條執行緒去查 DB，其他請求回舊值（第一次查詢、還沒有舊值時才等它查完）
+- 首頁顯示：`status` 取到 → 後端服務「正常」；`db` 為 `UP` → 資料庫「正常」，否則「無法連線」；請求失敗 → 後端服務「無法連線」、資料庫「未知」並出 toast
+
+#### 錯誤回應格式
+後端所有錯誤回應都是 JSON，至少含 `message`，一律不帶內部細節（例外訊息、SQL、主機）：
+
+| 狀態碼 | 情況 | 回應 |
+|---|---|---|
+| 400 | 文字欄位超過字數上限 | `{"message", "field", "max", "actual"}`；`field` 為 camelCase 的 JSON 欄名，`message` 如「「影響說明」超過 2000 字（目前 N 字）」 |
+| 400 | JSON 格式錯誤、參數型別錯誤 | `{"message": "請求格式錯誤"}` |
+| 400／404／405／406／415 | Spring MVC 自身的錯誤（缺必要參數、路徑不存在、方法不允許、媒體型別不支援等） | 照原狀態碼回 `{"message": "請求無法處理"}` |
+| 413 | 請求本文超過上限（JSON 1 MB、單檔 50 MB、整個請求 500 MB） | `{"message": "請求內容過大"}` |
+| 500 | DB 連線、SQL、交易例外 | `{"message": "資料庫存取失敗"}` |
+| 500 | 其他未預期例外 | `{"message": "系統發生錯誤"}` |
+
+經殼 jar 轉發時，後端的 4xx 目前會被殼 jar 轉成 500 `{"message":"後端服務呼叫失敗"}`，見「給範本維護者的註記」。
 
 ### 環境設定
 
-secret 一律放環境變數，不寫進 repo 內任何檔案；實際怎麼設定見 `SETUP.md`。DB 憑證透過公司套件 px-secret-resolver 取得，它與下表 `IM_DB_*` 三個變數的分工待定，見 BACKLOG.md 第 67 項。
+各 jar 的設定檔是**真檔不進 git**（被 `.gitignore` 排除），進 git 的是同名 `.properties.example`；新增鍵時同步寫進 `.example`（只寫鍵與說明，不寫真實位址或帳密）。實際怎麼建立與填值見 `SETUP.md`。DB 的 jdbcUrl 與帳密不在本系統任何檔案或環境變數中，由連線資訊 API 依別名提供。
+
+後端 `infra_manager_java/src/main/resources/`：
+
+| 檔案 | 鍵 | 用途 |
+|---|---|---|
+| `application.properties` | `spring.application.name` | 專案名（`infra_manager_java`） |
+| | `server.port` | 3202 |
+| | `spring.servlet.multipart.resolve-lazily` | `true`：multipart 延後到端點取 `MultipartFile` 時才解析 |
+| `config/database.properties` | `db.connect.itflow` | 本系統資料庫在連線資訊 API 的別名（必填；空白時啟動失敗） |
+| `config/host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | 連線資訊 API 的協定＋主機、port、路徑 |
+| | `db.connect.api.domain.path` | 由前三個以 `${}` 組合，範本只讀這一個；四個鍵都要存在（值可空），全空時仍可啟動，第一次查 DB 才失敗 |
+
+殼 jar `infra_manager_web/infra_manager_web/src/main/resources/`：
+
+| 檔案 | 鍵 | 用途 |
+|---|---|---|
+| `application.properties` | `spring.application.name` | 專案名（`infra_manager_web`） |
+| | `server.port` | 3201 |
+| | `server.servlet.context-path` | `/infra_manager_web`（前端 `base` 與 axios `baseURL` 都以此為前綴） |
+| `config/host.properties` | `backend.api.domain`、`backend.api.port`、`backend.api.path` | 後端 API 的協定＋主機、port、根路徑（本系統為 `/api`） |
+| | `backend.api.domain.path` | 由前三個以 `${}` 組合，`ApiForwarder` 只讀這一個；四個鍵都要存在（值可空） |
+
+secret 一律放環境變數，不寫進 repo 內任何檔案：
 
 | 環境變數 | 用途 |
 |---|---|
-| `IM_DB_URL` | Oracle JDBC 連線字串（格式 `jdbc:oracle:thin:@//host:1521/service`） |
-| `IM_DB_USER` | Oracle 應用程式連線帳號（`ap_user`） |
-| `IM_DB_PASSWORD` | Oracle 密碼 |
 | `IM_SESSION_SECRET` | session 簽章用 secret |
 | `IM_SMTP_*` | SMTP 連線與認證（細項 S8 定） |
 | `IM_RACK_API_KEY` | Impact 機櫃盤點 API 金鑰 |
