@@ -17,6 +17,8 @@ package com.mpx.infra_manager_java.web;
 //           真正未預期的例外才記 error，並加記堆疊前 10 個 frame（類別.方法:行號，不含訊息）方便定位。
 //           2026-10-06 S2：加 AccessDeniedException → 403、AuthenticationException → 401（方法層安全丟出時與 filter 層同一種回應）
 //           2026-10-06 S2 回合二：summarize 的實作移到 util.Throwables（匯入器 CLI 也要用），本類別保留同名轉呼
+//           2026-10-06 S4：加 ApiNotFoundException → 404、ApiBadRequestException → 400，帶例外自己的訊息
+//           （業務層的「找不到申請單」「篩選值不正確」要讓前端 toast 出來，不能被 ErrorResponse 那條改成「請求無法處理」）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -71,6 +73,16 @@ public class ApiExceptionHandler {
 			return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(message("請求內容過大"));
 		}
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message("請求格式錯誤"));
+	}
+
+	@ExceptionHandler(ApiNotFoundException.class)
+	public ResponseEntity<Map<String, Object>> notFound(ApiNotFoundException e) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message(e.getMessage()));
+	}
+
+	@ExceptionHandler(ApiBadRequestException.class)
+	public ResponseEntity<Map<String, Object>> badRequest(ApiBadRequestException e) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message(e.getMessage()));
 	}
 
 	/** 方法層安全（@PreAuthorize 等）在 controller 內丟出，不會經 filter 層的 handler；在此對齊成同樣的 401／403 JSON */

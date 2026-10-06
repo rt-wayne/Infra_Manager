@@ -1,0 +1,82 @@
+package com.mpx.infra_manager_java.service.changerequest;
+
+// ============================================================
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-06
+// 變更說明: 新增：檢視頁動作權限旗標的純運算（S4）。對應舊系統 lib/permissions.js，差異：
+//           canDecide 多了「狀態須為 IN_REVIEW」（舊系統漏掉，第 30 項方向 A）；canAiReview、canSubmit 在 S4 一律 false，
+//           等 S9／S5 接上功能再開。角色用 AuthUser.roles 的角色代碼（admin、idc_admin、governance⋯）
+// ============================================================
+
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+
+import com.mpx.infra_manager_java.model.auth.AuthUser;
+import com.mpx.infra_manager_java.model.changerequest.AppPermissions;
+import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
+import com.mpx.infra_manager_java.model.changerequest.CandRow;
+import com.mpx.infra_manager_java.model.changerequest.ExecRow;
+
+@Service
+public class AppPermissionService {
+
+	public static final String DELETE_MODE_ADMIN = "ADMIN";
+	public static final String DELETE_MODE_APPLICANT = "APPLICANT_PRE_REVIEW";
+
+	private static final Set<String> NOT_DELETABLE_BY_APPLICANT = Set.of("APPROVED", "IN_EXECUTION", "PENDING_REVIEW",
+			"EXECUTED");
+
+	/**
+	 * @param appr  目前版次的簽核實例；沒有時為 null
+	 * @param steps 簽核關卡（實例的或流程定義展開的）
+	 * @param cands 該實例所有關卡的候選人
+	 * @param exec  目前版次的實際執行紀錄；沒有時為 null
+	 */
+	public AppPermissions compute(AppRow app, ApprRow appr, List<ApprStepRow> steps, List<CandRow> cands, ExecRow exec,
+			AuthUser me) {
+		String status = app.getAppStatusCode();
+		boolean applicant = me.userId().equals(app.getApplyUserId());
+		boolean admin = hasRole(me, "admin");
+		boolean anyDecided = steps.stream().anyMatch(s -> "APPROVED".equals(s.getStepStatusCode())
+				|| "REJECTED".equals(s.getStepStatusCode()));
+
+		boolean canDecide = "IN_REVIEW".equals(status) && appr != null && isCurrentApprover(steps, cands, me.userId());
+		boolean canResubmit = "REJECTED".equals(status) && applicant;
+		boolean canRecall = "IN_REVIEW".equals(status) && applicant && !anyDecided;
+		boolean canExecute = ("APPROVED".equals(status) || "IN_EXECUTION".equals(status))
+				&& (exec == null || exec.getResultCode() == null) && (hasRole(me, "idc_admin") || applicant);
+		boolean canReview = "PENDING_REVIEW".equals(status) && hasRole(me, "governance");
+		String deleteMode = null;
+		if (admin) {
+			deleteMode = DELETE_MODE_ADMIN;
+		} else if (applicant && !anyDecided && !NOT_DELETABLE_BY_APPLICANT.contains(status)) {
+			deleteMode = DELETE_MODE_APPLICANT;
+		}
+		boolean canEditDraft = applicant && "DRAFT".equals(status);
+
+		return new AppPermissions(canDecide, canResubmit, canRecall, canExecute, canReview, deleteMode != null, false,
+				false, canEditDraft, deleteMode);
+	}
+
+	/** 目前關卡＝序號最小的 PENDING 關卡；有候選人就看候選人，沒有候選人才看流程定義的指定簽核人 */
+	static boolean isCurrentApprover(List<ApprStepRow> steps, List<CandRow> cands, String userId) {
+		ApprStepRow current = steps.stream().filter(s -> "PENDING".equals(s.getStepStatusCode()))
+				.filter(s -> s.getApprStepId() != null).findFirst().orElse(null);
+		if (current == null) {
+			return false;
+		}
+		List<CandRow> stepCands = cands.stream().filter(c -> current.getApprStepId().equals(c.getApprStepId())).toList();
+		if (!stepCands.isEmpty()) {
+			return stepCands.stream().anyMatch(c -> userId.equals(c.getUserId()));
+		}
+		return userId.equals(current.getFlowUserId());
+	}
+
+	private static boolean hasRole(AuthUser me, String roleId) {
+		return me.roles() != null && me.roles().contains(roleId);
+	}
+}

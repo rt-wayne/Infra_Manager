@@ -7,3 +7,6 @@ spring.application.name=infra_manager_java
 server.port=3202
 ### Infra Manager：multipart 延後到端點真的取 MultipartFile 時才解析，避免任一 /api/* 端點收到 multipart 就寫暫存檔
 spring.servlet.multipart.resolve-lazily=true
+### Infra Manager（S4，2026-10-06）：附件實體檔根目錄；IM_ATTACH.FILE_PATH 是相對於此目錄的路徑。
+### 每台部署機各自設定（例：D:/infra_manager/attach）；留空時附件下載端點回 500 並記 log
+im.attach.root=
