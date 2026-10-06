@@ -2,19 +2,22 @@
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 ### 修改日期: 2026-10-04
 ### 變更說明: 新增：前端殼 jar 的後端 API 位址（規格 v4）
+###           2026-10-06（Claude Fable 5.1，裁示 ①B）：讀取程式由範本 ApiForwarder 改為本專案 ApiProxyController，只改註解、鍵不變
 ### 首次建置：複製本檔為 host.properties 後填值（host.properties 不進 git）
 ###################################
 
 ###################################
 ###     後端 API
 ###################################
-### 程式（com.mpx.common.web.ApiForwarder）只讀 backend.api.domain.path；它由下面三個 key 以 ${} 組合而成
+### 程式（com.mpx.infra_manager_web.controller.ApiProxyController）只讀 backend.api.domain.path；它由下面三個 key 以 ${} 組合而成
 ###   backend.api.domain : 協定 + 主機，例：http://<api-host>
 ###   backend.api.port   : 冒號 + port，例：:<port>（走預設 port 時留空）
 ###   backend.api.path   : 後端 API 的根路徑；本專案（Infra Manager）後端沒有 context-path、路徑不帶 v1，填 /api
 ### 組合結果例：http://<api-host>:3202/api（殼 jar 的 /api/v1/health 會轉發到 http://<api-host>:3202/api/health）
 ### 四個 key 都要保留（值可空）：被 ${} 引用的 key 不存在時啟動會失敗
-### 留空時殼 jar 仍可啟動，頁面呼叫 API 時才會失敗（回 500）
+### 留空或格式不合法（不是 http:// 或 https://、沒有主機）時殼 jar 仍可啟動並印一行 WARN，頁面呼叫 API 時回 502「後端服務呼叫失敗」
+### 主機名不可含底線（如 Docker 服務名 infra_api）：Java 的 URI 解析會視為沒有主機、一律 502；請改用連字號或 IP
+### 結尾多餘的 / 會自動去掉；轉發器會檢查組出的目標仍在這個位址之下（同 scheme／host／port、路徑以 backend.api.path 開頭）
 backend.api.domain=
 backend.api.port=
 backend.api.path=

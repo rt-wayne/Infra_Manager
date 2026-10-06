@@ -158,7 +158,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 
 #### 前端架構
 - 兩包（web_template_3.5）：
-  - **殼 jar** `infra_manager_web/infra_manager_web/`：port 3201、context path `/infra_manager_web`；服務前端靜態檔；由本專案自建的轉發器（`com.mpx.infra_manager_web` 下單一 controller，2026-10-06 裁示 ①B：範本 `com.mpx.common.web` 的 `ApiForwarder` 等四個類別與測試已刪除，見「給範本維護者的註記」第 2 點）把 `/api/v1/**` 全部 HTTP method 轉給後端 `/api/**`（後端位址由殼 jar `config/host.properties` 的 `backend.api.domain.path` 指定）：原樣轉 method／路徑／查詢字串／本文與 `Content-Type`，只帶 `IM_` 開頭的 cookie 與 `X-IM-XSRF` header、附 `X-Forwarded-For`；回傳後端原狀態碼（含 4xx）、本文、`Content-Type` 與 `IM_` 開頭的 `Set-Cookie`；後端連不上回 502 `{"message":"後端服務呼叫失敗"}`；connect 5 秒／read 120 秒。不解析 payload、不加 CrossOrigin。不連 DB、沒有 SQL
+  - **殼 jar** `infra_manager_web/infra_manager_web/`：port 3201、context path `/infra_manager_web`；服務前端靜態檔；由本專案自建的轉發器（`com.mpx.infra_manager_web` 下單一 controller，2026-10-06 裁示 ①B：範本 `com.mpx.common.web` 的 `ApiForwarder` 等四個類別與測試已刪除，見「給範本維護者的註記」第 2 點）把 `/api/v1/**` 的 GET／HEAD／POST／PUT／PATCH／DELETE 轉給後端 `/api/**`（OPTIONS 由殼 jar 自己回 `Allow`、不轉；其他 method 405；後端位址由殼 jar `config/host.properties` 的 `backend.api.domain.path` 指定，結尾斜線自動去掉）：原樣轉 method／路徑／查詢字串／本文與 `Content-Type`／`Accept`（瀏覽器沒送 `Content-Type` 就不補；有本文時帶 `Content-Length`、不用 chunked，後端的 1 MB 快速 413 才用得到；表單解析過濾器 `FormContentFilter` 已關閉，PUT／PATCH／DELETE 的表單本文也原樣過；**例外：`multipart/*` 本文會先被殼 jar 的 Spring multipart 解析器讀走，轉到後端是空本文**，首版不支援上傳、解法見 BACKLOG.md 第 79 項），只帶 `IM_` 開頭的 cookie 與 `X-IM-XSRF` header、附 `X-Forwarded-For`（取連線來源 IP，不信任瀏覽器送來的）；回傳後端原狀態碼（含 3xx／4xx／5xx）、本文、`Content-Type`（後端有本文卻沒給時標 `application/octet-stream`）與 `IM_` 開頭的 `Set-Cookie`；其他回應 header（含 3xx 的 `Location`）不轉，所以後端對 `/api/**` 未登入必須回 401、不得導頁。子路徑含 `.`／`..`／`;`／`\`／編碼過的斜線／中間空段（`//`）、不是 `/api/v1` 開頭、查詢字串或 `Content-Type` 格式不合法、或組出的目標不在設定位址的 scheme／host／port／路徑前綴之下時回 400 `{"message":"請求格式錯誤"}`、不打後端（防路徑跳脫與 SSRF）；結尾斜線放行；部分格式（原始 `\`、`%2F`、`%5C`、`%00`、跳出根目錄的 `..`）Tomcat 會先回它自己的 400，本文不是上述 JSON。後端位址未設定或格式不合法（只接受 `http`／`https`；主機名含底線視為不合法）、連不上、逾時回 502 `{"message":"後端服務呼叫失敗"}`；connect 5 秒／read 120 秒、固定 HTTP/1.1、不跟隨導向。不解析 payload、不加 CrossOrigin。log 只記 method、路徑、來源 IP、狀態或失敗例外鏈的類別名（由外往內，例 `ConnectException <- ClosedChannelException`）。不連 DB、沒有 SQL
   - **前端** `infra_manager_web/infra_manager_web_frontend/`：Vue 3.5 + TypeScript；vue-router **hash 模式**；axios 實例 `src/api/http.ts`（baseURL `/infra_manager_web/api/v1`、timeout 120 秒，與殼 jar read timeout 一致）；API 呼叫集中在 `src/api/`、請求與回應型別放 `src/types/`、畫面放 `src/views/`、測試放 `tests/`；Vite `base` 為 `/infra_manager_web/`，build 輸出到殼 jar 的 `src/frontend`，殼 jar 打包時一併放進 jar
 - 頁面只呼叫自己殼 jar 的 `/infra_manager_web/api/v1/...`，不直接打後端 3202。本機開發入口網址 `http://localhost:3201/infra_manager_web/#/`；正式環境為 https（使用者 2026-10-06 確認）
 - 不使用 UI 元件庫，沿用範本 `main.css` 的色票（`--teal`、`--line` 等）與基礎字級（`body` 19px）；版面規範依範本 README
@@ -351,7 +351,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | 500 | DB 連線、SQL、交易例外 | `{"message": "資料庫存取失敗"}` |
 | 500 | 其他未預期例外 | `{"message": "系統發生錯誤"}` |
 
-經殼 jar 轉發時，後端的狀態碼與本文原樣回給瀏覽器；殼 jar 連不上後端時回 502 `{"message":"後端服務呼叫失敗"}`（見「前端架構」的轉發器規格）。
+經殼 jar 轉發時，後端的狀態碼與本文原樣回給瀏覽器（3xx 不帶 `Location`）；殼 jar 自己只會產生兩種錯誤：請求路徑或格式不合法回 400 `{"message":"請求格式錯誤"}`、後端位址未設定或連不上回 502 `{"message":"後端服務呼叫失敗"}`（見「前端架構」的轉發器規格；少數畸形路徑由 Tomcat 先回 400，本文是 Tomcat 的格式，前端一律以狀態碼判斷、不依賴 400 的本文結構）。
 
 ### 環境設定
 

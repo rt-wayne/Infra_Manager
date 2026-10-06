@@ -6,6 +6,7 @@
 	變更說明: 新增：前端殼 jar 的 log 設定（規格 v4），比照 dev_template：單一檔案 appender 掛 root，按日切檔保留 30 天
 	          LOG_DIR 與檔名直接寫專案名（兩處 infra_manager_web），產生器建專案時換成新專案名
 	          jdk25：移除 scan／scanPeriod（設定檔在 jar 內無法監看，Boot 4 的 logback 會印 WARN）
+	          2026-10-06（Claude Fable 5.1，裁示 ①B）：logger 由已刪除的範本套件 com.mpx.common.web 改為本專案 com.mpx.infra_manager_web
 	============================================================
 -->
 <configuration debug="false">
@@ -37,7 +38,7 @@
         <appender-ref ref="file"/>
     </root>
 
-    <!-- common.web 的 logger，只設 level；輸出走 root 的 console 與 file -->
-    <logger name="com.mpx.common.web" level="info"/>
+    <!-- 本專案（轉發器）的 logger，只設 level；輸出走 root 的 console 與 file -->
+    <logger name="com.mpx.infra_manager_web" level="info"/>
 
 </configuration>
