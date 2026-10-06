@@ -23,7 +23,7 @@
 
 ### 功能清單
 
-- **登入與帳號**：用帳號密碼登入（登入方式待定，見 BACKLOG.md 第 16 項）；第一次用預設密碼登入會被要求改密碼；改密碼規則為至少 6 字、不得等於帳號，改完後其他裝置的「記住我」失效。「記住我」是否保留舊 token 待定，見 BACKLOG.md 第 28 項
+- **登入與帳號**：用帳號密碼登入，帳密存在本系統資料庫（2026-10-06 裁示；AD／LDAP 之後再評估，見 BACKLOG.md 第 84 項）。切換上線時全員密碼重設為「帳號小寫」並標記為預設密碼，第一次登入會被強制改密碼才能使用其他功能；改密碼規則為至少 6 字、不得等於預設密碼（帳號小寫）。沒有「記住我」，關閉瀏覽器或閒置 8 小時後要重新登入（日後要做見 BACKLOG.md 第 85 項）
 - **首頁**：看申請單統計與「我的待辦」（等我簽核的單）；並顯示系統狀態（後端服務與資料庫是否正常、後端時間），可按「重新檢查」
 - **申請單列表**：預設顯示近 90 天，可依狀態、優先等級、來源、只看我的、關鍵字、日期區間篩選；待我簽核的單排在最上面；顯示 AI 摘要與 AI 費用
 - **新增／編輯申請單**：填寫基本資料、異動類別、原因、影響範圍、設備清單、機櫃 U 位、施工步驟、排程、風險評估與回退方案；可套用範本；可上傳附件（拖放、貼上截圖、上傳前預檢）；先存成草稿
@@ -95,6 +95,7 @@ Vue 3 SPA，共 20 頁：
 | 前端 | `infra_manager_web/infra_manager_web_frontend/`：Vue 3.5 + TypeScript + Vite 8 + vue-router（hash 模式）+ axios；Node 24；不使用 UI 元件庫，沿用範本 `src/assets/main.css` 的色票與基礎字級 |
 | 建置工具 | Maven，一律透過各目錄的 Maven Wrapper（`mvnw`）執行；前端用 npm |
 | 資料存取 | 範本 `com.mpx.common.db` 的 `DbClient`（`query`／`update`，`:name` 具名參數）；**無 JPA、無 Flyway** |
+| 認證 | Spring Security 7.1.1（`spring-boot-starter-security`，版本由 Boot BOM 管理；2026-10-06 裁示 ⑥A）：server-side session＋CSRF＋bcrypt，不另引入其他密碼學套件；測試用 `spring-boot-starter-webmvc-test`／`spring-boot-starter-security-test` |
 | 資料庫 | Oracle 19c；建表與改表一律由開發方提供 SQL 檔（放 `db/oracle/`），由使用者以 `rd_user` 手動執行 |
 | JDBC 驅動 | ojdbc17 + orai18n（中文字元集轉換用），隨範本 pom 引入。範本 pom 另附帶 `mssql-jdbc`，本系統不使用、不移除（見「給範本維護者的註記」第 3 點） |
 | DB 連線資訊 | 執行期由範本向公司「DB 連線資訊 API」依別名取得（jdbcUrl／帳密不在程式、設定檔或環境變數），並建 Hikari 連線池 |
@@ -138,7 +139,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 
 #### 後端分層
 - 範本的 `com.mpx.common` 與 `com.mpx.Application` 不修改；業務程式只放 `com.mpx.infra_manager_java` 底下
-- 分層依範本：controller（`@RestController`，路徑 `/api/<資源>`）→ service（業務邏輯，交易邊界）→ dao（`@Repository`，注入 `DbClient`，DB 別名以 `@Value("${db.connect.itflow}")` 讀取）→ model（POJO，SQL 欄位別名大寫底線對應 camelCase 屬性）。另有 `config`（Spring 設定）、`web`（filter 與例外處理）、`util`（共用工具）
+- 分層依範本：controller（`@RestController`，路徑 `/api/<資源>`）→ service（業務邏輯，交易邊界）→ dao（`@Repository`，注入 `DbClient`，DB 別名以 `@Value("${db.connect.itflow}")` 讀取；表名一律經 `config.DbSchema.table("IM_XXX")` 加 schema 前綴——值來自 `db.schema.itflow`，啟動時以白名單 `[A-Za-z][A-Za-z0-9_$#]{0,127}` 驗證後轉大寫，未設或不合法即啟動失敗；這是後端 README §8「SQL 不拼字串」的唯一例外，因為識別字無法用 `:name` 綁定，2026-10-06 裁示 ②A）→ model（POJO，SQL 欄位別名大寫底線對應 camelCase 屬性）。另有 `config`（Spring 設定）、`web`（filter 與例外處理）、`util`（共用工具）
 - 套件切法（2026-10-06 裁示 ①B）：先依層、再依功能——`controller`／`service`／`dao`／`model` 四個頂層套件底下，各自再依功能分子套件：`identity`、`approval`（共用簽核引擎）、`changerequest`、`ai`、`mail`、`inventory`、`audit`（例如 `service.approval`、`dao.changerequest`）。S1 的 `Health*` 只有一個檔，直接放頂層套件
 - **交易管理**：範本 `DbClient.update` 為單句 autocommit、不提供 TransactionManager；本系統一張申請單要同時寫多張表，因此在 `config.AppTransactionConfig` 自建 `LazyAliasTransactionManager`（繼承 `DataSourceTransactionManager`）。它疊在範本已建好的 Hikari 連線池上（不另建池），第一次交易時才依 `db.connect.itflow` 別名取池並快取 DataSource，維持範本「連線資訊 API 位址未設仍可啟動」的行為；別名空白時啟動即失敗。`@Transactional` 範圍內的 `DbClient` 呼叫共用同一條連線、一起 commit／rollback
 - **請求本文上限**（`config.RequestLimitConfig`，常數寫在程式內）：JSON 等非 multipart 本文 1 MB（`web.BodyLimitFilter`，掛在 `/api/*`；`Content-Length` 已超過就不讀本文、未知長度則邊讀邊計數）、multipart 單檔 50 MB、整個 multipart 請求 500 MB，超過一律回 413。multipart 延後解析（`spring.servlet.multipart.resolve-lazily=true`），只有真的取 `MultipartFile` 參數的端點才會落暫存檔
@@ -146,9 +147,9 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 - **log 紀律**：log 不得含密碼、jdbcUrl、帳號、SQL 參數值。log 落點依範本（`/home/tomcat/log/infra_manager_java/`，Windows 對應啟動時工作目錄所在磁碟機）
 - **簽核引擎**：`ApprovalChainBuilder` 建立簽核鏈——送審時開一筆 `IM_APPR`、依 `IM_FLOW_STEP` 展開 `IM_APPR_STEP`，角色池關卡的候選人在送審當下由 `IM_USER_ROLE_MAP` 展開、固化寫入 `IM_APPR_CAND_MAP`；`DecisionPolicy` 處理同意／退件判定；補件時關閉舊 `IM_APPR`、開新一筆，並把前一版表單全文寫入 `IM_APP_VER`
 - **Transaction**：一次簽核一個 transaction——以 `IM_APP.ROW_VER_NO` 樂觀鎖鎖定申請單（衝突回 409）→ 更新 `IM_APPR_STEP` → 更新申請單狀態 → 插入 `IM_MAIL_OUTBOX` 與 `IM_APP_EVENT` → commit；寄信由 outbox worker 在 commit 後處理
-- **認證**：本系統有自己的登入頁，不接公司統一入口或 SSO（使用者 2026-10-06 確認）。後端（3202）Spring Security server-side session：session cookie `IM_SESSION`（HttpOnly、Secure、SameSite=Lax；正式環境 3201 為 https，使用者已確認）、CSRF 採 cookie `IM_XSRF` ＋ header `X-IM-XSRF`（前端 axios 自動帶）、閒置 8 小時逾時；多機部署時接 Spring Session JDBC；不用 JWT。`GET /api/auth/me` 永遠回 200（未登入時 `loggedIn:false`），前端呼叫失敗時再查一次此端點判斷是否登入過期、是則導回登入頁。cookie 與 header 由殼 jar 自建的轉發器透傳（見「前端架構」）；後端一律自行驗 session，不信任殼 jar 轉來的身分（正式環境 3202 是否只開給殼 jar 待確認，見 BACKLOG.md 第 80 項）。登入方式（DB 帳密或 AD/LDAP）待定，見 BACKLOG.md 第 16 項
-- **授權**：`IM_USER_ROLE_MAP` 轉成 `ROLE_*` authority 管 URL 層；與資料相關的判斷用 `@PreAuthorize("@crAuthz.canDecide(#id)")`；9 個 `canX` 旗標由後端算進 DTO
-- **密碼相容**：舊格式 `scrypt$saltHex$hashHex`（N=16384、r=8、p=1、keylen=64），以自寫 encoder（BouncyCastle `SCrypt.generate`）掛在 `DelegatingPasswordEncoder`，登入成功時升級成新格式
+- **認證**（後端部分 S2 回合一已上線，2026-10-06；本功能分批施工中，進度見 BACKLOG.md 第 2 項）：本系統有自己的登入頁，不接公司統一入口或 SSO（使用者 2026-10-06 確認）；登入方式為 DB 帳密（裁示 ①A），驗證在 `service.auth.AuthService`：帳號去空白轉小寫後查 `IM_USER.LOGIN_ID`，`STATUS=1` 且 `PWD_HASH` 非空才比對密碼，查無帳號或停用時也做一次假比對（避免靠回應時間猜帳號）。後端（3202）用 Spring Security server-side session（`config.SecurityConfig`；Tomcat 記憶體 session，不用 formLogin／httpBasic；多機部署時才接 Spring Session JDBC，見 BACKLOG.md 第 86 項）：session cookie `IM_SESSION`（HttpOnly、Secure 明設、SameSite=Lax、Path=/、不設 Domain；正式環境 3201 為 https，使用者已確認）、閒置 8 小時逾時、登入成功時由 `AuthService` 自己換 session id（手動登入不經 Spring 的登入後策略，所以不設 `sessionFixation`）；CSRF 採 cookie `IM_XSRF`（非 HttpOnly、Secure、SameSite=Lax、Path=/）＋ header `X-IM-XSRF`，所有 POST／PUT／PATCH／DELETE（含 login、logout）都要帶，前端先呼叫 `GET /api/auth/me` 取得 cookie、axios 自動帶 header；登入成功時換發新的 `IM_XSRF`、登出時清掉（前端每次請求都從 cookie 讀當下的值即可）；cookie 屬性全部寫在程式常數，不靠 `request.isSecure()` 自動判斷，真 Tomcat 送出的 `Set-Cookie` 屬性有測試鎖住（`SessionCookieTomcatTest`）。另宣告一個一律拒絕的 `AuthenticationManager` bean，只為了讓 Spring Boot 不建預設帳號 `user`（否則會把隨機密碼印進 log）。不用 JWT、沒有 remember-me。`GET /api/auth/me` 永遠回 200（未登入時 `loggedIn:false`），前端呼叫失敗時再查一次此端點判斷是否登入過期、是則導回登入頁。`/api/health`、`/api/auth/login`／`logout`／`me` 免登入；其他 `/api/auth/**` 須登入；其他 `/api/**` 未登入回 401 `{"message":"尚未登入"}`、絕不導頁（302），CSRF 不合回 403 `{"message":"安全驗證失敗，請重新整理頁面後再試"}`，`/api` 以外的路徑一律拒絕。cookie 與 header 由殼 jar 自建的轉發器透傳（見「前端架構」）；後端一律自行驗 session，不信任殼 jar 轉來的身分（正式環境 3202 是否只開給殼 jar 待確認，見 BACKLOG.md 第 80 項）。認證 log（`security.md` A09）：登入成功、登入失敗（原因代碼 `no_user`／`inactive_or_no_hash`／`bad_password`）、登出、403（類別 `csrf`／`default_password`／`forbidden`）各記一行，帶工號（帳號存在時）與來源 IP `srcIp`，不記輸入的帳號、不記密碼；`srcIp` 取殼 jar 附的 `X-Forwarded-For` 第一段（`web.ClientIp`，只留英數與 `.:%-_`、最長 64），在 BACKLOG.md 第 80 項定案前視為「來源未驗證」，只供追查、不得拿來做授權或限流。沒有登入次數限制，見 BACKLOG.md 第 88 項；停用帳號或移除角色不會讓已登入的 session 立即失效，見 BACKLOG.md 第 89 項
+- **授權**：`IM_USER_ROLE_MAP`（只取啟用的對應與啟用的角色）轉成 `ROLE_<角色代碼>` authority 管 URL 層；另有 `PWD_OK` authority，只在非預設密碼（`IS_DFLT_PWD=0`）時給，`/api/**`（`/api/auth/**` 與 `/api/health` 除外）一律要求 `PWD_OK`，所以用預設密碼登入的人只能改密碼與登出，其他 API 回 403 `{"message":"請先修改預設密碼"}`；與資料相關的判斷用 `@PreAuthorize("@crAuthz.canDecide(#id)")`（`@EnableMethodSecurity` 已開；方法層丟出的 401／403 由 `web.ApiExceptionHandler` 轉成與 filter 層相同格式的 JSON）；9 個 `canX` 旗標由後端算進 DTO
+- **密碼**（2026-10-06 裁示 ①A 修訂、⑦A）：**不相容舊系統 scrypt 格式**。匯入舊帳號時不沿用舊雜湊，全員 `PWD_HASH` 重設為「帳號小寫」的 bcrypt 雜湊並設 `IS_DFLT_PWD=1`（已改過密碼的人也一律重設），首次登入強制改密碼。密碼以 Spring Security `PasswordEncoderFactories.createDelegatingPasswordEncoder()` 儲存（`{bcrypt}` 前綴，日後換演算法可平滑升級），不另引入 BouncyCastle、不自寫 encoder。改密碼端點與匯入器在 S2 回合二
 - **AI 審查**（是否保留待定，見 BACKLOG.md 第 17 項；金鑰存放待定，見 BACKLOG.md 第 18 項）：Anthropic Java SDK，使用 OutputConfig（structured output）／tool use／thinking；Bedrock mantle 端點拒絕 `output_config.format`，走 bedrock 通道一律落到 tool 模式；aws 通道需自訂 baseUrl + `anthropic-workspace-id` header（未驗證，S11 先做概念驗證）；報告是否過期以「key 排序 JSON + SHA-256」的申請單快照 hash 判斷；retry 用 SDK 內建 + 退避 1s／3s；遇 refusal 用 fallbackModel 重送並記 `fell_back_from`；追問的輸入為快照、報告、最近 20 則對話、新問題，max_tokens 16000；審查為非同步（回 202，前端輪詢）；提示詞與 REVIEW_SCHEMA 放 `resources`
 - **存取紀錄**：Servlet Filter 寫 `IM_ACCESS_LOG`（有上限佇列 + 批次寫入，定期清除；保留天數待定，見 BACKLOG.md 第 70 項）；loopback 改記 LAN IP；`SYS_PARAM` 的 `EXCLUDE_IP` 所列 IP 不記錄
 - **信件**：JavaMailSender + `IM_MAIL_OUTBOX`（`PENDING`／`SENT`／`FAILED`、`TRY_CNT` 重試次數）；所有信件內容（舊系統五種樣板 + 三種 inline HTML）改用 Thymeleaf 或 Mustache 樣板
@@ -213,7 +214,7 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
 
 #### 部署與維運
 - 部署：Docker 容器，主機作業系統 Rocky Linux 9.7；容器的啟動與管理方式（docker compose 或 systemd）待定，見 BACKLOG.md 第 22 項。開發期在本機以 jar + bat 啟動（`start-new.bat`：後端 3202、殼 jar 3201），本機開發不使用 Docker
-- 設定分三處：不變的放各 jar 的 `*.properties`（真檔不進 git，進 git 的是同名 `.properties.example`，鍵值見「環境設定」）；secret（session secret、機櫃 API 金鑰、SMTP 認證、AI 金鑰）放環境變數（AI 金鑰存放處待定，見 BACKLOG.md 第 18 項）；DB 連線資訊不放本系統任何地方，由連線資訊 API 依別名提供；畫面上可調的放 `SYS_PARAM`
+- 設定分三處：不變的放各 jar 的 `*.properties`（真檔不進 git，進 git 的是同名 `.properties.example`，鍵值見「環境設定」）；secret（機櫃 API 金鑰、SMTP 認證、AI 金鑰；server-side session 不需要簽章 secret）放環境變數（AI 金鑰存放處待定，見 BACKLOG.md 第 18 項）；DB 連線資訊不放本系統任何地方，由連線資訊 API 依別名提供；畫面上可調的放 `SYS_PARAM`
 - 切換：新系統以 3201 port 上 UAT，正式切換後改用 3200，舊系統保留唯讀；切換策略待定，見 BACKLOG.md 第 27 項
 
 ### 資料結構
@@ -244,7 +245,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 - `IM_USER` 使用者主檔：PK `USER_ID`（工號）；`LOGIN_ID` UK、CHECK 強制小寫；`USER_NAME`、`EMAIL`、`JOB_TITLE`、`DEPT_NAME`、`TEL`；`PWD_HASH`（NULL 表示尚未設定）、`IS_DFLT_PWD`、`PWD_CHANGE_DATE`。**使用者只能停用（STATUS 0）、不能刪除**。預載一個停用的代用帳號 `HIST_PAPER`（登入帳號 `hist_paper`、無密碼，不可登入），只供對不到申請人的紙本歷史單掛申請人
 - `IM_ROLE` 角色主檔：PK `ROLE_ID`；`ROLE_NAME`、`SORT_NO`。預載 6 筆：admin 系統管理員、it_manager 資訊主管、dept_manager Infra 主管、idc_admin 機房管理員、governance 資訊治理、infra Infra 同仁
 - `IM_USER_ROLE_MAP`：PK (`USER_ID`, `ROLE_ID`)；一人可多角色
-- `IM_LOGIN_TOKEN` 登入權杖：PK `LOGIN_TOKEN_ID`；`TOKEN_HASH` UK（SHA-256，不存明文）；`USER_ID`、`LAST_USE_DATE`、`EXPIRY_DATE`、`USER_AGENT`；STATUS 0 = 已登出或撤銷。IX (`USER_ID`, `STATUS`)。remember-me 做法待定，見 BACKLOG.md 第 28 項
+- `IM_LOGIN_TOKEN` 登入權杖：PK `LOGIN_TOKEN_ID`；`TOKEN_HASH` UK（SHA-256，不存明文）；`USER_ID`、`LAST_USE_DATE`、`EXPIRY_DATE`、`USER_AGENT`；STATUS 0 = 已登出或撤銷。IX (`USER_ID`, `STATUS`)。**S2 不做 remember-me，此表先保留不使用**（2026-10-06 裁示 ③A）；表說明「取代舊系統記憶體 session」與現行 Tomcat session 設計不符、待改，見 BACKLOG.md 第 85 項
 
 #### 簽核流程定義與簽核實例（共用簽核引擎，給未來模組重用）
 - `IM_FLOW` 簽核流程主檔：PK `FLOW_ID`；`FLOW_NAME`、`FLOW_DESC`；`DOC_TYPE`（CR／ACCOUNT／INSPECTION）；`IS_DFLT`（同一 `DOC_TYPE` 只能有一個預設流程，且預設流程必須啟用）。預載 4 筆：`full`（P3／P4 預設，5 關）、`p2_high`（Infra 主管單關，允許代簽）、`p1_emergency`（資訊主管事後補核）、`imported`（93 張紙本歷史單專用，停用、新單不可選）
@@ -305,9 +306,10 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 |---|---|---|---|
 | GET /api/health | 健康檢查 | — | — |
 | GET /api/dashboard | 首頁統計、我的待辦 | 公開 | HomeView |
-| POST /api/auth/login | 登入、remember-me、預設密碼導向改密碼 | 公開 | LoginView |
-| POST /api/auth/password | 改密碼（≥6 字、不得等於帳號、改完撤銷 token） | 登入 | ChangePasswordView |
-| POST /api/auth/logout | 登出 | 登入 | — |
+| GET /api/auth/me | 目前登入者。永遠 200：`{loggedIn, userId, loginId, userName, roles, mustChangePassword}`，未登入只有 `loggedIn:false`；回應順便發 `IM_XSRF` cookie | 公開 | 所有頁面（路由守衛） |
+| POST /api/auth/login | 登入。本文 `{loginId, password}`（帳號不分大小寫、最長 64；密碼最長 128）；成功 200、本文同 `/me`，並建立 session；帳密錯／停用 401 `帳號或密碼錯誤`；缺欄位或超長 400；需 CSRF header。`mustChangePassword:true` 時前端導向改密碼頁 | 公開 | LoginView |
+| POST /api/auth/password | 改密碼（≥6 字、不得等於預設密碼、須驗舊密碼；S2 回合二） | 登入（含預設密碼者） | ChangePasswordView |
+| POST /api/auth/logout | 登出。204，未登入也 204；需 CSRF header | 公開 | — |
 | GET /api/apps?status&priority&source&mine&q&from&to | 列表（預設 90 天、待我簽核置頂、AI 摘要與費用） | 公開 | AppListView |
 | POST /api/apps（multipart） | 建草稿、附件、選範本、套 workflowPolicy | 登入 | AppFormView |
 | GET /api/apps/{id} | 檢視，含 9 個 canX 權限旗標 | 公開 | AppViewView |
@@ -365,6 +367,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | | `server.port` | 3202 |
 | | `spring.servlet.multipart.resolve-lazily` | `true`：multipart 延後到端點取 `MultipartFile` 時才解析 |
 | `config/database.properties` | `db.connect.itflow` | 本系統資料庫在連線資訊 API 的別名（必填；空白時啟動失敗） |
+| | `db.schema.itflow` | `IM_*` 表所在的 schema 名（必填；如 `rd_user`，以 `ap_user` 連線時也填表所屬的 schema）；啟動時白名單驗證，未設或不合法即啟動失敗；DAO 以 `DbSchema.table()` 組成 `SCHEMA.表名` |
 | `config/host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由前三個以 `${}` 組合，範本只讀這一個；四個鍵都要存在（值可空），全空時仍可啟動，第一次查 DB 才失敗 |
 
@@ -382,7 +385,6 @@ secret 一律放環境變數，不寫進 repo 內任何檔案：
 
 | 環境變數 | 用途 |
 |---|---|
-| `IM_SESSION_SECRET` | session 簽章用 secret |
 | `IM_SMTP_*` | SMTP 連線與認證（細項 S8 定） |
 | `IM_RACK_API_KEY` | Impact 機櫃盤點 API 金鑰 |
 | AI 金鑰 | 存放方式待定，見 BACKLOG.md 第 18 項 |

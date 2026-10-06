@@ -17,11 +17,13 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 2 | S2 帳號與登入（三回合）。**回合一** 後端認證骨架：Spring Security server-side session＋CSRF（`IM_SESSION`／`IM_XSRF`／`X-IM-XSRF`，屬性寫在程式常數）、`POST /api/auth/login`／`logout`、`GET /api/auth/me`、`/api/**` 未登入 401 不導頁、`ROLE_<角色>`＋`PWD_OK` 權限（預設密碼者打其他 API 403）、bcrypt（DelegatingPasswordEncoder）、`config.DbSchema` schema 前綴（`db.schema.itflow` 白名單）。**回合二** 改密碼 `POST /api/auth/password`（≥6 字、不得等於預設密碼、須驗舊密碼、改完 `IS_DFLT_PWD=0` 並重建 session 權限；**新密碼 UTF-8 不得超過 72 bytes，`encode` 前先驗、超過回 400**——bcrypt 的 `encode` 超過 72 bytes 會丟例外，`matches` 不會，所以登入不受影響但改密碼沒驗會 500；`LoginRequest.PASSWORD_MAX=128` 是字元數，中文 25 字就超過）＋ users.json 匯入器（後端 jar CLI 模式 `--im.import.users=<檔>`＋帳號工號對照 CSV；不沿用舊 scrypt 雜湊，全員重設為帳號小寫的 bcrypt、`IS_DFLT_PWD=1`；對照表到位前只匯 `wayne` 假帳號，見第 60 項）＋ `IM_LOGIN_TOKEN` 表說明修正（第 85 項）。**回合三** 前端：LoginView、ChangePasswordView、`api/auth.ts`、`types/auth.ts`、`composables/useAuth.ts`、路由守衛（未登入導登入頁、`mustChangePassword` 導改密碼頁）、axios 攔截器（失敗先查 `/me` 再導登入頁、自動帶 `X-IM-XSRF`）。裁示（2026-10-06）：①A 修訂 DB 帳密＋匯入全員重設；②A `db.schema.itflow`；③A 無 remember-me；④A 不接 Spring Session JDBC；⑤A 不轉 `User-Agent`；⑥A 加 `spring-boot-starter-security`；⑦A bcrypt。完成條件：`wayne` 假帳號能登入；預設密碼導向改密碼頁且其他 API 403；後端 `/api/**` 未登入回 401 不導頁；`IM_SESSION`／`IM_XSRF` 的 `Secure` 明設、`Path=/`、不設 `Domain`；真對照表到位後匯入 22 人筆數一致 | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動：
-- 卡住／待確認：
+- 下一步：回合一已完成（code review 裁示全部依建議、修正完、131 個單元測試全過、已 commit）。接著開**回合二**：改密碼端點 `POST /api/auth/password`（含 72 bytes 檢查）＋ users.json 匯入器（CLI 模式，先只匯 `wayne`）＋第 85 項表說明。回合二開工前先 `git fetch origin`＋動工前快照
+- 已改動：無（回合一全部已 commit）
+- 回合二要記得的事：匯入器跑在後端 jar 的 CLI 模式，需要真 DB，本機要先補 `db.schema.itflow`（見下）；改完密碼要重建 session 權限（拿掉 `PWD_OK` 閘門用的預設密碼標記）
+- 卡住／待確認：使用者的真 `infra_manager_java/src/main/resources/config/database.properties` 還沒有 `db.schema.itflow`（設定檔，已請使用者自己加 `db.schema.itflow=rd_user`，我不動這個檔）——沒加的話後端啟動與 `@SpringBootTest` 整合測試（`mvnw verify`）都會啟動失敗；回合二匯入器要連真 DB 驗證前必須先補上
 
 ## 已拍板待實作
 
@@ -29,7 +31,6 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 2 | S2 帳號與登入：`IM_USER`／`IM_ROLE`／`IM_USER_ROLE_MAP` 表已在 V1；users.json 匯入器（需第 60 項帳號工號對照表）；session + CSRF（cookie 與 header 名、逾時、透傳方式見 PRD「認證」與「前端架構」的轉發器規格；3201 為 https，使用者 2026-10-06 確認）；登入／登出／改密碼。**開工前先裁示第 16 項（登入方式）**；若選 A 才做 scrypt 相容 encoder。開工時一併決定：後端要不要記瀏覽器 `User-Agent`（`IM_LOGIN_TOKEN.USER_AGENT`、存取紀錄）——殼 jar 轉發器目前不轉 `User-Agent`／`Accept-Language`／`Origin`／`Referer`，後端只看得到殼 jar 的 Java 用戶端，要記就得加進轉發清單。完成條件：舊帳號能登入；預設密碼導向改密碼頁；匯入 22 人筆數一致；後端 `/api/**` 未登入回 401、不導頁（殼 jar 轉發器不轉 `Location`，302 到瀏覽器會變成沒有去處的錯誤）；`IM_SESSION` 與 `IM_XSRF` cookie 的 `Secure` 要明確設定（`server.servlet.session.cookie.secure=true`、CSRF cookie 同），不能靠自動判斷——後端從殼 jar 收到的是 http，`request.isSecure()` 為 false 不會自動加；cookie `Path` 維持 `/`、不設 `Domain`，否則回到瀏覽器時與 3201 網域對不上會被丟掉（2026-10-06 第二輪 code review B2） | 2 | — |
 | 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則） | 3 | — |
 | 4 | S4 唯讀列表與檢視：GET 列表（6 篩選、待我簽核置頂）、GET 檢視（關卡、附件下載權限）。完成條件：抽 5 張新舊畫面一致 | 4 | — |
 | 5 | S5 表單設定與範本：`IM_FORM_OPTION`（V1 已建）；範本 CRUD（修改／刪除權限**開工前先裁示第 30 項**，涉及漏洞第 43 項）。完成條件：3 份範本可見；權限規則依第 30 項裁示結果驗證 | 5 | — |
@@ -48,14 +49,12 @@
 
 | ID | 摘要 | 提出日 | 詳情 |
 |----|------|--------|------|
-| 16 | ② 登入方式：A DB 帳密沿用舊密碼／B AD/LDAP。architect 建議 A 先上線，B 之後加 | 2026-10-02 | — |
 | 17 | ③ AI 審查去留：A 保留移植／B 首版拿掉、舊報告唯讀。architect 建議 A（162 份在用） | 2026-10-02 | — |
 | 18 | ④ AI 金鑰存放（正式環境為 Docker＋Rocky Linux 9.7）：候選 A 環境變數／B Docker secret 檔案掛載／C px-secret-resolver（若支援非 DB 憑證）／D AWS Secrets Manager。原 architect 建議的 DPAPI＋WinSW 方案因正式環境非 Windows 已失效，需重新分析；遷移時解出舊 `ai.key.enc` 另見第 33 項 | 2026-10-02 | — |
 | 22 | ⑧ 正式環境容器的啟動與管理方式：A docker compose／B systemd；開發期維持 jar + bat。原 WinSW 選項因非 Windows 已失效，需重新分析。S15 開工前裁示 | 2026-10-02 | — |
 | 24 | ⑩ 三代 AI 報告：A 原樣存、Java 讀時正規化／B 原樣存 + Node 預轉顯示欄／C 全轉 v3。architect 建議 B | 2026-10-02 | — |
 | 26 | ⑫ 未登入可看：A 全部須登入／B 維持公開。architect 建議 A | 2026-10-02 | — |
 | 27 | ⑬ 切換策略：A 凍結一次切換（3201 UAT → 凍結舊系統 → 最後一次匯入 → 對帳 → 改 3200 → 舊系統唯讀）／B 並行寫入。architect 建議 A | 2026-10-02 | — |
-| 28 | ⑭ remember-me：A 不搬 token、全部重登／B 移植舊 token。architect 建議 A | 2026-10-02 | — |
 | 29 | ⑮ 遷移工具：A Java 匯入器／B Node 匯出 + Java 匯入。architect 建議 A（AI 部分借 Node） | 2026-10-02 | — |
 | 30 | ⑯ 既有漏洞：A 一律修正／B 完全照搬。architect 建議 A，逐項列 CHANGELOG 並公告。清單見下方「舊系統已知漏洞」第 41～54 項 | 2026-10-02 | — |
 | 32 | 待確認：正式環境 AI provider 是 `aws`（舊系統設定檔、SYSTEM_README:153）；兩台正式機是否一致？ | 2026-10-02 | — |
@@ -63,7 +62,7 @@
 | 34 | 待確認：schedule.start/end、execution.actualStart/End 是不是不帶 Z 的牆上時間？（S3 前量測） | 2026-10-02 | — |
 | 35 | 待確認：aiReviews.appSnapshot 欄位範圍是否與 computeAppHash 輸入一致？（S3 前量測） | 2026-10-02 | — |
 | 36 | 待確認：附件總容量？（S3 前量測） | 2026-10-02 | — |
-| 37 | 待確認：AD 帳號 ID 能否與現有 login_id 一一對應？（第 16 項登入方式選 B 時才需要） | 2026-10-02 | — |
+| 37 | 待確認：AD 帳號 ID 能否與現有 login_id 一一對應？（第 84 項改 AD/LDAP 登入時才需要） | 2026-10-02 | — |
 | 38 | 待確認：舊系統統計頁是否純 CSS 圖？（S14 前確認） | 2026-10-02 | — |
 | 40 | 待確認：Java SDK 是否支援自訂 baseUrl + `anthropic-workspace-id` header（S11 驗證） | 2026-10-02 | — |
 | 55 | 舊系統 P1「口頭報備、事後補單」（form-schema.json:9）系統沒有強制，新系統要不要強制未定 | 2026-10-02 | — |
@@ -77,15 +76,19 @@
 | 66 | 搬遷到 Azure DevOps：等使用者提供 repo 網址並說「搬」才動 | 2026-10-05 | — |
 | 69 | 舊系統版次沒有表單內容快照，但 `IM_APP_VER.FORM_JSON` 為 NOT NULL，舊版次匯入時要填什麼未定（S3 前決定） | 2026-10-05 | — |
 | 70 | `IM_ACCESS_LOG` 保留天數與清理排程未定（S14 前決定）。完成條件含：同步改寫 `IM_ACCESS_LOG` 表說明的「見 BACKLOG」（該句進 DB 資料字典；V1 已執行時需另開 migration） | 2026-10-05 | — |
-| 72 | `IM_LOGIN_TOKEN` 表說明寫「取代舊系統記憶體 session」，與 PRD 的 server-side session + Spring Session JDBC 設計不一致；此表是 remember-me token 還是 session 本體未定。已裁示先保留 `IM_LOGIN_TOKEN` 表，與第 16 項（登入方式）、第 28 項（remember-me）一起決定 | 2026-10-05 | — |
 | 73 | 附件根目錄的位置與設定方式未定（`IM_ATTACH.FILE_PATH` 存相對路徑；正式環境 Docker 容器要掛哪個 volume、由哪個設定鍵或環境變數指定根目錄）；S3 匯入附件並核對 sha256 時就要用到，S3 前決定 | 2026-10-05 | — |
 | 75 | 4 張已刪除單與現存單同號（`IM20260505-002`、`IM20260505-003`、`IM20260506-002`、`IM20260918-003`，皆為不同的單），`APP_ID` 為主鍵不可重複，使用者已裁示改號規則為 B：原號加後綴 `-D`（如 `IM20260505-002-D`），不從序號表取號，先改號、後回填 `IM_APP_SEQ`，回填時排除帶 `-D` 後綴的單號。其所有子表與關聯資料（含附件、AI 審查、事件紀錄、版次、簽核實例）的單號隨之改號。附件歸屬以各單 JSON 的 `attachments[].storedName` 判定、不以 `public/uploads/<單號>/` 資料夾判定（撞號的兩張單共用同一資料夾），實體檔使用者已裁示為 A：匯入時把已刪除單的附件複製（不是搬移）到新的 `-D` 資料夾，資料夾名一律等於單號、無例外。共 5 個檔：已刪除的 `IM20260505-003` 的 `1777960881217_20251210_012806829_iOS.jpg` → `IM20260505-003-D`；已刪除的 `IM20260918-003` 的 `1789717904288_PA升級作業計畫.docx`、`1789718818701_paste-2026-09-18T08-06-17-1.png`、`…08-06-18-1.png`、`1789718818702_paste-2026-09-18T08-06-25-1.png` → `IM20260918-003-D`（來源皆在舊 `public/uploads/<單號>/`，與現存同號單共用資料夾）；`IM20260505-002`、`IM20260506-002` 無附件。待做：S3 匯入腳本實作此複製，並讓附件路徑欄指向新資料夾 | 2026-10-05 | — |
 | 76 | 等 DBA 回覆：(1) 審 `docs/db/Table_List_Schema.xlsx`（31 張表、417 個欄位，使用者裁示照現狀送出；`SYS_PARAM` 已依規範條文把欄名改為 `PARAM_NAME`／`PARAM_VALUE`／`PARAM_DESC`（`MEMO` 不是保留字，沿用範例原名），與規範範例工作表的 `NAME`／`VALUE`／`DESCR` 不同；此說明已寫進 `SYS_PARAM` 的表說明，隨 xlsx 送出）；(1b) 順帶問 DBA 一題：`IM_APP.SUP_NAME` 存廠商文字（舊資料 368 張單中 263 張有廠商名稱、沒有代碼，同一廠商有不同寫法，如「晉泰科技」47 次、「晉泰」40 次），機房施工廠商是否在公司廠商主檔 `CMN_SUP`（PX 廠編）內？若在，是否要改存 `SUP_ID`；(2) 第 61 項的 29 個縮寫（使用者裁示維持現狀）一併送。稽核性質的表（`IM_ACCESS_LOG`、`IM_APP_EVENT`、`IM_APP_VER`）使用者已裁示維持四種權限都給（清理排程見第 70 項、改號匯入見第 75 項需要 UPDATE／DELETE），不送 DBA。回覆若要改欄名，改動範圍是 V1 DDL、PRD，並須重產 xlsx（`node db/tools/gen_table_doc.js`）；改表名則授權檔也要改。`ap_user` 存取方式已裁示維持以 schema 前綴存取、不建同義詞，不送 DBA。S1 不受阻擋，但 DDL 在正式環境執行前須有回覆 | 2026-10-05 | — |
 | 74 | 表單選項已定為後台可維護（`IM_FORM_OPTION`），但 PRD API 規格只有唯讀的 `GET /api/form-schema`；寫入 API 的端點、權限，以及可否刪除或只能停用選項未定，S14 前決定 | 2026-10-05 | — |
-| 77 | S2 正式 DAO 的 SQL 要怎麼帶 schema 前綴（`rd_user.表名`，已裁示不建同義詞）：識別字不能用 `:name` 綁定，必然是字串串接，與後端 README §8「SQL 沒有字串拼接」字面衝突。候選：A 設定檔 key（如 `db.schema.itflow`）啟動時白名單驗證後注入成常數／B 寫死常數／C 從 `ALL_TABLES` 查（TransactionRollbackIT 目前做法，2026-10-06 複審裁示 ①A 加白名單 `[A-Z][A-Z0-9_$#]{0,127}`）。定案時一併在 README §8 補一句「schema 前綴例外」。S2 開工前決定 | 2026-10-06 | — |
 | 79 | 殼 jar 的轉發器（2026-10-06 自建完成）首版只轉 JSON／文字本文並整份讀進記憶體，附件上傳（multipart）與下載（二進位串流）要另外處理；S4 下載／S6 上傳前決定：轉發器加 multipart／串流透傳（本專案可自行改，不必再與範本維護者協調）、或瀏覽器直連 3202、或其他。**上傳現況（2026-10-06 第二輪 code review S1，裁示 ③A 暫不動設定）**：殼 jar 的 `MultipartAutoConfiguration` 預設開啟且非延後解析，`multipart/*` 請求進 controller 前 Tomcat 已把本文寫進暫存檔（單檔 1 MB、整請求 10 MB，超過回 Spring 自己的 413），轉發器 `readAllBytes()` 讀到的是空本文；解法是殼 jar 設 `spring.servlet.multipart.enabled=false`（真檔與 `.example` 同步）讓本文原樣過，但這會拿掉殼 jar 唯一的本文上限，所以要與第 80 項（殼 jar 本文上限）同時定。與第 80 項一起看 | 2026-10-06 | — |
 | 80 | 殼 jar 本身沒有請求本文上限；⑤A 的 1 MB／50 MB／500 MB 只保護後端 3202。轉發器已改為本專案自建（2026-10-06 完成），殼 jar 要不要也加上限可自行決定，S6 上傳前定。正式環境 3202 是否只允許殼 jar 來源（防火牆或 Docker 網路）：使用者 2026-10-06 答不知道，後端一律自行驗 session、不信任殼 jar 轉來的身分，PRD 標待確認。同一個部署議題：殼 jar 到 3202 目前是 http 明文（`host.properties.example` 的範例），`IM_SESSION` 與 `X-IM-XSRF` 在內網明碼傳輸；若 3202 不是只開給殼 jar、或兩者不在同一台／同一個 Docker 網路，要改 https 或其他保護，S15 部署前定。另一個同時定的部署議題（2026-10-06 第二輪 code review B3）：3201 的 https 若由前面的反向代理終結，殼 jar `getRemoteAddr()` 拿到的是代理 IP，轉給後端的 `X-Forwarded-For` 與存取紀錄都會變成代理 IP；要記真實來源得設 `server.forward-headers-strategy` 並限定只信任該代理的 IP，不得無條件信任。第三個（2026-10-06 第三輪 code review ⑤）：殼 jar 的 JDK HttpClient 沒指定代理、用 JVM 預設 `ProxySelector`，正式後端是內網主機名或 IP、不在預設不代理清單（`localhost|127.*|[::1]`）內，維運若用 `-Dhttp.proxyHost` 或 `JAVA_TOOL_OPTIONS` 啟動殼 jar，打後端的請求（含 `IM_SESSION`、`X-IM-XSRF`）會經公司代理；候選：`BackendClientConfig` 加 `.proxy(HttpClient.Builder.NO_PROXY)` 固定直連、或部署文件規定啟動參數要把後端主機放進 `http.nonProxyHosts`。給範本維護者的事剩兩件：業務層自建 TransactionManager 超出範本 README「不支援交易」、範本 pom 附帶的 `mssql-jdbc` 本系統用不到（裁示 ⑦A：不自行移除）；原「`ApiForwarder` 4xx 轉 500 的變更單」因自建轉發器不再需要。兩件都在 PRD「給範本維護者的註記」，剩下的是實際送出 | 2026-10-06 | — |
 | 83 | 殼 jar 沒有資安回應標頭（`security.md` A05 要求的 `X-Content-Type-Options: nosniff`、`X-Frame-Options`、`Content-Security-Policy`），靜態頁與 `/api/v1/**` 回應都沒加，而且轉發器只回 `Content-Type` 與 `IM_` cookie、會丟掉後端的 `Cache-Control: no-store`。範本原本就這樣，不是轉發器改版造成。候選：殼 jar 加一個回應 header filter（靜態頁與 API 一起加）／轉發器多透傳 `Cache-Control`／兩者都做。CSP 要配合前端 inline style 的用法一起定，S4 第一個唯讀頁面前決定 | 2026-10-06 | — |
+| 84 | AD／LDAP 登入（原第 16 項選項 B）：DB 帳密版（S2）上線後再評估要不要加；要做時先確認第 37 項（AD 帳號能否對應 `login_id`），並決定 AD 帳號與 `IM_USER` 的對應與停用同步方式 | 2026-10-06 | — |
+| 85 | remember-me 與 `IM_LOGIN_TOKEN`：S2 不做 remember-me（裁示 ③A；原第 28 項定為不移植舊 token），表先保留不使用。表說明「取代舊系統記憶體 session，支援多機與重啟不掉線」與現行 Tomcat session 設計不符，要改成「remember-me 權杖（尚未啟用）」——V1 已在測試 DB 執行，須另寫 `COMMENT ON TABLE` 的 SQL 檔、同步改 V1 檔文字並重產 xlsx（`node db/tools/gen_table_doc.js`）；S2 回合二一併做。日後要做 remember-me 時再定效期、撤銷規則與第 87 項的 `USER_AGENT` | 2026-10-06 | — |
+| 86 | 多機部署的 session 共享：目前 Tomcat 記憶體 session（裁示 ④A），後端重啟即全員登出、不能多台；正式環境若超過一個後端實例或要重啟不掉線，接 Spring Session JDBC（4.1.1 在 Boot BOM 內）並建 session 表（DDL 由開發方提供、使用者以 `rd_user` 執行）。S15 部署前決定 | 2026-10-06 | — |
+| 87 | 瀏覽器 `User-Agent` 不轉發、不記錄（裁示 ⑤A）：殼 jar 轉發器只轉 `IM_` cookie、`X-IM-XSRF`、`Content-Type`／`Accept`，後端只看得到殼 jar 的 Java 用戶端；`IM_LOGIN_TOKEN.USER_AGENT` 與 `IM_ACCESS_LOG` 因此沒有瀏覽器資訊。日後要記得把 `User-Agent` 加進轉發清單；與第 85 項、S14 存取紀錄一起看 | 2026-10-06 | — |
+| 88 | 登入暴力嘗試防護：`POST /api/auth/login` 沒有次數限制或帳號鎖定（舊系統也沒有），bcrypt 比對耗時只是自然減速；候選：同帳號／同來源 IP 失敗 N 次後暫時鎖定（需記錄失敗次數）、或殼 jar 層限流。`security.md` A07。S15 部署前決定 | 2026-10-06 | — |
+| 89 | 停用帳號或移除角色後，已登入的 session 不會立即失效（S2 回合一 code review 第 11 項，裁示 ③A 登記）：權限在登入當下固定存進 session，之後不再查 `IM_USER.STATUS` 與角色表；閒置逾時 8 小時且無絕對逾時，持續操作的人可無限期保持登入。回合二的「改完密碼重建 session 權限」只處理本人改密碼。候選：每個請求重查 `STATUS`（多一次 DB 查詢）、維護 session 清單供管理員踢人（接 Spring Session 後較容易，見第 86 項）、加絕對逾時。S14 使用者管理（停用功能）開工時一起做 | 2026-10-06 | — |
 
 ### 舊系統已知漏洞（依第 30 項 ⑯ 決定後處理）
 
@@ -101,7 +104,7 @@
 | 48 | 版次 history 沒有表單內容快照 | 2026-10-02 | — |
 | 49 | 假 UTC（存台灣時間標 Z），信件再 +8h（完成信顯示 +16h；rememberToken 效期實際 30 天又 8 小時） | 2026-10-02 | — |
 | 50 | login redirect 參數沒驗證（open redirect） | 2026-10-02 | — |
-| 51 | 預設密碼 = 帳號小寫 | 2026-10-02 | — |
+| 51 | 預設密碼 = 帳號小寫（S2 裁示沿用此預設值，但匯入時全員重設並以 `PWD_OK` 權限閘門強制首次改密碼；是否改成隨機初始密碼於第 30 項裁示時再看） | 2026-10-02 | — |
 | 52 | accessLogger 高併發遺失；settings 非原子寫入 | 2026-10-02 | — |
 | 53 | 首頁「我的待辦」含 draft，與 server.js 算法不一致 | 2026-10-02 | — |
 | 54 | workflows.json 關卡 key 與名稱錯位（key `dept_manager` 名稱卻是「機房管理員」）；遷移以 name/role 為準 | 2026-10-02 | — |
@@ -111,3 +114,4 @@
 | ID | 摘要 | 決定日 | 理由（一句） |
 |----|------|--------|------------|
 | 19 | ⑤ UI 元件庫（原候選 Element Plus／Naive UI／PrimeVue／Vuetify）：不使用元件庫，沿用前端範本 `main.css`（S1 裁示 ④B） | 2026-10-06 | 照公司前端範本 web_template_3.5 的 `main.css` 與版面規範 |
+| 28 | ⑭ remember-me：不移植舊 token，S2 也不做 remember-me 功能（裁示 ③A；日後要做見第 85 項） | 2026-10-06 | 全員密碼重設後舊 token 無意義；功能本身延後 |
