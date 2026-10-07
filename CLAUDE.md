@@ -10,8 +10,10 @@
 
 - **code review 的時機改為「每個施工階段（S 編號）結束才跑一次 `code-reviewer`」**，回合內只跑單元測試（`./mvnw -q clean package` 全綠即可 commit），不每回合委派 `code-reviewer` 與 `test-runner`
 - review 回報的**阻擋項當場修**；**非阻擋項一律登記到 `BACKLOG.md`「下一階段（細節調整）」分區、不當場修**，也不逐項請使用者裁示
+- **待確認項預設照建議做**（2026-10-07 裁示 ①A）：開工分析、驗收、review 列出的待確認項，Claude 直接採自己的建議施工，不停下等「全部依建議」；報告照常列出採了哪個選項與理由，使用者不同意再事後改。**例外，仍須先停下問**：刪除資料或檔案、資安相關取捨、動設定檔（含 `.env`／`*.properties`）、與使用者先前裁示矛盾
+- **三檔同步改為階段結束才做**（2026-10-07 裁示 ②A）：回合內的 commit 只更新 `BACKLOG.md`（交接欄、登記項）；`PRD.md` 與 `CHANGELOG.md` 在每個 S 階段結束時一次補齊。階段做到一半時 PRD 落後實際程式屬預期
 - 施工順序：S2 回合三 → S4 → S6 → S7 → S9 → S10 → S5 → S8 → 其餘；S3（歷史申請單匯入）與帳號真實匯入（第 91 項）延後到基本功能之後
-- 其他全域規則（Edit／Write 改檔、commit 後 push、三檔文件同步、繁體中文、不碰 `com.mpx.common`）**照常**，不因衝刺放寬
+- 其他全域規則（Edit／Write 改檔、commit 後 push、繁體中文、不碰 `com.mpx.common`）**照常**（三檔同步依上方 ②A 改為階段結束），不因衝刺放寬
 
 ## 開發慣例
 - 後端：Java 25（`export JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot"` 後再 `./mvnw`）、Spring Boot 4.1、Jackson 3（`tools.jackson.*`）；SQL 只用 `:name` 參數，表名經 `DbSchema.table()` 加前綴
