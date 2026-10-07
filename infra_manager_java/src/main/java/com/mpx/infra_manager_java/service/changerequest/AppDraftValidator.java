@@ -8,6 +8,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           長度：VARCHAR2(n CHAR) 以 code point 計，APPLY_EMAIL 是 byte 語意、以 UTF-8 byte 計；CLOB 用 TextLength 兩級上限。
 //           超長丟 TextTooLongException（400 帶 field／max／actual，field 為 JSON 路徑如 equipments[0].name）；
 //           其餘格式錯誤丟 ApiBadRequestException。選項 id 必須是啟用中且群組正確的 IM_FORM_OPTION
+//           2026-10-07 S5 R1（Claude Opus 5.5）：加 validate(…, requireTitle) 給範本用（範本標題可空）
 // ============================================================
 
 import java.math.BigDecimal;
@@ -46,11 +47,16 @@ public final class AppDraftValidator {
 	}
 
 	public static AppDraft validate(AppDraftRequest r, List<FormOptionRow> activeOptions) {
+		return validate(r, activeOptions, true);
+	}
+
+	/** requireTitle=false 給範本用：範本的標題可空，其餘規則與草稿相同 */
+	public static AppDraft validate(AppDraftRequest r, List<FormOptionRow> activeOptions, boolean requireTitle) {
 		if (r == null) {
 			throw new ApiBadRequestException("請求格式錯誤");
 		}
 		String title = text("title", "標題", r.title(), 200);
-		if (title == null) {
+		if (title == null && requireTitle) {
 			throw new ApiBadRequestException("請填寫標題");
 		}
 		if (r.prioCode() == null || !PRIO_CODES.contains(r.prioCode())) {

@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 // 變更說明: 新增：草稿檢查與正規化的單元測試（S6 回合二 b-1）。鎖定：標題與優先等級必填；預設值；空白轉 null；
 //           超長回正確 field／max／actual（含 code point、UTF-8 byte、CLOB 兩級）；CRLF 不多算；
 //           選項群組錯、未啟用、重複的處理；空白設備列與步驟略過；設備缺名稱、時間順序、工時格式
+//           2026-10-07 S5 R1：加範本模式（requireTitle=false）標題可空、優先等級仍必填
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -111,6 +112,18 @@ class AppDraftValidatorTest {
 		n.prioCode = null;
 		assertThatThrownBy(n::validate).isInstanceOf(ApiBadRequestException.class);
 		assertThatThrownBy(() -> AppDraftValidator.validate(null, OPTIONS)).isInstanceOf(ApiBadRequestException.class);
+	}
+
+	@Test
+	void 範本模式標題可空但優先等級仍必填() {
+		Builder b = base();
+		b.title = "   ";
+		assertThat(AppDraftValidator.validate(b.build(), OPTIONS, false).title()).isNull();
+		Builder n = base();
+		n.title = null;
+		n.prioCode = null;
+		assertThatThrownBy(() -> AppDraftValidator.validate(n.build(), OPTIONS, false))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage("請選擇優先等級");
 	}
 
 	@Test
