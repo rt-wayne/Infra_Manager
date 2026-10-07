@@ -23,7 +23,7 @@
 - 下一步：S7 R3 前端（送審／撤回／簽核接真 API），計畫與交接欄見 `backlog/7-s7-approval-engine.md`「R3」。R2 已完成且 `verify` 全綠（IT 18 個、兩個完成條件都過）。**測試 DB 的 `IM_ROLE` 曾經是空的**，2026-10-07 由 Claude 補回 V1 預載 6 筆，詳見計畫檔交接欄
 - 已改動：R1 新增 `ApprovalWriteDao`、`AppFlowService`、`AppSubmitValidator`、`AppFlowController`、`FlowActionRequest`；`AppWriteDao` 加 `transition`／`updateFlowId`；`AppPermissionService.canSubmit` 開啟（草稿且申請人或 admin）。R2 新增 `DecisionRequest`、`DecisionPolicy`、`AppFlowService.decide`、`POST /api/apps/{id}/decisions`、`ApprovalWriteDao.decideStep`／`activateNext`、`AppWriteDao.updateStatus`、測試 `DecisionPolicyTest`／`AppFlowDecisionIT`
 - 要記得的事：**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
-- 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
+- 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認；第 102 項（前端改版成示意頁）排在 S7 R3 之後，開工前要使用者裁示 (a)(b)(c) 三項
 
 ## 下一階段（細節調整）
 
@@ -58,6 +58,7 @@
 | 12 | S12 AI 對話、寄出、費用：messages、send、aiPricing、v1～v3 顯示。完成條件：三種舊格式正常顯示 | 12 | — |
 | 13 | S13 機櫃選擇器：盤點快取 + U 位視覺化元件（可能超過 3 回合，必要時拆兩段）。完成條件：選範圍帶入設備列；Impact 斷線顯示舊快取 | 13 | — |
 | 14 | S14 後台與統計：users、workflows、settings、form-schema、stats、`IM_ACCESS_LOG`（保留天數與清理排程依第 70 項）。完成條件：統計與舊系統同區間一致。開工前先確認第 38 項 | 14 | — |
+| 102 | 前端整套改版成使用者提供的示意頁（2026-10-07 使用者交代「先記著，晚點改」；S7 R3 之後排入）：示意頁在 repo 根目錄 `示意頁_帳號權限管理與機房巡檢.html`（使用者檔案、未進版控，開工時搬到 `docs/` 一起 commit）。範圍：① `main.css` 整份換成示意頁色票與元件類（`--accent #c8540a` 橙、`--bg #f4f3ef` 米白、14px、側欄 208px、頂列 56px、`.panel`／`.tbl`／`.btn-*`／`.pill-*`／`.form-row`／`.filter-bar`／`.toast`）；② `App.vue` 改成「左側欄＋頂列＋內容區」外殼（新增 `components/SideNav.vue`、`TopBar.vue`），登入頁與改密碼頁不顯示側欄；③ 登入頁照使用者截圖重做（🏢 登入、灰色說明、帳號、密碼、記住我、橙色整寬登入鈕、📌👀🔒 三段說明）；④ 首頁改示意頁版型（hero＋三鈕、六格統計卡、待簽核橫幅、最近活動）；⑤ 列表／檢視／表單／改密碼頁只拆各自大標題列改用 `.page-head`、class 對應新樣式，功能不動。約兩個回合（①～③、④～⑤）。**開工前要使用者裁示 3 項**：(a) 登入頁帳號下拉——舊系統用 `datalist` 把全員名單塞進登入頁（未登入可列舉帳號），新系統要做需新增公開端點只回啟用中帳號 loginId／姓名／部門，建議照截圖做但屬資安取捨；(b) 「記住我 30 天」與裁示 ③A／第 28、85 項矛盾——建議只畫停用的勾選框與說明、後端留第 85 項；(c) 「不登入瀏覽列表與統計」與現行守衛（前端非 public 路由、後端 `/api/**` 都要登入）矛盾——建議登入頁先不放這段字，等拍板。**已採建議、使用者可推翻 4 項**：(d) 範圍外選單（帳號權限管理、機房巡檢、範本、統計）照示意頁列出但 `.locked` 灰色、點了 toast「此功能尚未開放」；(e) 字級採示意頁 14px，不採公司範本 README §10 的 19px／48px（使用者是資訊處同仁、非門市）；(f) 首頁六格統計先顯示「—」標「統計功能規劃中」（裁示 ⑤A 不做統計端點），待簽核橫幅用 `mineCount`、最近活動用列表 API 前 10 筆；(g) 頂列角色切換下拉改成登入者姓名＋角色＋登出鈕、未登入顯示「登入」鈕 | 7.5 | — |
 | 15 | S15 服務化與切換演練：正式環境以 Docker 部署在 Rocky Linux 9.7（容器啟動與管理方式**開工前先裁示第 22 項**）、正式匯入演練、切換 runbook 進 SETUP.md（切換策略**開工前先裁示第 27 項**）。完成條件：演練機完整跑一次切換與回退 | 15 | — |
 
 ## 僅記錄未拍板
