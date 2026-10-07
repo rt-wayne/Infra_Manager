@@ -26,6 +26,6 @@
 
 ## 測試 DB 分工（2026-10-07 使用者交代）
 - **DDL（建表、改表、授權）由使用者執行**：Claude 只產出 SQL 檔與步驟，不自己對 DB 跑 DDL
-- **測試需要的資料由 Claude 自己建立與清除**（種子 SQL、驗收用假資料），不再請使用者代跑；只限測試 DB（`d-itflow`，SID `FLOW`），以 `ap_user` 連線、`ALTER SESSION SET CURRENT_SCHEMA = RD_USER`。刪除條件必須限定在種子資料自己的鍵值範圍
+- **測試需要的資料由 Claude 自己建立與清除**（種子 SQL、驗收用假資料），不再請使用者代跑；只限測試 DB（`d-itflow`，SID `FLOW`；JDBC 一律用 IP `192.168.119.161:1521`，主機名解析到的位址連線會被拒——2026-10-07 實測），以 `ap_user` 連線、`ALTER SESSION SET CURRENT_SCHEMA = RD_USER`。刪除條件必須限定在種子資料自己的鍵值範圍
 - 連線方式：本機 sqlplus 是 11.2 版，連 19c 會 ORA-28040，改用 JDBC（`~/.m2` 的 ojdbc17＋orai18n）執行
 - **DB 密碼不寫進任何檔案**（含本檔、repo、auto memory）；新 session 沒有密碼時向使用者索取
