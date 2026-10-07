@@ -26,7 +26,7 @@
 - **登入與帳號**：用帳號密碼登入，帳密存在本系統資料庫（2026-10-06 裁示；AD／LDAP 之後再評估，見 BACKLOG.md 第 84 項）。切換上線時全員密碼重設為「帳號小寫」並標記為預設密碼，第一次登入會被強制改密碼才能使用其他功能；新密碼規則為至少 6 字、不得全為空白、不得等於帳號（不分大小寫）或舊密碼（預設密碼本身不受 6 字限制，帳號 5 個字的人預設密碼就是 5 個字）。沒有「記住我」，關閉瀏覽器或閒置 8 小時後要重新登入（日後要做見 BACKLOG.md 第 85 項）
 - **首頁**：看申請單統計與「我的待辦」（等我簽核的單）；並顯示系統狀態（後端服務與資料庫是否正常、後端時間），可按「重新檢查」
 - **申請單列表**：預設顯示近 90 天（只在起訖日都沒填時套用），可依狀態、優先等級、來源、只看我的、關鍵字（單號／標題／作業主旨／申請人，上限 100 字）、建立日期區間篩選；待我簽核的單排在最上面；每頁 20 筆；須登入才能看（2026-10-06 裁示，全部頁面皆須登入）；列表是否顯示 AI 摘要與 AI 費用待 BACKLOG.md 第 17 項（AI 審查去留）定案
-- **新增／編輯申請單**：填寫基本資料、異動類別、原因、影響範圍、設備清單、機櫃 U 位、施工步驟、排程、風險評估與回退方案；可套用範本；可上傳附件（拖放、貼上截圖、上傳前預檢）；先存成草稿。目前已上線：新增與編輯草稿（只有申請人能編輯）、附件逐檔上傳（上傳前預檢副檔名、大小與檔數）；尚未提供套用範本（S5）、機櫃 U 位選擇（S13，之前設備位置只能填「不適用＋原因」或留空）、附件拖放與貼上截圖（BACKLOG.md 第 98 項），草稿附件不能刪除（與舊系統相同）
+- **新增／編輯申請單**：填寫基本資料、異動類別、原因、影響範圍、設備清單、機櫃 U 位、施工步驟、排程、風險評估與回退方案；可套用範本；可上傳附件（拖放、貼上截圖、上傳前預檢）；先存成草稿。目前已上線：新增與編輯草稿（只有申請人能編輯）、附件逐檔上傳（上傳前預檢副檔名、大小與檔數）、新增時套用範本（表單上方選範本就地帶入，或從範本列表按「建單」）；尚未提供機櫃 U 位選擇（S13，之前設備位置只能填「不適用＋原因」或留空）、附件拖放與貼上截圖（BACKLOG.md 第 98 項），草稿附件不能刪除（與舊系統相同）
 - **送審與撤回**（已上線）：申請人或 admin 送審草稿，系統先檢查必填（申請單位、聯絡電話、Email、作業主題、至少一位執行人員、遠端作業的連線方式、委外時的廠商資料，一次列出全部缺漏），再依當下的流程政策展開簽核關卡與候選人（候選人在送審當下固化，之後角色異動不影響；申請人本人不列為候選人）；還沒有任何一關簽過之前，申請人可撤回成草稿（可填原因）。AI 審查啟用時送審前須有相符報告，待 BACKLOG.md 第 17 項定案後才接上
 - **簽核**（已上線）：目前關卡的候選人可同意或退件；同意不填意見時記為「同意」，退件必填意見；同意後進下一關、末關同意即核准；退件結束這一輪簽核、尚未輪到的關卡標記略過。兩人同時簽同一關只有一人成功，另一人被提示重新載入。簽核時附檔見 BACKLOG.md 第 101 項
 - **退件補件**：被退件的單由申請人修改後補件，產生新版次並直接重新進入審核；舊版次的簽核紀錄在檢視頁查得到，舊版表單內容凍結保存在 DB（畫面上檢視舊版內容尚未提供，見 BACKLOG.md 第 106 項）
@@ -34,7 +34,7 @@
 - **治理審查**（已上線）：資訊治理人員（governance）在檢視頁審核待治理審核的單：通過即結案（意見可不填），退回則回到退件狀態（必填意見），申請人補件後整張單重新簽核與執行。審查人是申請人或該單執行人時不阻擋
 - **刪除**：申請人（符合條件時）或 admin 可刪除申請單，需輸入單號確認；刪除為軟刪除，編號不再被重用
 - **AI 審查**（是否保留待定，見 BACKLOG.md 第 17 項）：對申請單做 AI 預審，內容沒變就略過、可強制重審；AI 執行在背景進行，畫面輪詢結果；可對報告追問；admin 可寄出報告
-- **範本**：範本列表、檢視、新增、修改、刪除（修改／刪除的權限範圍待定，見 `BACKLOG.md` 第 30 項）
+- **範本**（已上線）：把常用的申請單內容存成範本，新增申請單時一鍵帶入。範本存標題、優先等級、作業方式與內容、類別／原因／範圍、設備、作業步驟、預估工時，不存申請人聯絡資料與預定開始／結束時間；範本名稱必填、標題可空。任何登入者都能新增、檢視、套用範本；只有建立者本人與系統管理員能修改、刪除（舊系統任何人都能改刪別人的，已修正）。刪除後不能再套用。列表顯示每份範本的套用次數與最後套用的時間和人，用範本建出的申請單第一次存檔時才算一次。套用時已停用的選項自動拿掉，表單已填過內容會先確認再覆蓋
 - **統計**：依日／週／月分桶統計申請單
 - **機櫃盤點**：從 Impact 系統取得機櫃與設備資料（快取，背景刷新），在新增申請單時用機櫃 U 位視覺化選擇器選位置並帶入設備
 - **後台管理（admin）**：使用者管理（新增、修改、停用；使用者只能停用、不能刪除）、簽核流程管理、外寄信件紀錄與失敗重寄、測試信、系統設定（workflowPolicy、上傳限制、排除記錄的 IP）、表單設定維護（優先等級、設備類別、申請原因、影響範圍、檢核項等選項存在資料庫，admin 可在後台維護）、存取紀錄查詢
@@ -63,10 +63,10 @@ Vue 3 SPA，共 19 頁：
 | ChangePasswordView | 改密碼（預設密碼登入後強制導向） |
 | HomeView | 首頁統計、我的待辦、系統狀態（後端服務／資料庫「正常」或「無法連線」） |
 | AppListView | 申請單列表與篩選；單號是連到檢視頁的連結 |
-| AppFormView | 新增／編輯草稿／補件共用表單，內含機櫃 U 位選擇器、設備可編輯表格、附件上傳。目前已上線新增（`/apps/new`）、編輯草稿（`/apps/:id/edit`）與補件（`/apps/:id/resubmit`），規格見「前端架構」；機櫃選擇器尚未做 |
+| AppFormView | 新增／編輯草稿／補件共用表單，內含機櫃 U 位選擇器、設備可編輯表格、附件上傳。目前已上線新增（`/apps/new`）、編輯草稿（`/apps/:id/edit`）與補件（`/apps/:id/resubmit`），規格見「前端架構」；新增模式上方有範本下拉（清單載入失敗仍可直接填，`?template=<id>` 進頁即套用；套用就地帶入、不重載頁面，保留申請人聯絡資料與開始／結束時間，存檔時以 `templateId` 累計次數）；機櫃選擇器尚未做 |
 | AppViewView | 檢視申請單（`/apps/:id`）；送審、撤回、簽核、刪除、AI 審查與追問、寄出報告。目前已上線：唯讀檢視（仿紙本表格呈現基本資料、作業內容、類別（「其他」補充顯示為「類別（其他）：說明」）、原因、範圍、設備、步驟、排程、位置、檢核表、執行紀錄（未填結果時異常／後續追蹤顯示「—」）、簽核關卡、附件索引、歷史版次與歷次簽核、事件）；動作鈕依 `permissions` 顯示——「編輯草稿」導到編輯頁、「補件」導到補件頁，「填寫執行紀錄」導到執行頁，「送審」「撤回到草稿」「簽核」「治理審核」「刪除申請單」已接真 API（規格見「前端架構」的「檢視頁流程動作」），其餘提示「此功能尚未開放」；附件下載鈕先以 HEAD 確認檔案存在（404 toast「找不到附件檔案」），再交給瀏覽器原生下載（不整檔讀進記憶體）；查無單號顯示「找不到申請單」 |
 | ExecuteView | 填寫執行紀錄（`/apps/:id/execute`）：執行檢核表（每項執行人「填入我自己」或填自由文字）、實際執行紀錄、暫存、完成並送治理審查、退回給申請人；規格見「前端架構」的「執行頁」。治理審查不另開頁，在 AppViewView 的「治理審核」面板操作 |
-| TemplateListView／TemplateEditView | 範本列表與編輯 |
+| TemplateListView／TemplateEditView | 範本列表（`/templates`，每頁 20 列；每列「建單」導到 `/apps/new?template=<id>`，可編輯者才有修改／刪除，刪除先確認）與新增／修改（`/templates/new`、`/templates/:id/edit`；表單一～四區塊與 AppFormView 共用 `components/DraftFields.vue`，範本模式不顯示申請人聯絡資料與開始／結束時間；無權修改時不給表單） |
 | StatsView | 統計 |
 | AccessLogView | 存取紀錄（admin） |
 | AdminUsersView | 使用者管理 |
@@ -171,6 +171,12 @@ start-new.bat  本機一鍵建置並啟動兩個 jar
   - **新增** `POST /api/apps`：申請人一律是登入者、`APPLY_DATE` 由伺服器設；流程依 `FLOW_POLICY`：`full_only` 一律 `full`，`by_priority` 取該優先等級選項的 `FLOW_ID`（沒設定退回 `full`）。單號在同一交易取號：`IM_APP_SEQ` 當日列 `LAST_NO+1`，沒有當日列就 INSERT 1，兩人同時插入撞鍵時重做 UPDATE；號碼只增不減，刪單後再建不會撞號，當日超過 999 張自然變成 4 位數。主檔與子表同一交易寫入，成功回 201 `{appId, rowVerNo: 0}`
   - **編輯** `PUT /api/apps/{id}`：只有申請人能編輯（admin 也不行）。本文同新增並多帶 `rowVerNo`，缺少回 400「缺少版本號，請重新載入頁面」。更新條件含版本號、`DRAFT`、申請人與 `STATUS=1`，成功時 `ROW_VER_NO+1`；0 列時依現況分辨：查無回 404「找不到申請單」、非申請人 403、不是草稿 409「申請單已不是草稿，無法編輯，請重新載入頁面」、版本不符 409「申請單已在其他地方修改過，請重新載入頁面後再編輯」。子表在同一交易刪除後重建；`FLOW_ID` 依新的優先等級重算。成功回 200 `{appId, rowVerNo}`
   - 已知待補細節（服務層 403 沒寫 log、日期寬鬆解析、選項陣列長度上限等）見 BACKLOG.md 第 100 項
+- **範本**（S5；`service.template.TemplateService`、`dao.template.TemplateDao`、`controller.template.TemplateController`）：
+  - **內容格式**：`IM_TMPL.FORM_JSON` 存 `model.template.TemplateForm`，欄位名同 `AppDraftRequest`、去掉 `applicant` 與 `rowVerNo`，`schedule` 只有 `estHours`。寫入前轉成草稿請求、以 `AppDraftValidator` 同一套規則檢查並正規化（只多「標題可空」），存的是正規化後的結果；序列化用本類別專屬的 `JsonMapper`（不受全域設定影響），讀取時忽略未知欄位，解析失敗回 `form=null` 並記 log（只記例外類別名）。`FORM_JSON` 以 `Types.CLOB` 綁定；列表以 `JSON_VALUE(FORM_JSON, '$.prioCode')` 取優先等級，不搬整份 CLOB
+  - **檢核**：範本名稱必填「請填寫範本名稱」、上限 100 字（超過回 `{message, field, max, actual}`）；缺 `form` 回「缺少範本內容」。ID 由伺服器產生 `tpl_<毫秒>_<4 位 hex>`，路徑上的 ID 先過 `^[A-Za-z0-9_-]{1,60}$`，不符或查無（含已刪除）一律 404「找不到範本，可能已被刪除」
+  - **權限**：修改、刪除先查有效範本，再比對 DB 的 `OWNER_USER_ID` 與登入者，或登入者有 `admin` 角色，否則 403「只有範本建立者或系統管理員可以修改或刪除範本」；本文改不到建立者、次數與狀態。不做樂觀鎖（`IM_TMPL` 沒有版本欄，後寫者為準）；名稱不檢查重複
+  - **套用次數**：`AppDraftService.create` 在寫完子表後、同一交易呼叫 `TemplateService.recordUse`：`USE_CNT = NVL(USE_CNT,0)+1`、`LAST_USE_DATE`、`LAST_USE_USER_ID`（只限 `STATUS=1`，不動 `UPDATE_DATE`）。ID 格式不符或 0 列只記 info log、不丟例外；DB 錯誤則整張單回滾。編輯草稿（PUT）不累計
+  - 已知待補細節（範本載入中可存檔、套用後工時與起訖不一致、內容壞掉仍顯示套用成功、大內容與建單整條路的 IT、上一頁不重新套用）見 BACKLOG.md 第 109 項
 - **機櫃盤點快取**：Caffeine + DB 快取列（`IM_RACK_CACHE`，依快取鍵值分列，如 `SITES`、`RACKS_<站點代碼>`）；`@Scheduled` 背景刷新（stale-while-revalidate）；單一執行中旗標避免重複刷新；外部機櫃系統（Impact）斷線時回舊快取
 - **我的待辦數**：一條 SQL，靠 `IM_APPR_CAND_MAP` 的 `USER_ID` 索引
 
@@ -334,7 +340,7 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | POST /api/auth/logout | 登出。204，未登入也 204；需 CSRF header | 公開 | — |
 | GET /api/apps?status&priority&source&mine&q&from&to&page | 列表。`status` 七種狀態碼之一、`priority` P1～P4、`source` ONLINE／IMPORTED、`mine` 待我簽核、`q` 關鍵字（trim 後上限 100 字，比對單號／標題／作業主旨／申請人姓名，不分大小寫）、`from`／`to` 建立日期 `yyyy-MM-dd`（比對單據建立時間、不是申請日；都沒填才套近 90 天；`from` 晚於 `to` 400）、`page` 從 1 起（每頁 20，超出範圍夾回）；篩選值不合法 400 帶訊息、格式錯 400 `請求格式錯誤`。回 `{items, total, page, size, mineCount}`，`items` 待我簽核者置頂、再依建立時間新到舊；每筆含單號、標題、優先度（代碼／名稱／顏色）、作業主旨、申請部門、申請人、版次、狀態、來源、目前關卡與簽核人（候選人多於一人顯示「N 人待簽」）、`mine`、建立時間。AI 摘要與費用待第 17 項 | 登入 | AppListView |
 | GET /api/form-options | 申請表單用的選項與上傳限制：`options` 為啟用中（`STATUS` 1）的 `IM_FORM_OPTION`，依群組、`SORT_NO`、ID 排序，每項 `{formOptionId, groupCode, code, name, upFormOptionId, colorCode, desc, timeLimitDesc, prioFlowDesc, sampleDesc, flowId, sortNo}`；`upload` 為 `{maxMb, maxFiles}`（讀取規則見 `SYS_PARAM`），只供前端提示，實際檢核在後端 | 登入 | AppFormView |
-| POST /api/apps | 建草稿（JSON，不含附件）：取號、套 `FLOW_POLICY`，成功 201 `{appId, rowVerNo: 0}`；檢核與取號規則見「後端分層」的「草稿新增與編輯」。套用範本待 S5 | 登入 | AppFormView |
+| POST /api/apps | 建草稿（JSON，不含附件）：取號、套 `FLOW_POLICY`，成功 201 `{appId, rowVerNo: 0}`；檢核與取號規則見「後端分層」的「草稿新增與編輯」。選填 query `templateId`：同交易累計該範本套用次數，範本不存在不擋建單 | 登入 | AppFormView |
 | POST /api/apps/{id}/attachments | 草稿附件上傳（multipart，一次一檔、part 名 `file`；副檔名白名單，檔數與大小依 `SYS_PARAM`；只限 DRAFT 或 REJECTED——退件後申請人可先補附件再補件，刪除仍只限 DRAFT），成功 201 回附件元素（同檢視 API）；規則與錯誤訊息見「後端分層」的「附件」 | 申請人 | AppFormView |
 | GET /api/apps/{id} | 檢視。回完整表單（基本資料、樂觀鎖版號 `rowVerNo`、申請人、廠商、分類／原因／範圍選項（各帶 `formOptionId`）含其他說明、設備、計畫步驟、排程、位置、補件說明）、檢核表（每項 `{seqNo, code, name, done, doneAt, executor, userId, executorDesc}`，`executor` 為顯示用姓名或文字；該版次還沒存過執行紀錄時為空陣列）、執行結果、簽核鏈（未送審的草稿依流程定義展開、全部 WAITING；每關候選人姓名）、`approvalHistory`（目前實例以外的歷次簽核，含被撤回、被退件、被取消的那幾輪，依建立先後，每筆 `{apprId, verNo, statusCode, startedAt, closedAt, steps}`）、附件索引、版次、事件、`permissions`（`canDecide`、`canResubmit`、`canRecall`、`canExecute`、`canReview`、`canDelete`、`canAiReview`、`canSubmit`、`canEditDraft`、`deleteMode`）。日期時間一律 `yyyy-MM-dd HH:mm` 台灣時間字串。單號格式不合或查無（含已軟刪除）404 `找不到申請單`。`canDecide` 要求狀態為 `IN_REVIEW` 且為目前關卡候選人（修正舊系統狀態不對仍可簽的漏洞）；`canSubmit` 為草稿且登入者是申請人或 admin；`canRecall` 為審核中且登入者是申請人（已有關卡簽過時後端仍回 409）；`canResubmit` 為退件且登入者是申請人；`canExecute` 為待執行或執行中、尚未填執行結果，且登入者是 idc_admin 或申請人；`canReview` 為待治理審核且登入者有 governance 角色；`canDelete`／`deleteMode` 規則同刪除端點（admin 恆 ADMIN；申請人限目前版次沒人簽過、未補件過且狀態允許）；`canAiReview` 在 S11 實作前固定 false | 登入 | AppViewView |
 | GET（HEAD）/api/apps/{id}/attachments/{attachId} | 附件下載（規則見「後端分層」的「附件」）；`attachId` 非數字 400 `請求格式錯誤` | 登入 | AppViewView |
@@ -350,7 +356,11 @@ DDL 全部放在 `db/oracle/`，由 `rd_user` 手動執行（不使用 Flyway）
 | POST /api/apps/{id}/ai-reviews | AI 審查（非同步 202；hash 沒變略過，force 強制） | 申請人（draft）或 admin | AppViewView |
 | POST /api/ai-reviews/{rid}/messages | AI 報告追問 | 登入 | AppViewView |
 | POST /api/ai-reviews/{rid}/send | 寄出 AI 報告 | admin | AppViewView |
-| /api/templates（CRUD） | 範本列表、JSON、增刪改 | 列表公開；增刪改任何登入者 | TemplateListView、TemplateEditView |
+| GET /api/templates | 範本列表（名稱排序，一次回全部）：`tmplId`、名稱、優先等級（代碼／名稱／顏色）、建立者姓名、套用次數、最後套用時間與人、更新時間、`canEdit` | 登入 | TemplateListView、AppFormView |
+| GET /api/templates/{id} | 單筆含 `form`（格式見「後端分層」的「範本」）與 `canEdit` | 登入 | TemplateEditView、AppFormView |
+| POST /api/templates | `{tmplName, form}` → 201 `{tmplId}` | 登入 | TemplateEditView |
+| PUT /api/templates/{id} | `{tmplName, form}` → 200 `{tmplId}`；非建立者且非 admin 403 | 建立者或 admin | TemplateEditView |
+| DELETE /api/templates/{id} | 軟刪除 → 204；非建立者且非 admin 403 | 建立者或 admin | TemplateListView |
 | GET /api/stats | 日／週／月分桶統計 | 公開 | StatsView |
 | GET /api/access-logs | 存取紀錄（最後 500 筆） | admin | AccessLogView |
 | GET /api/rack-data、GET /api/rack-data/status、POST /api/rack-data/refresh | 機櫃盤點資料、快取狀態、強制刷新（是否需登入待定，見 `BACKLOG.md` 第 26 項；refresh 限 admin） | 前兩者公開；refresh admin | 機櫃選擇器 |

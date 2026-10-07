@@ -20,7 +20,7 @@
 | 5 | S5 範本：範本 CRUD（第 43 項裁示 A：修改／刪除限建立者或 admin）、套用範本建單、3 份測試種子。完成條件：3 份範本可見；他人改刪 403、建立者與 admin 可改刪 | [backlog/5-templates.md](backlog/5-templates.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S5 結案剩兩件——① 匯入 S5 種子到測試 DB（`ap_user` 以 `d-itflow:1521:FLOW` 連線被拒 ORA-12541，常見 port 1521～1526／1531／1541 都沒開，**等使用者提供測試 DB 的 host:port 或 service name**）；② 補 PRD／CHANGELOG（第 43 項結案、第 30 項列出本階段修掉的舊漏洞）並移除第 5 項、刪施工計畫檔
+- 下一步：S5 只剩匯入種子——`ap_user` 以 `d-itflow:1521:FLOW` 連線被拒 ORA-12541，常見 port 1521～1526／1531／1541 都沒開，**等使用者提供測試 DB 的 host:port 或 service name**；匯入工具是一次性 JDBC 小程式（密碼經標準輸入、匯入前只刪 `S5SEED-%`）。匯入並確認列表看得到 3 份後：移除第 5 項、刪施工計畫檔 `backlog/5-templates.md`（刪檔前問使用者）。PRD／CHANGELOG 已補（2026-10-07），第 43 項已移除。之後衝刺順序是 S8
 - S5 階段末已做（2026-10-07）：`./mvnw clean verify` exit 0，IT 35 個全過（含 `TemplateServiceIT`）；`code-reviewer` 零阻擋、非阻擋 5 項已登記第 109 項；**經 3201 手動驗證使用者裁示略過**，但已啟動 3201／3202 讓使用者自己看畫面（殼 jar 19:33 重打、含 R3 前端）
 - 已改動：S5 R3 已 commit：`POST /api/apps?templateId=` 寫完子表後同交易累計 `USE_CNT`／`LAST_USE_*`（範本不存在只記 log、不擋建單）；`AppFormView` 新增時上方選範本就地帶入（內容改過先 confirm、`?template=` 也能帶）、範本列表每列「建單」；種子 `db/oracle/sample/S5_sample_templates.sql` 已寫、**尚未匯入**；前端 spec 103 個全綠。S5 R1 後端 `/api/templates` CRUD 已 commit；`TemplateServiceIT` 已寫、未跑（階段末 `verify`）。S5 R2 前端已 commit：`/templates` 列表（前端每頁 20 列、`canEdit` 才有修改／刪除）、`/templates/new` 與 `/templates/:id/edit`（`TemplateEditView`）、首頁「範本管理」入口；申請單表單一～四區塊抽成 `components/DraftFields.vue`（`kind` 切申請單／範本，範本不顯示申請人聯絡資料與開始／結束時間），`AppFormView` 改用它、既有 spec 全綠；轉換函式在 `utils/templateForm.ts`，`keepActive`／`MAX_ROWS` 移到 `utils/draftForm.ts`；前端 spec 98 個全綠、型別檢查與 build 通過
 - 要記得的事：**S9 經 3201 的手動驗證使用者裁示略過**（2026-10-07「我不做手動驗證」），「退件 → 補件 → v2 簽核」、刪除面板、DELETE 帶本文經殼 jar 都還沒從畫面走過，基本功能完成後整體驗收時一併走（DELETE 不通才退回 `POST /delete`）。**S10 經 3201 的手動驗證同樣裁示略過**（2026-10-07），「待執行 → 暫存 → 送治理審查 → 通過／退回 → 補件」與執行頁 1024 寬時間欄（第 107 項 e）併入同一次整體驗收。第 102 項（前端改版成示意頁）使用者說「晚點改」，排程由使用者決定。**測試 DB 的 `IM_ROLE` 曾經是空的**（2026-10-07 S7 verify 時發現，V1 §8.1 預載 6 筆不在），由 Claude 以「不存在才插入」補回 6 筆、未動既有列；原因不明，使用者若知道是誰清的請告知。**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
@@ -55,7 +55,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 30 | ⑯ 既有漏洞：**2026-10-07 使用者裁示 A 一律修正**，逐項列 CHANGELOG 並公告（公告方式與時點未定，切換前一併整理）。清單見下方「舊系統已知漏洞」第 41～54 項，各項修完時在該列註明、全部處理完本項結案；第 43 項隨 S5 結案 | — | — |
+| 30 | ⑯ 既有漏洞：**2026-10-07 使用者裁示 A 一律修正**，逐項列 CHANGELOG 並公告（公告方式與時點未定，切換前一併整理）。清單見下方「舊系統已知漏洞」第 41～54 項，各項修完時在該列註明、全部處理完本項結案；第 43 項已於 S5 修正並移除（CHANGELOG 2026-10-07 S5 列） | — | — |
 | 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則）。**S4 的「抽 5 張新舊畫面一致」驗收（2026-10-06 裁示 ②A）併入本項，匯入完成後對列表頁與檢視頁執行**。匯入時設備位置「不適用」原因要把舊代碼轉中文（`not_idc`、`rack_not_ready`，對照舊 `view.ejs:127`；S4 code review G8），否則檢視頁顯示英文代碼。匯入後要把 `IM_APP_SEQ.LAST_NO` 回填到各日期的最大號（S6 編號計數器只增不減，不回填則當天新單撞舊單；S6 開工分析範圍外發現） | 3 | — |
 | 8 | S8 信件 outbox：`IM_MAIL_OUTBOX`、worker、樣板、admin 信件頁、測試信；定 `IM_SMTP_*` 細項；寄信時點含簽核（送審、進下一關、末關同意、退件、撤回）與 S10 的送治理審查通知、退回通知（執行端與治理）、結案通知（見 `PRD.md`「簽核引擎」末段）。完成條件：三種信寄到測試信箱；SMTP 中斷 failed 可重寄 | 8 | — |
 | 11 | S11 AI 概念驗證與審查（**開工前先裁示第 17 項 AI 去留與第 18 項金鑰存放**；選 B 則本階段改為「舊報告唯讀顯示」）：先驗證 SDK 在正式通道的 structured output／tool 退回／自訂 header（第 40 項）；再做非同步審查 + hash 把關。完成條件：同單審兩次第二次略過；refusal 有單元測試；**概念驗證失敗就停下回報** | 11 | — |
@@ -117,7 +117,6 @@
 |----|------|--------|------|
 | 41 | 編號撞號覆蓋既有單（apps.js:88-93，「當天檔案數 + 1」） | 2026-10-02 | — |
 | 42 | 多處不用登入；`/uploads` 公開 static（server.js:69）；`/api/rack-data` 回設備管理 IP 與序號 | 2026-10-02 | — |
-| 43 | 範本任何登入者可改刪別人的（routes/templates.js）。2026-10-07 裁示 A；S5 R1 後端已修（修改／刪除限建立者或 admin，其餘 403），S5 結案時移除 | 2026-10-02 | — |
 | 44 | POST `/:id/execute` 沒檢查角色（S10 已修：只限 idc_admin 或申請人，見 PRD「執行與治理審查」；待第 30 項裁示時一併結案） | 2026-10-02 | — |
 | 45 | 補件跳過 AI 閘門 | 2026-10-02 | — |
 | 46 | notifyOnly、allowDelegate 沒實作；流程存檔丟掉 allowDelegate | 2026-10-02 | — |
