@@ -10,6 +10,8 @@
 //           S7 R3（Claude Fable 5.1，2026-10-07）：加 submitApp／recallApp／decideApp（送審、撤回、簽核；
 //           body 都帶 rowVerNo，版本不符或狀態已變 409、非當事人 403、必填缺漏 400，訊息都由後端帶）
 //           S9 R3（Claude Opus 5.5，2026-10-07）：加 resubmitApp（退件單補件重送）／deleteApp（DELETE 帶 JSON 本文）
+//           S10 R3（Claude Opus 5.5，2026-10-07）：加 saveExecution（填寫執行紀錄）／rejectExecution（執行端退回）／
+//           reviewExecution（治理審查）
 // ============================================================
 import http from './http'
 import type {
@@ -22,9 +24,13 @@ import type {
   DecisionRequest,
   DeleteRequest,
   DeleteResponse,
+  ExecRejectRequest,
+  ExecutionRequest,
+  ExecutionSaved,
   FlowActionRequest,
   FlowActionResponse,
   FormOptionsResponse,
+  GovernanceReviewRequest,
   ResubmitRequest
 } from '../types/app'
 
@@ -110,6 +116,21 @@ export function resubmitApp(appId: string, body: ResubmitRequest): Promise<FlowA
 /* DELETE /apps/{id} 軟刪除（admin 任何狀態；申請人限尚無人簽過且未退件）→ 200 { appId }；單號不符或原因空白 400 */
 export function deleteApp(appId: string, body: DeleteRequest): Promise<DeleteResponse> {
   return http.delete<DeleteResponse>('/apps/' + encodeURIComponent(appId), { data: body }).then(r => r.data)
+}
+
+/* PUT /apps/{id}/execution 填寫執行紀錄（idc_admin 或申請人；待執行／執行中）→ 200 { appId, rowVerNo, statusCode } */
+export function saveExecution(appId: string, body: ExecutionRequest): Promise<ExecutionSaved> {
+  return http.put<ExecutionSaved>(flowPath(appId, 'execution'), body).then(r => r.data)
+}
+
+/* POST /apps/{id}/execution/reject 執行端退回給申請人（權限同執行；意見必填）→ 200 { appId, rowVerNo } */
+export function rejectExecution(appId: string, body: ExecRejectRequest): Promise<FlowActionResponse> {
+  return http.post<FlowActionResponse>(flowPath(appId, 'execution/reject'), body).then(r => r.data)
+}
+
+/* POST /apps/{id}/governance-review 治理審查（只限 governance；待治理審核）→ 200 { appId, rowVerNo, statusCode } */
+export function reviewExecution(appId: string, body: GovernanceReviewRequest): Promise<ExecutionSaved> {
+  return http.post<ExecutionSaved>(flowPath(appId, 'governance-review'), body).then(r => r.data)
 }
 
 /* POST /apps/{id}/attachments 一次一檔（part 名 file）→ 201 附件資訊；onProgress 收 0～100 */

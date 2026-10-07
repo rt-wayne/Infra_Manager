@@ -15,6 +15,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           治理退回 → REJECTED → 補件後 IM_APP_VER v1 為 GOV_RETURNED 且 v2 檢核表與執行結果空白、
 //           執行端退回 → REJECTED 不清 v1 執行資料 → 補件後 v1 為 EXEC_REJECTED（補件兩條要 full 流程有啟用關卡，否則略過）；
 //           清理加簽核實例三表與 IM_APP_VER
+//           2026-10-07 S10 R3：第一條加檢視 API 檢核項帶原始 userId／executorDesc 的斷言
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +46,7 @@ import com.mpx.infra_manager_java.dao.changerequest.AppVerDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
 import com.mpx.infra_manager_java.model.DualRow;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
+import com.mpx.infra_manager_java.model.changerequest.AppDetail;
 import com.mpx.infra_manager_java.model.changerequest.AppDraft;
 import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
 import com.mpx.infra_manager_java.model.changerequest.AppVerRow;
@@ -73,6 +75,9 @@ class AppExecutionIT {
 
 	@Autowired
 	private AppFlowService appFlowService;
+
+	@Autowired
+	private AppQueryService appQueryService;
 
 	@Autowired
 	private AppVerDao appVerDao;
@@ -182,6 +187,13 @@ class AppExecutionIT {
 		assertThat(exists("SELECT COUNT(*) AS OK FROM " + list + " WHERE APP_ID = :id AND SEQ_NO = 2 AND IS_DONE = 0"
 				+ " AND DONE_DATE IS NULL AND USER_ID IS NULL AND EXEC_USER_DESC = :d",
 				Map.of("id", appId, "d", "門市EDP、廠商"))).as("未完成帶時間存 null").isTrue();
+		List<AppDetail.CheckItem> shown = appQueryService.detail(appId, APPLICANT).checklist();
+		assertThat(shown.get(0).userId()).as("檢視 API 帶原始工號（R3 執行頁重存用）").isEqualTo(APPLICANT_ID);
+		assertThat(shown.get(0).executorDesc()).isNull();
+		assertThat(shown.get(0).doneAt()).isNotNull();
+		assertThat(shown.get(1).userId()).isNull();
+		assertThat(shown.get(1).executorDesc()).isEqualTo("門市EDP、廠商");
+		assertThat(shown.get(1).executor()).isEqualTo("門市EDP、廠商");
 		String exec = schema.table("IM_APP_EXEC");
 		assertThat(exists("SELECT COUNT(*) AS OK FROM " + exec + " WHERE APP_ID = :id AND APP_VER_NO = 1"
 				+ " AND RESULT_CODE IS NULL AND USER_ID IS NULL AND CLOSE_DATE IS NULL AND ACTUAL_START_DATE IS NOT NULL",

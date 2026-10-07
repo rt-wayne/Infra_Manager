@@ -15,6 +15,8 @@
 //           S9 R3（Claude Opus 5.5，2026-10-07）：AppDetail 補 approvalHistory（歷次簽核 AppPastApproval，目前那筆以外、
 //           含撤回與取消的實例）；新增補件本文 ResubmitRequest（巢狀 {rowVerNo, resubMemo, form}）、刪除本文 DeleteRequest
 //           （{rowVerNo, confirmId, reason}）與回應 DeleteResponse；簽核實例狀態中文 APPR_STATUS_LABELS
+//           S10 R3（Claude Opus 5.5，2026-10-07）：AppCheckItem 補原始 userId／executorDesc；新增執行本文 ExecutionRequest
+//           （含 ExecutionCheckItem）、回應 ExecutionSaved、執行端退回本文 ExecRejectRequest、治理審查本文 GovernanceReviewRequest
 // ============================================================
 
 export type AppStatus =
@@ -218,7 +220,11 @@ export interface AppCheckItem {
   name: string | null
   done: boolean
   doneAt: string | null
+  /** 顯示用：系統使用者姓名或手填描述 */
   executor: string | null
+  /** 原始兩欄（至多一個有值），執行頁重存時原樣帶回 */
+  userId: string | null
+  executorDesc: string | null
 }
 
 export interface AppExecution {
@@ -470,6 +476,55 @@ export interface DeleteRequest {
 
 export interface DeleteResponse {
   appId: string
+}
+
+/** 執行頁送出的一個檢核項；userId（系統使用者工號）與 executorDesc（自由文字）至多擇一 */
+export interface ExecutionCheckItem {
+  seqNo: number
+  done: boolean
+  /** yyyy-MM-ddTHH:mm；勾完成時要帶回已存的時間，否則後端補成伺服器現在時間 */
+  doneAt: string | null
+  userId: string | null
+  executorDesc: string | null
+}
+
+/**
+ * PUT /apps/{id}/execution 本文；resultCode 有值＝完成並送治理審查，null＝暫存（停在執行中）。
+ * 時間為 yyyy-MM-ddTHH:mm；沒勾異常／後續追蹤時說明由後端存 null
+ */
+export interface ExecutionRequest {
+  rowVerNo: number
+  checklist: ExecutionCheckItem[]
+  actualStart: string | null
+  actualEnd: string | null
+  resultCode: string | null
+  exception: boolean
+  exceptionDesc: string | null
+  followUp: boolean
+  followUpDesc: string | null
+  memo: string | null
+}
+
+/** 執行儲存與治理審查的回應；statusCode 是儲存後的狀態（IN_EXECUTION／PENDING_REVIEW／EXECUTED／REJECTED） */
+export interface ExecutionSaved {
+  appId: string
+  rowVerNo: number
+  statusCode: string
+}
+
+/** POST /apps/{id}/execution/reject 本文：意見必填（上限 2000 字） */
+export interface ExecRejectRequest {
+  rowVerNo: number
+  memo: string
+}
+
+export type ReviewDecision = 'PASS' | 'RETURN'
+
+/** POST /apps/{id}/governance-review 本文：退回意見必填、通過可空 */
+export interface GovernanceReviewRequest {
+  rowVerNo: number
+  decision: ReviewDecision
+  memo: string
 }
 
 /** 400 欄位過長時多帶 field（例 equipments[0].name）、max、actual */

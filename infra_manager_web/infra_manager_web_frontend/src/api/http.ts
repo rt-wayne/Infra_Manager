@@ -11,6 +11,7 @@
 //           - errorMessage(e)：取後端 { message }，沒有就給通用文字；供各頁 toast 用（失敗不得顯示成查無資料）
 //           S4 回合二（Claude Opus 5.5，2026-10-06，BACKLOG 第 92 項 ⑥）：/auth/login 的 401 是帳密錯誤、不是登入過期，
 //           不交給處理器（原本會多打一次 /me，可能把剛登入成功的狀態蓋回未登入）；新增 isUnauthorized 讓頁面略過自己的 toast
+//           S10 R3（2026-10-07）：isStale 從檢視頁搬來共用（檢視頁與執行頁的流程動作失敗後判斷要不要重新載入）
 // ============================================================
 import axios, { AxiosError } from 'axios'
 import type { ApiErrorBody } from '../types/auth'
@@ -51,6 +52,12 @@ const LOGIN_URL = '/auth/login'
 
 export function isUnauthorized(e: unknown): boolean {
   return e instanceof AxiosError && e.response?.status === 401
+}
+
+/** 409（版本過期、狀態已變、關卡被搶簽）、403（權限已變）、404（已被刪除）：畫面上的資料已過期，要重新載入 */
+export function isStale(e: unknown): boolean {
+  const s = e instanceof AxiosError ? e.response?.status : undefined
+  return s === 409 || s === 403 || s === 404
 }
 
 http.interceptors.response.use(

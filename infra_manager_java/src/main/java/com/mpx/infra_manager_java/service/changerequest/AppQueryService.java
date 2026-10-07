@@ -11,6 +11,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //                 附件只給中繼資料，下載走 AttachmentService
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：detail 帶 rowVerNo 與選項的 formOptionId
 //           S9 R2（Claude Opus 5.5，2026-10-07）：detail 帶 approvalHistory（目前實例以外的歷次簽核，含撤回那一輪）
+//           2026-10-07 S10 R3：檢核項另帶原始 userId／executorDesc（執行頁重存時原樣帶回，executor 仍是顯示用）
 // ============================================================
 
 import java.time.LocalDate;
@@ -176,7 +177,8 @@ public class AppQueryService {
 				appDao.findCheckList(appId, verNo).stream()
 						.map(c -> new AppDetail.CheckItem(c.getSeqNo(), c.getOptionCode(), c.getOptionName(),
 								flag(c.getIsDone()), TaiwanTime.formatDateTime(c.getDoneDate()),
-								c.getUserName() != null ? c.getUserName() : c.getExecUserDesc()))
+								c.getUserName() != null ? c.getUserName() : c.getExecUserDesc(), c.getUserId(),
+								c.getExecUserDesc()))
 						.toList(),
 				exec == null ? null
 						: new AppDetail.Execution(exec.getAppVerNo(), TaiwanTime.formatDateTime(exec.getActualStartDate()),

@@ -12,27 +12,31 @@
 //           S6 回合四（2026-10-07）：「編輯草稿」鈕導到 /apps/:id/edit
 //           S9 R3（Claude Opus 5.5，2026-10-07）：「尚未開放」改用還沒做的執行紀錄鈕（簽核、撤回 S7 已開放）；
 //           補件鈕導到 /apps/:id/resubmit；刪除面板（單號一致＋原因才能按、成功回列表、409 重載並收起面板）；歷次簽核掛在版次下
+//           S10 R3（Claude Opus 5.5，2026-10-07）：「尚未開放」改用 AI 風險審查鈕（執行紀錄已開放）；檢核項測試資料補 userId／executorDesc；
+//           執行鈕導到 /apps/:id/execute；治理審核面板（通過帶空意見、退回空白擋下、confirm 取消不送、409 重載並收起面板）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppViewView from '../src/views/AppViewView.vue'
-import { checkAttachment, deleteApp, getApp } from '../src/api/apps'
+import { checkAttachment, deleteApp, getApp, reviewExecution } from '../src/api/apps'
 import { useToast } from '../src/composables/useToast'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
+import { APP_EDIT_ROUTE, APP_EXECUTE_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 import type { AppDetail, AppPermissions } from '../src/types/app'
 
 vi.mock('../src/api/apps', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/api/apps')>()),
   getApp: vi.fn(),
   checkAttachment: vi.fn(),
-  deleteApp: vi.fn()
+  deleteApp: vi.fn(),
+  reviewExecution: vi.fn()
 }))
 
 const getMock = vi.mocked(getApp)
 const checkMock = vi.mocked(checkAttachment)
 const deleteMock = vi.mocked(deleteApp)
+const reviewMock = vi.mocked(reviewExecution)
 const Blank = { template: '<div />' }
 
 function makeRouter(): Router {
@@ -42,7 +46,8 @@ function makeRouter(): Router {
       { path: '/apps', name: APP_LIST_ROUTE, component: Blank },
       { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView },
       { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: Blank },
-      { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: Blank }
+      { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: Blank },
+      { path: '/apps/:id/execute', name: APP_EXECUTE_ROUTE, component: Blank }
     ]
   })
 }
@@ -92,7 +97,7 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
     schedule: { start: '2026-10-07 22:00', end: '2026-10-08 02:00', estHours: 4 },
     location: { sourceCode: 'MANUAL', areaName: 'A 區', rackName: 'R01', uRange: null, siteId: null, rackId: null, uStart: 10, uEnd: 12, omitReason: null },
     resubmitMemo: null,
-    checklist: [{ seqNo: 1, code: 'C1', name: '確認備份', done: true, doneAt: '2026-10-07 22:10', executor: '王小明' }],
+    checklist: [{ seqNo: 1, code: 'C1', name: '確認備份', done: true, doneAt: '2026-10-07 22:10', executor: '王小明', userId: '00001', executorDesc: null }],
     execution: null,
     approval: {
       apprId: 5,
@@ -229,14 +234,73 @@ describe('AppViewView', () => {
   })
 
   it('動作鈕依 permissions 顯示，還沒做的出「此功能尚未開放」', async () => {
-    getMock.mockResolvedValue(detail({ permissions: { ...NO_PERMS, canDecide: true, canRecall: true, canExecute: true } }))
+    getMock.mockResolvedValue(detail({ permissions: { ...NO_PERMS, canDecide: true, canRecall: true, canAiReview: true } }))
     const { wrapper } = await mountView()
 
     const buttons = wrapper.findAll('.actions button')
-    expect(buttons.map(b => b.text())).toEqual(['簽核', '撤回到草稿', '填寫執行紀錄'])
+    expect(buttons.map(b => b.text())).toEqual(['AI 風險審查', '簽核', '撤回到草稿'])
     const before = toastMsgs().filter(m => m === '此功能尚未開放').length
-    await buttons[2].trigger('click')
+    await buttons[0].trigger('click')
     expect(toastMsgs().filter(m => m === '此功能尚未開放').length).toBe(before + 1)
+    wrapper.unmount()
+  })
+
+  it('填寫執行紀錄鈕導到執行頁', async () => {
+    getMock.mockResolvedValue(detail({ statusCode: 'APPROVED', permissions: { ...NO_PERMS, canExecute: true } }))
+    const { wrapper, router } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '填寫執行紀錄')?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/apps/IM20261006-001/execute')
+    wrapper.unmount()
+  })
+
+  it('治理審核：通過可不填意見，帶 rowVerNo 呼叫 API、toast 並重新載入', async () => {
+    getMock.mockResolvedValue(detail({ statusCode: 'PENDING_REVIEW', rowVerNo: 8, permissions: { ...NO_PERMS, canReview: true } }))
+    reviewMock.mockResolvedValue({ appId: 'IM20261006-001', rowVerNo: 9, statusCode: 'EXECUTED' })
+    const { wrapper } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '治理審核')?.trigger('click')
+    expect(wrapper.find('#review-memo').exists()).toBe(true)
+    getMock.mockResolvedValue(detail({ statusCode: 'EXECUTED', rowVerNo: 9 }))
+    await wrapper.findAll('button').find(b => b.text().includes('通過'))?.trigger('click')
+    await flushPromises()
+
+    expect(reviewMock).toHaveBeenCalledWith('IM20261006-001', { rowVerNo: 8, decision: 'PASS', memo: '' })
+    expect(toastMsgs()).toContain('已通過，申請單結案')
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('#review-memo').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('治理審核退回：意見空白擋下；confirm 取消不送；確認後 409 toast、重載並收起面板', async () => {
+    getMock.mockResolvedValue(detail({ statusCode: 'PENDING_REVIEW', rowVerNo: 3, permissions: { ...NO_PERMS, canReview: true } }))
+    reviewMock.mockReset()
+    reviewMock.mockRejectedValue(httpError(409, '申請單不是待治理審核狀態，無法審核，請重新載入頁面'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const { wrapper } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '治理審核')?.trigger('click')
+    const returnBtn = () => wrapper.findAll('button').find(b => b.text().includes('退回'))
+    await returnBtn()?.trigger('click')
+    expect(toastMsgs()).toContain('退回請填寫意見，讓申請人知道要補什麼')
+    expect(confirm).not.toHaveBeenCalled()
+
+    await wrapper.find('#review-memo').setValue('  檢核表第 3 項未完成  ')
+    await returnBtn()?.trigger('click')
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(reviewMock).not.toHaveBeenCalled()
+
+    confirm.mockReturnValue(true)
+    getMock.mockResolvedValue(detail({ statusCode: 'EXECUTED', rowVerNo: 4 }))
+    await returnBtn()?.trigger('click')
+    await flushPromises()
+
+    expect(reviewMock).toHaveBeenCalledWith('IM20261006-001', { rowVerNo: 3, decision: 'RETURN', memo: '檢核表第 3 項未完成' })
+    expect(toastMsgs()).toContain('申請單不是待治理審核狀態，無法審核，請重新載入頁面')
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('#review-memo').exists()).toBe(false)
+    confirm.mockRestore()
     wrapper.unmount()
   })
 

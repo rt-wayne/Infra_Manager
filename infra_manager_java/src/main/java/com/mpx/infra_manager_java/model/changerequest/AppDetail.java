@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.model.changerequest;
 //           日期時間一律 yyyy-MM-dd HH:mm 字串、日期 yyyy-MM-dd；附件不帶檔案路徑，下載走專用端點
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：加 rowVerNo（樂觀鎖，編輯草稿時帶回）與 Option.formOptionId
 //           S9 R2（Claude Opus 5.5，2026-10-07）：approval 後面加 approvalHistory（目前實例以外的歷次簽核，依實例建立先後）
+//           2026-10-07 S10 R3（Claude Opus 5.5）：CheckItem 加 userId、executorDesc（原始兩欄，執行頁重存用）
 // ============================================================
 
 import java.math.BigDecimal;
@@ -50,8 +51,12 @@ public record AppDetail(String appId, String title, String prioCode, String prio
 			String rackId, Integer uStart, Integer uEnd, String omitReason) {
 	}
 
-	/** executor：執行人姓名（系統帳號）或手填的執行人描述，二擇一 */
-	public record CheckItem(Integer seqNo, String code, String name, boolean done, String doneAt, String executor) {
+	/**
+	 * executor：執行人姓名（系統帳號）或手填的執行人描述，二擇一（顯示用）；
+	 * userId／executorDesc 是原始兩欄，執行頁重存時原樣帶回（S10 R3）
+	 */
+	public record CheckItem(Integer seqNo, String code, String name, boolean done, String doneAt, String executor,
+			String userId, String executorDesc) {
 	}
 
 	public record Execution(Integer verNo, String actualStart, String actualEnd, String resultCode, String resultName,

@@ -13,13 +13,22 @@
 //           S4 回合三（Claude Opus 5.5，2026-10-06）：加 /apps/:id 檢視頁；列表與檢視改具名路由（名稱在 router/names.ts）
 //           S6 回合四（Claude Opus 5.5，2026-10-07）：加 /apps/new 新增草稿、/apps/:id/edit 編輯草稿（同一個 AppFormView）
 //           S9 R3（Claude Opus 5.5，2026-10-07）：加 /apps/:id/resubmit 補件重送（仍是 AppFormView，依路由名稱切模式）
+//           S10 R3（Claude Opus 5.5，2026-10-07）：加 /apps/:id/execute 填寫執行紀錄（ExecuteView）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import AppListView from '../views/AppListView.vue'
 import AppViewView from '../views/AppViewView.vue'
 import AppFormView from '../views/AppFormView.vue'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_NEW_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from './names'
+import ExecuteView from '../views/ExecuteView.vue'
+import {
+  APP_EDIT_ROUTE,
+  APP_EXECUTE_ROUTE,
+  APP_LIST_ROUTE,
+  APP_NEW_ROUTE,
+  APP_RESUBMIT_ROUTE,
+  APP_VIEW_ROUTE
+} from './names'
 import LoginView from '../views/LoginView.vue'
 import ChangePasswordView from '../views/ChangePasswordView.vue'
 import { CHANGE_PASSWORD_PATH, LOGIN_PATH, useAuth } from '../composables/useAuth'
@@ -41,7 +50,8 @@ const router = createRouter({
     { path: '/apps/new', name: APP_NEW_ROUTE, component: AppFormView },
     { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView },
     { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: AppFormView },
-    { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: AppFormView }
+    { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: AppFormView },
+    { path: '/apps/:id/execute', name: APP_EXECUTE_ROUTE, component: ExecuteView }
   ]
 })
 

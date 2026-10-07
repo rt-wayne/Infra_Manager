@@ -19,6 +19,8 @@
             S9 R3（Claude Opus 5.5，2026-10-07）：「補件重送」導到 /apps/:id/resubmit；「刪除申請單」展開面板（輸入單號＋原因，
             單號一致且原因不空白才能按），成功導回列表並 toast；歷史版次區每一版底下列出該版的歷次簽核（approvalHistory，
             含撤回、取消那幾輪）；流程動作失敗時 409／403／404 都重新載入（第 104 項 N2），重載後面板對應的權限沒了就收起（N1）
+            S10 R3（Claude Opus 5.5，2026-10-07）：「填寫執行紀錄」導到 /apps/:id/execute；「治理審核」展開面板（意見欄＋通過／退回，
+            退回前端先擋空白再 confirm，同簽核面板）；isStale 改用 api/http 共用的那一支
 -->
 <template>
   <main>
@@ -55,6 +57,19 @@
         <div class="actions">
           <button class="go" type="button" :disabled="busy" @click="decide('APPROVE')">✓ 同意</button>
           <button class="danger" type="button" :disabled="busy" @click="decide('REJECT')">✗ 退件</button>
+          <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
+        </div>
+      </section>
+
+      <section v-else-if="panel === 'review'" class="card flow" aria-label="治理審核">
+        <h2>治理審核：執行結果</h2>
+        <p class="sub">確認檢核表與實際執行紀錄無誤後通過即結案；退回必須填寫原因，申請人需補件重送、整張單重新簽核與執行</p>
+        <label for="review-memo">審核意見</label>
+        <textarea id="review-memo" v-model="reviewMemo" rows="3" maxlength="2000" :disabled="busy"
+          placeholder="通過可留空；退回請說明哪裡不符、要補什麼"></textarea>
+        <div class="actions">
+          <button class="go" type="button" :disabled="busy" @click="review('PASS')">✓ 通過（結案）</button>
+          <button class="danger" type="button" :disabled="busy" @click="review('RETURN')">✗ 退回</button>
           <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
         </div>
       </section>
@@ -379,10 +394,10 @@ import { useRoute, useRouter } from 'vue-router'
 import StatusPill from '../components/StatusPill.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { AxiosError } from 'axios'
-import { attachmentUrl, checkAttachment, decideApp, deleteApp, getApp, recallApp, submitApp } from '../api/apps'
-import { errorMessage, isUnauthorized } from '../api/http'
+import { attachmentUrl, checkAttachment, decideApp, deleteApp, getApp, recallApp, reviewExecution, submitApp } from '../api/apps'
+import { errorMessage, isStale, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE } from '../router/names'
+import { APP_EDIT_ROUTE, APP_EXECUTE_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE } from '../router/names'
 import {
   APPR_STATUS_LABELS,
   ATTACH_OWNER_LABELS,
@@ -399,7 +414,8 @@ import {
   type AppPermissions,
   type AppVersion,
   type Decision,
-  type FlowActionResponse
+  type FlowActionResponse,
+  type ReviewDecision
 } from '../types/app'
 import { kb, prioStyle } from '../utils/format'
 
@@ -432,11 +448,12 @@ const ACTIONS: { key: PermKey; label: string }[] = [
 
 const actions = computed(() => (app.value ? ACTIONS.filter(a => app.value?.permissions[a.key] === true) : []))
 
-type Panel = 'decide' | 'recall' | 'delete' | null
+type Panel = 'decide' | 'review' | 'recall' | 'delete' | null
 
-/** 展開中的操作面板（簽核意見／撤回原因／刪除確認）；送審不需要面板，confirm 後直接送 */
+/** 展開中的操作面板（簽核意見／治理審核意見／撤回原因／刪除確認）；送審不需要面板，confirm 後直接送 */
 const panel = ref<Panel>(null)
 const memo = ref('')
+const reviewMemo = ref('')
 const reason = ref('')
 const confirmId = ref('')
 const delReason = ref('')
@@ -444,7 +461,12 @@ const delReason = ref('')
 const busy = ref(false)
 
 /** 面板與開啟它所需的權限；重新載入後權限沒了就收起面板 */
-const PANEL_PERMS: Record<Exclude<Panel, null>, PermKey> = { decide: 'canDecide', recall: 'canRecall', delete: 'canDelete' }
+const PANEL_PERMS: Record<Exclude<Panel, null>, PermKey> = {
+  decide: 'canDecide',
+  review: 'canReview',
+  recall: 'canRecall',
+  delete: 'canDelete'
+}
 
 function panelOf(key: PermKey): Panel {
   for (const [p, k] of Object.entries(PANEL_PERMS)) {
@@ -472,6 +494,10 @@ function act(key: PermKey): void {
     void router.push({ name: APP_RESUBMIT_ROUTE, params: { id: appId.value } })
     return
   }
+  if (key === 'canExecute') {
+    void router.push({ name: APP_EXECUTE_ROUTE, params: { id: appId.value } })
+    return
+  }
   if (key === 'canSubmit') {
     void submit()
     return
@@ -484,19 +510,9 @@ function act(key: PermKey): void {
   toast('此功能尚未開放', 'amber')
 }
 
-function statusOf(e: unknown): number | undefined {
-  return e instanceof AxiosError ? e.response?.status : undefined
-}
-
-/** 409（版本過期、狀態已變、關卡被搶簽）、403（權限已變）、404（已被刪除）：畫面上的資料已過期，要重新載入 */
-function isStale(e: unknown): boolean {
-  const s = statusOf(e)
-  return s === 409 || s === 403 || s === 404
-}
-
 /**
- * 三個流程動作共用：帶目前的 rowVerNo 呼叫 API，成功就收面板、toast、重新載入；
- * 失敗 toast 後端訊息；資料已過期（isStale）另外重新載入，讓使用者直接看到最新狀態
+ * 流程動作共用：帶目前的 rowVerNo 呼叫 API，成功就收面板、toast、重新載入；
+ * 失敗 toast 後端訊息；資料已過期（isStale：409／403／404）另外重新載入，讓使用者直接看到最新狀態
  */
 async function runFlow(okMsg: string, call: (rowVerNo: number) => Promise<FlowActionResponse>): Promise<void> {
   const a = app.value
@@ -506,6 +522,7 @@ async function runFlow(okMsg: string, call: (rowVerNo: number) => Promise<FlowAc
     await call(a.rowVerNo)
     panel.value = null
     memo.value = ''
+    reviewMemo.value = ''
     reason.value = ''
     toast(okMsg, 'teal')
     await load(appId.value, true)
@@ -557,6 +574,19 @@ async function decide(d: Decision): Promise<void> {
     if (!window.confirm('確定要退件給申請人？退件後申請單結束這一輪簽核，申請人需補件重送。')) return
   }
   await runFlow(d === 'APPROVE' ? '已同意' : '已退件', v => decideApp(appId.value, { rowVerNo: v, decision: d, memo: m }))
+}
+
+async function review(d: ReviewDecision): Promise<void> {
+  const m = reviewMemo.value.trim()
+  if (d === 'RETURN') {
+    if (!m) {
+      toast('退回請填寫意見，讓申請人知道要補什麼', 'red')
+      return
+    }
+    if (!window.confirm('確定退回給申請人？退回後申請人需補件重送，整張單重新簽核與執行。')) return
+  }
+  await runFlow(d === 'PASS' ? '已通過，申請單結案' : '已退回給申請人',
+    v => reviewExecution(appId.value, { rowVerNo: v, decision: d, memo: m }))
 }
 
 const downloading = ref<number | null>(null)
@@ -688,6 +718,7 @@ async function load(id: string, keep = false): Promise<void> {
     app.value = null
     panel.value = null
     memo.value = ''
+    reviewMemo.value = ''
     reason.value = ''
     confirmId.value = ''
     delReason.value = ''
