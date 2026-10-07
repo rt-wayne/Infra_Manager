@@ -20,6 +20,7 @@ package com.mpx.infra_manager_java.web;
 //           2026-10-06 S4：加 ApiNotFoundException → 404、ApiBadRequestException → 400，帶例外自己的訊息
 //           （業務層的「找不到申請單」「篩選值不正確」要讓前端 toast 出來，不能被 ErrorResponse 那條改成「請求無法處理」）
 //           2026-10-07 S6 回合二 b-2：加 ApiConflictException → 409，帶例外自己的訊息（樂觀鎖、非草稿）
+//           2026-10-07 S6 回合三（Claude Opus 5.5）：加 MultipartException → 400「請求格式錯誤」（原本落到最後防線變 500）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -40,6 +41,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -66,6 +68,12 @@ public class ApiExceptionHandler {
 	@ExceptionHandler({ BodyTooLargeException.class, MaxUploadSizeExceededException.class })
 	public ResponseEntity<Map<String, Object>> tooLarge(Exception e) {
 		return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(message("請求內容過大"));
+	}
+
+	/** multipart 本文壞掉（邊界不對、客戶端傳到一半斷線）；超過上限的 MaxUploadSizeExceededException 由上面那條處理 */
+	@ExceptionHandler(MultipartException.class)
+	public ResponseEntity<Map<String, Object>> badMultipart(MultipartException e) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message("請求格式錯誤"));
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)

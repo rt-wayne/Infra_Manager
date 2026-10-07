@@ -8,6 +8,8 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           超長回 400 {message, field, max, actual}；本文不是 JSON 回 400
 //           2026-10-07 回合二 b-2：加 PUT /api/apps/{id}——200 {appId, rowVerNo(新)}、缺 CSRF 403、
 //           服務丟出的 403／404／409／400 原樣對應狀態碼與訊息
+//           2026-10-07 回合三：加 POST /api/apps/{id}/attachments——201 回附件資訊、CSRF 放表單參數不算（只認 header，B5）、
+//           不是 multipart 415、缺 file part 400、服務例外對應 409／400
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -33,21 +36,25 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.mpx.infra_manager_java.config.SecurityConfig;
 import com.mpx.infra_manager_java.controller.auth.AuthController;
 import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.auth.UserRow;
+import com.mpx.infra_manager_java.model.changerequest.AppDetail;
 import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
 import com.mpx.infra_manager_java.service.auth.AuthService;
 import com.mpx.infra_manager_java.service.changerequest.AppDraftService;
+import com.mpx.infra_manager_java.service.changerequest.AttachmentUploadService;
 import com.mpx.infra_manager_java.util.TextTooLongException;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
@@ -72,6 +79,9 @@ class AppDraftControllerTest {
 
 	@MockitoBean
 	private AppDraftService appDraftService;
+
+	@MockitoBean
+	private AttachmentUploadService attachmentUploadService;
 
 	private record Session(MockHttpSession session, Cookie xsrf) {
 	}
@@ -195,5 +205,62 @@ class AppDraftControllerTest {
 				.content("{not json")).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("請求格式錯誤"));
 		verifyNoInteractions(appDraftService);
+	}
+
+	private static final String UPLOAD_URL = "/api/apps/IM20261007-001/attachments";
+
+	private static MockMultipartFile part() {
+		return new MockMultipartFile("file", "報價單.pdf", "application/pdf", new byte[] { 1, 2, 3 });
+	}
+
+	@Test
+	void 上傳成功回201帶附件資訊() throws Exception {
+		Session s = login();
+		when(attachmentUploadService.upload(eq("IM20261007-001"), any(), any())).thenReturn(new AppDetail.Attachment(
+				101L, "APP", "IM20261007-001", "報價單.pdf", 3L, "application/pdf", "2026-10-07 10:20"));
+		mockMvc.perform(multipart(UPLOAD_URL).file(part()).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue())).andExpect(status().isCreated())
+				.andExpect(content().json("{\"attachId\":101,\"ownerType\":\"APP\",\"fileName\":\"報價單.pdf\","
+						+ "\"byteQty\":3,\"mimeType\":\"application/pdf\",\"uploadedAt\":\"2026-10-07 10:20\"}"));
+		ArgumentCaptor<MultipartFile> file = ArgumentCaptor.forClass(MultipartFile.class);
+		ArgumentCaptor<AuthUser> user = ArgumentCaptor.forClass(AuthUser.class);
+		verify(attachmentUploadService).upload(eq("IM20261007-001"), file.capture(), user.capture());
+		assertThat(file.getValue().getOriginalFilename()).isEqualTo("報價單.pdf");
+		assertThat(user.getValue().userId()).isEqualTo("E0001");
+	}
+
+	@Test
+	void 上傳_CSRF只認header_放在表單參數也回403() throws Exception {
+		Session s = login();
+		mockMvc.perform(multipart(UPLOAD_URL).file(part()).session(s.session()).cookie(s.xsrf())
+				.param("_csrf", s.xsrf().getValue())).andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_CSRF));
+		verifyNoInteractions(attachmentUploadService);
+	}
+
+	@Test
+	void 上傳_不是multipart回415_缺part回400() throws Exception {
+		Session s = login();
+		mockMvc.perform(post(UPLOAD_URL).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
+				.content("{}")).andExpect(status().isUnsupportedMediaType());
+		mockMvc.perform(multipart(UPLOAD_URL).file(new MockMultipartFile("other", "a.pdf", null, new byte[] { 1 }))
+				.session(s.session()).cookie(s.xsrf()).header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()))
+				.andExpect(status().isBadRequest());
+		verifyNoInteractions(attachmentUploadService);
+	}
+
+	@Test
+	void 上傳_服務例外對應狀態碼() throws Exception {
+		Session s = login();
+		when(attachmentUploadService.upload(any(), any(), any()))
+				.thenThrow(new ApiConflictException(AttachmentUploadService.MSG_NOT_DRAFT))
+				.thenThrow(new ApiBadRequestException(AttachmentUploadService.MSG_TYPE_NOT_ALLOWED));
+		mockMvc.perform(multipart(UPLOAD_URL).file(part()).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue())).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AttachmentUploadService.MSG_NOT_DRAFT));
+		mockMvc.perform(multipart(UPLOAD_URL).file(part()).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue())).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(AttachmentUploadService.MSG_TYPE_NOT_ALLOWED));
 	}
 }

@@ -19,6 +19,8 @@ package com.mpx.infra_manager_java.config;
 //           403（CSRF 不符、預設密碼未改、權限不足）記 log：路徑、工號、類別、來源 IP（security.md A09）。
 //           2026-10-06 S2 回合二：SecurityFilterChain、session cookie、SameSite 三個 bean 加 @ConditionalOnWebApplication(SERVLET)，
 //           匯入器以 web-application-type=none 啟動時沒有 HttpSecurity 也能起；PasswordEncoder 等純物件 bean 不設條件（匯入器要用）
+//           2026-10-07 S6 回合三 B5（Claude Opus 5.5）：CSRF token 改只從 header 讀（HeaderOnlyCsrfTokenRequestHandler），
+//           不再退回表單參數，避免沒帶 header 的 multipart 在被擋下前就讓 Tomcat 解析本文、寫暫存檔
 // ============================================================
 
 import org.slf4j.Logger;
@@ -46,12 +48,12 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.service.auth.AuthService;
 import com.mpx.infra_manager_java.web.ClientIp;
 import com.mpx.infra_manager_java.web.CsrfCookieFilter;
+import com.mpx.infra_manager_java.web.HeaderOnlyCsrfTokenRequestHandler;
 import com.mpx.infra_manager_java.web.JsonResponses;
 
 import jakarta.servlet.DispatcherType;
@@ -115,7 +117,7 @@ public class SecurityConfig {
 			CsrfTokenRepository csrfRepository) throws Exception {
 		http.securityContext(sc -> sc.securityContextRepository(contextRepository))
 				.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
-						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+						.csrfTokenRequestHandler(new HeaderOnlyCsrfTokenRequestHandler()))
 				.addFilterAfter(new CsrfCookieFilter(), CsrfFilter.class)
 				.authorizeHttpRequests(auth -> auth
 						.dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.ASYNC).permitAll()
