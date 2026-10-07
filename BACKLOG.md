@@ -20,7 +20,7 @@
 | 6 | S6 新增、編輯草稿：AppForm（不含機櫃選擇器）、附件上傳、編號計數器、殼 jar 串流透傳與本文上限。2026-10-06 開工裁示「全部依建議」（①A 串流透傳、②B 逐檔上傳、③A 殼 jar 擋 1 MB／51 MB、④B 前端不預檢字數、⑤A 只有申請人能編輯、⑥A 樂觀鎖、⑦A 位置只做「不適用」、⑧A 副檔名白名單、⑨A 先做回合二）；回合順序 二 a → 二 b → 一（S4 驗收後）→ 三 → 四。完成條件：建草稿成功；同日刪單再建不撞號（有測試）；經 3201 上傳下載 50 MB 檔 sha256 一致 | [backlog/6-s6-draft-form.md](backlog/6-s6-draft-form.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S6（第 6 項）回合二 b：建草稿／編輯草稿。施工計畫與交接在 [backlog/6-s6-draft-form.md](backlog/6-s6-draft-form.md)；S4 已結案，二 b 之後做回合一（殼 jar 串流透傳）
+- 下一步：S6（第 6 項）回合一：殼 jar 串流透傳＋本文上限（二 a、二 b 已完成）。施工計畫與交接在 [backlog/6-s6-draft-form.md](backlog/6-s6-draft-form.md)
 - 已改動（S6 回合二 a，commit `ec19ce5`）：見施工計畫檔
 - 要記得的事：**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
 - 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認

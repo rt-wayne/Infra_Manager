@@ -6,12 +6,16 @@ package com.mpx.infra_manager_java.service.changerequest;
 // 變更說明: 新增：建立申請單草稿（S6 回合二 b-1）。順序：讀選項與流程政策 → 檢查（交易外的慢動作都在取號前做完）→
 //           同一交易內取號、寫主檔與子表。申請人鎖定登入者、APPLY_DATE 為台灣今天（施工計畫待確認第 6 題）。
 //           流程：full_only → full；by_priority → 該優先等級 PRIO 選項的 FLOW_ID，沒設定則退回 full。
-//           建草稿不寫 IM_APP_EVENT（事件碼沒有「建立」，與舊系統一致）
+//           建草稿不寫 IM_APP_EVENT（事件碼沒有「建立」，與舊系統一致）。
+//           2026-10-07 回合二 b-2：加 update（編輯草稿）。條件式 UPDATE 一句同時檢查版本、DRAFT、申請人，
+//           0 列時再查一次決定回 404／403／409；成功後子表整批刪除重建，與主檔同一交易。流程依新的優先等級重算
 // ============================================================
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.regex.Pattern;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,14 +24,23 @@ import com.mpx.infra_manager_java.dao.changerequest.FormOptionDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.AppDraft;
 import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
+import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
 import com.mpx.infra_manager_java.util.TaiwanTime;
+import com.mpx.infra_manager_java.web.ApiBadRequestException;
+import com.mpx.infra_manager_java.web.ApiConflictException;
+import com.mpx.infra_manager_java.web.ApiNotFoundException;
 
 @Service
 public class AppDraftService {
 
 	public static final String FLOW_FULL = "full";
+	public static final String MSG_NO_VERSION = "缺少版本號，請重新載入頁面";
+	public static final String MSG_NOT_DRAFT = "申請單已不是草稿，無法編輯，請重新載入頁面";
+	public static final String MSG_STALE = "申請單已在其他地方修改過，請重新載入頁面後再編輯";
+
+	private static final Pattern APP_ID = Pattern.compile("^[A-Z0-9-]{1,20}$");
 
 	private final FormOptionDao formOptionDao;
 	private final SysParamService sysParamService;
@@ -55,6 +68,38 @@ public class AppDraftService {
 		appWriteDao.insertApp(appId, flowId, user.userId(), TaiwanTime.startOf(today), draft);
 		appWriteDao.insertChildren(appId, user.userId(), draft);
 		return appId;
+	}
+
+	/** 編輯草稿，回新的 rowVerNo */
+	@Transactional
+	public long update(String appId, AppDraftRequest request, AuthUser user) {
+		if (appId == null || !APP_ID.matcher(appId).matches()) {
+			throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+		}
+		if (request != null && request.rowVerNo() == null) {
+			throw new ApiBadRequestException(MSG_NO_VERSION);
+		}
+		List<FormOptionRow> options = formOptionDao.findActive();
+		AppDraft draft = AppDraftValidator.validate(request, options);
+		String flowId = flowFor(draft.prioCode(), sysParamService.flowPolicy(), options);
+		long rowVerNo = request.rowVerNo();
+
+		if (appWriteDao.updateApp(appId, rowVerNo, flowId, user.userId(), draft) == 0) {
+			AppLockRow state = appWriteDao.findLockState(appId);
+			if (state == null) {
+				throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+			}
+			if (!user.userId().equals(state.getApplyUserId())) {
+				throw new AccessDeniedException("只有申請人可以編輯草稿");
+			}
+			if (!"DRAFT".equals(state.getAppStatusCode())) {
+				throw new ApiConflictException(MSG_NOT_DRAFT);
+			}
+			throw new ApiConflictException(MSG_STALE);
+		}
+		appWriteDao.deleteChildren(appId);
+		appWriteDao.insertChildren(appId, user.userId(), draft);
+		return rowVerNo + 1;
 	}
 
 	static String flowFor(String prioCode, String policy, List<FormOptionRow> options) {

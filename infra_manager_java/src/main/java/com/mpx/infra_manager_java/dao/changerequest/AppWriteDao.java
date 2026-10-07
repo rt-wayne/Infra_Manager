@@ -6,7 +6,8 @@ package com.mpx.infra_manager_java.dao.changerequest;
 // 變更說明: 新增：申請單草稿寫入 IM_APP 主檔與 6 張子表（S6 回合二 b-1）。每個方法單句或逐列單句；
 //           交易由 AppDraftService 的 @Transactional 決定。CLOB 欄位以 Types.CLOB 綁定（走 setClob），
 //           避免長字串被當 VARCHAR／LONG 綁定而撞 ORA-01461／ORA-24816。
-//           deleteChildren 給回合二 b-2 編輯草稿「子表整批刪除重建」用
+//           deleteChildren 給回合二 b-2 編輯草稿「子表整批刪除重建」用。
+//           2026-10-07 回合二 b-2：加 updateApp（條件含版本、DRAFT、申請人，任一不符回 0 列）與 findLockState
 // ============================================================
 
 import java.sql.Timestamp;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Repository;
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager_java.config.DbSchema;
 import com.mpx.infra_manager_java.model.changerequest.AppDraft;
+import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 
 @Repository
 public class AppWriteDao {
@@ -53,13 +55,19 @@ public class AppWriteDao {
 				+ " :workMode, :remoteMethod, :supName, :supContact, :supTel, :headCount, :workSubject, :otherReason,"
 				+ " :schedStart, :schedEnd, :estHours, :omitReason, 1, SYSDATE, :applyUserId,"
 				+ " :impactDesc, :workDetail, :riskDesc, :rollbackPlan)";
-		Map<String, Object> p = new HashMap<>();
+		Map<String, Object> p = fields(d);
 		p.put("appId", appId);
-		p.put("title", d.title());
-		p.put("prioCode", d.prioCode());
 		p.put("flowId", flowId);
 		p.put("applyUserId", applyUserId);
 		p.put("applyDate", applyDate);
+		dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 主檔中由表單決定的欄位（insertApp／updateApp 共用） */
+	private static Map<String, Object> fields(AppDraft d) {
+		Map<String, Object> p = new HashMap<>();
+		p.put("title", d.title());
+		p.put("prioCode", d.prioCode());
 		p.put("deptName", d.applyDeptName());
 		p.put("tel", d.applyTel());
 		p.put("email", d.applyEmail());
@@ -81,7 +89,39 @@ public class AppWriteDao {
 		p.put("workDetail", clob(d.workDetail()));
 		p.put("riskDesc", clob(d.riskDesc()));
 		p.put("rollbackPlan", clob(d.rollbackPlan()));
-		dbClient.update(itflowDb, sql, p);
+		return p;
+	}
+
+	/**
+	 * 更新草稿主檔並把 ROW_VER_NO +1；只有「版本相符、仍是 DRAFT、申請人是 by、未刪除」才會更新。
+	 * 回影響筆數（0 表示上述任一條件不符，由呼叫端用 findLockState 判斷原因）
+	 */
+	public int updateApp(String appId, long rowVerNo, String flowId, String by, AppDraft d) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET APP_TITLE = :title, PRIO_CODE = :prioCode,"
+				+ " FLOW_ID = :flowId, APPLY_DEPT_NAME = :deptName, APPLY_TEL = :tel, APPLY_EMAIL = :email,"
+				+ " IS_SELF_EXEC = :selfExec, IS_SUP_EXEC = :supExec, WORK_MODE_CODE = :workMode,"
+				+ " REMOTE_METHOD = :remoteMethod, SUP_NAME = :supName, SUP_CNTCT = :supContact, SUP_TEL = :supTel,"
+				+ " SUP_HEAD_CNT = :headCount, WORK_SUBJ = :workSubject, OTHER_REASON = :otherReason,"
+				+ " SCHED_START_DATE = :schedStart, SCHED_END_DATE = :schedEnd, EST_HOUR_QTY = :estHours,"
+				+ " OMIT_REASON = :omitReason, ROW_VER_NO = ROW_VER_NO + 1, UPDATE_DATE = SYSDATE, UPDATE_BY = :by,"
+				+ " IMPACT_DESC = :impactDesc, WORK_DETAIL = :workDetail, RISK_DESC = :riskDesc,"
+				+ " ROLL_BACK_PLAN = :rollbackPlan"
+				+ " WHERE APP_ID = :appId AND ROW_VER_NO = :rowVerNo AND APP_STATUS_CODE = 'DRAFT'"
+				+ " AND APPLY_USER_ID = :by AND STATUS = 1";
+		Map<String, Object> p = fields(d);
+		p.put("appId", appId);
+		p.put("rowVerNo", rowVerNo);
+		p.put("flowId", flowId);
+		p.put("by", by);
+		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 編輯失敗時判斷原因；單不存在或已刪除回 null */
+	public AppLockRow findLockState(String appId) {
+		String sql = "SELECT APP_STATUS_CODE, APPLY_USER_ID, ROW_VER_NO FROM " + schema.table("IM_APP")
+				+ " WHERE APP_ID = :appId AND STATUS = 1";
+		List<AppLockRow> rows = dbClient.query(itflowDb, sql, Map.of("appId", appId), AppLockRow.class);
+		return rows.isEmpty() ? null : rows.get(0);
 	}
 
 	/** 寫入 6 張子表；SEQ_NO 依清單順序 1 起 */

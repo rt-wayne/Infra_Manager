@@ -19,6 +19,7 @@ package com.mpx.infra_manager_java.web;
 //           2026-10-06 S2 回合二：summarize 的實作移到 util.Throwables（匯入器 CLI 也要用），本類別保留同名轉呼
 //           2026-10-06 S4：加 ApiNotFoundException → 404、ApiBadRequestException → 400，帶例外自己的訊息
 //           （業務層的「找不到申請單」「篩選值不正確」要讓前端 toast 出來，不能被 ErrorResponse 那條改成「請求無法處理」）
+//           2026-10-07 S6 回合二 b-2：加 ApiConflictException → 409，帶例外自己的訊息（樂觀鎖、非草稿）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -83,6 +84,11 @@ public class ApiExceptionHandler {
 	@ExceptionHandler(ApiBadRequestException.class)
 	public ResponseEntity<Map<String, Object>> badRequest(ApiBadRequestException e) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message(e.getMessage()));
+	}
+
+	@ExceptionHandler(ApiConflictException.class)
+	public ResponseEntity<Map<String, Object>> conflict(ApiConflictException e) {
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(message(e.getMessage()));
 	}
 
 	/** 方法層安全（@PreAuthorize 等）在 controller 內丟出，不會經 filter 層的 handler；在此對齊成同樣的 401／403 JSON */

@@ -6,7 +6,9 @@ package com.mpx.infra_manager_java.dao.changerequest;
 // 變更說明: 新增：草稿寫入對真實測試 Oracle 的整合測試（S6 回合二 b-1，只由 mvnw verify 執行；連線資訊 API 位址為空、
 //           或測試帳號 T0001／各群組啟用選項不存在時略過）。用 ITW 開頭的假單號，不經取號、不碰計數列。
 //           驗證：主檔＋6 張子表在同一交易寫入後讀得回來，CLOB 存 20000 個中文字（約 60 KB）不撞 ORA-01461／ORA-24816；
-//           交易內丟例外時主檔與子表都不留；deleteChildren 只刪子表。測試結束刪除本測試建的單
+//           交易內丟例外時主檔與子表都不留；deleteChildren 只刪子表。測試結束刪除本測試建的單。
+//           2026-10-07 回合二 b-2：加 updateApp——版本相符才更新、ROW_VER_NO +1、CLOB 改寫讀得回來；
+//           舊版本或非申請人回 0 列；findLockState 讀得到現況、不存在回 null
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,6 +36,7 @@ import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager_java.config.DbSchema;
 import com.mpx.infra_manager_java.model.DualRow;
 import com.mpx.infra_manager_java.model.changerequest.AppDraft;
+import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.model.changerequest.OptionRow;
@@ -146,6 +149,33 @@ class AppWriteDaoIT {
 		assertThat(appDao.findEquipments(appId)).isEmpty();
 		assertThat(appDao.findPlanSteps(appId)).isEmpty();
 		assertThat(appDao.findById(appId)).isPresent();
+	}
+
+	@Test
+	void 更新草稿_版本相符才更新且版本加一_不符或非申請人為0列() {
+		new TransactionTemplate(transactionManager).executeWithoutResult(s -> write(draft()));
+		AppDraft d = draft();
+		AppDraft changed = new AppDraft("改過的標題", "P1", d.applyDeptName(), d.applyTel(), d.applyEmail(),
+				d.selfExec(), d.supplierExec(), d.workModeCode(), d.remoteMethod(), d.supName(), d.supContact(),
+				d.supTel(), d.supHeadCount(), d.workSubject(), d.impactDesc(), "改過的細節", d.riskDesc(), "還原計畫",
+				d.otherReason(), d.schedStart(), d.schedEnd(), d.estHours(), d.omitReason(), d.categoryItemIds(),
+				d.categoryOthers(), d.reasonIds(), d.scopeIds(), d.equipments(), d.planSteps());
+
+		assertThat(appWriteDao.updateApp(appId, 0, "p1_emergency", USER, changed)).isEqualTo(1);
+		AppRow a = appDao.findById(appId).orElseThrow();
+		assertThat(a.getAppTitle()).isEqualTo("改過的標題");
+		assertThat(a.getPrioCode()).isEqualTo("P1");
+		assertThat(a.getWorkDetail()).isEqualTo("改過的細節");
+		assertThat(a.getRollBackPlan()).isEqualTo("還原計畫");
+		assertThat(a.getRowVerNo()).isEqualTo(1L);
+
+		assertThat(appWriteDao.updateApp(appId, 0, "full", USER, changed)).isZero();
+		assertThat(appWriteDao.updateApp(appId, 1, "full", "T9999", changed)).isZero();
+		AppLockRow lock = appWriteDao.findLockState(appId);
+		assertThat(lock.getAppStatusCode()).isEqualTo("DRAFT");
+		assertThat(lock.getApplyUserId()).isEqualTo(USER);
+		assertThat(lock.getRowVerNo()).isEqualTo(1L);
+		assertThat(appWriteDao.findLockState("ITW_NONE")).isNull();
 	}
 
 	@Test

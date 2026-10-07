@@ -6,15 +6,19 @@ package com.mpx.infra_manager_java.controller.changerequest;
 // 變更說明: 新增：POST /api/apps 的 MockMvc 測試（S6 回合二 b-1）。比照 AppControllerTest 走真的登入流程。
 //           鎖定：未登入 401；缺 CSRF 403；登入後 201 {appId, rowVerNo:0} 且服務收到登入者；
 //           超長回 400 {message, field, max, actual}；本文不是 JSON 回 400
+//           2026-10-07 回合二 b-2：加 PUT /api/apps/{id}——200 {appId, rowVerNo(新)}、缺 CSRF 403、
+//           服務丟出的 403／404／409／400 原樣對應狀態碼與訊息
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -29,10 +33,12 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 
 import com.mpx.infra_manager_java.config.SecurityConfig;
 import com.mpx.infra_manager_java.controller.auth.AuthController;
@@ -43,6 +49,9 @@ import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
 import com.mpx.infra_manager_java.service.auth.AuthService;
 import com.mpx.infra_manager_java.service.changerequest.AppDraftService;
 import com.mpx.infra_manager_java.util.TextTooLongException;
+import com.mpx.infra_manager_java.web.ApiBadRequestException;
+import com.mpx.infra_manager_java.web.ApiConflictException;
+import com.mpx.infra_manager_java.web.ApiNotFoundException;
 
 import jakarta.servlet.http.Cookie;
 
@@ -129,6 +138,53 @@ class AppDraftControllerTest {
 				.content(BODY)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("title"))
 				.andExpect(jsonPath("$.max").value(200)).andExpect(jsonPath("$.actual").value(201))
 				.andExpect(jsonPath("$.message").exists());
+	}
+
+	private static final String EDIT_BODY = "{\"title\":\"改標題\",\"prioCode\":\"P2\",\"rowVerNo\":3}";
+
+	private ResultActions putDraft(Session s, String id) throws Exception {
+		return mockMvc.perform(put("/api/apps/" + id).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
+				.content(EDIT_BODY));
+	}
+
+	@Test
+	void 編輯草稿回200帶新版本號() throws Exception {
+		Session s = login();
+		when(appDraftService.update(eq("IM20261007-001"), any(), any())).thenReturn(4L);
+		putDraft(s, "IM20261007-001").andExpect(status().isOk())
+				.andExpect(content().json("{\"appId\":\"IM20261007-001\",\"rowVerNo\":4}"));
+		ArgumentCaptor<AppDraftRequest> req = ArgumentCaptor.forClass(AppDraftRequest.class);
+		ArgumentCaptor<AuthUser> user = ArgumentCaptor.forClass(AuthUser.class);
+		verify(appDraftService).update(eq("IM20261007-001"), req.capture(), user.capture());
+		assertThat(req.getValue().rowVerNo()).isEqualTo(3L);
+		assertThat(user.getValue().userId()).isEqualTo("E0001");
+	}
+
+	@Test
+	void 編輯_缺CSRF回403() throws Exception {
+		Session s = login();
+		mockMvc.perform(put("/api/apps/IM20261007-001").session(s.session()).contentType(MediaType.APPLICATION_JSON)
+				.content(EDIT_BODY)).andExpect(status().isForbidden());
+		verifyNoInteractions(appDraftService);
+	}
+
+	@Test
+	void 編輯_服務例外對應狀態碼() throws Exception {
+		Session s = login();
+		when(appDraftService.update(eq("A"), any(), any())).thenThrow(new AccessDeniedException("x"));
+		when(appDraftService.update(eq("B"), any(), any())).thenThrow(new ApiNotFoundException("找不到申請單"));
+		when(appDraftService.update(eq("C"), any(), any()))
+				.thenThrow(new ApiConflictException(AppDraftService.MSG_STALE));
+		when(appDraftService.update(eq("D"), any(), any()))
+				.thenThrow(new ApiBadRequestException(AppDraftService.MSG_NO_VERSION));
+		putDraft(s, "A").andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_FORBIDDEN));
+		putDraft(s, "B").andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("找不到申請單"));
+		putDraft(s, "C").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AppDraftService.MSG_STALE));
+		putDraft(s, "D").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(AppDraftService.MSG_NO_VERSION));
 	}
 
 	@Test
