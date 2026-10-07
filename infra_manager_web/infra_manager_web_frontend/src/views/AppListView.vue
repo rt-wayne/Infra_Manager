@@ -7,12 +7,16 @@
             失敗 → toast 後端訊息並顯示錯誤文字，不顯示成「沒有符合條件」；401 由登入處理器導頁，本頁不另出 toast
             AI 審查欄位待第 17 項
             S4 回合三：單號改成連到檢視頁 /apps/:id；prioStyle 移到 utils/format
+            S6 回合四（2026-10-07）：標題列加「新增申請單」連到 /apps/new
 -->
 <template>
   <main>
     <header class="hero">
       <h1>申請單列表</h1>
-      <router-link class="link" to="/">回首頁</router-link>
+      <div class="hero-links">
+        <router-link class="new" :to="{ name: APP_NEW_ROUTE }">＋ 新增申請單</router-link>
+        <router-link class="link" to="/">回首頁</router-link>
+      </div>
     </header>
 
     <form class="card filters" @submit.prevent="search">
@@ -117,7 +121,7 @@ import { listApps } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
 import { PRIORITIES, SOURCE_LABELS, STATUS_LABELS, type AppListFilter, type AppListResponse } from '../types/app'
-import { APP_VIEW_ROUTE } from '../router/names'
+import { APP_NEW_ROUTE, APP_VIEW_ROUTE } from '../router/names'
 import { prioStyle } from '../utils/format'
 
 const { toast } = useToast()
@@ -175,6 +179,8 @@ main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 .hero { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .hero h1 { margin: 0; font-size: 28px; color: var(--navy); }
 .link { color: var(--blue); font-size: 17px; }
+.hero-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.new { background: var(--teal); color: #fff; font-weight: 700; border-radius: 7px; padding: 8px 18px; font-size: 17px; text-decoration: none; }
 
 .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
 

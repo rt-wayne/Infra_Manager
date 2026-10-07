@@ -9,6 +9,7 @@
 //           「送審」改為只在事件紀錄表斷言（原斷言會被任何位置的同字命中）
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：測試資料補 rowVerNo、formOptionId（型別新增必填欄位）
 //           S6 回合一-2（2026-10-07）：下載鈕改為可用；下載先 HEAD 再開 <a download>、404 toast、401 不出 toast
+//           S6 回合四（2026-10-07）：「編輯草稿」鈕導到 /apps/:id/edit
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -17,7 +18,7 @@ import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppViewView from '../src/views/AppViewView.vue'
 import { checkAttachment, getApp } from '../src/api/apps'
 import { useToast } from '../src/composables/useToast'
-import { APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 import type { AppDetail, AppPermissions } from '../src/types/app'
 
 vi.mock('../src/api/apps', async importOriginal => ({
@@ -35,7 +36,8 @@ function makeRouter(): Router {
     history: createMemoryHistory(),
     routes: [
       { path: '/apps', name: APP_LIST_ROUTE, component: Blank },
-      { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView }
+      { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView },
+      { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: Blank }
     ]
   })
 }
@@ -227,6 +229,17 @@ describe('AppViewView', () => {
     expect(buttons.map(b => b.text())).toEqual(['簽核', '撤回到草稿'])
     await buttons[0].trigger('click')
     expect(toastMsgs()).toContain('此功能尚未開放')
+    wrapper.unmount()
+  })
+
+  it('編輯草稿鈕導到編輯頁', async () => {
+    getMock.mockResolvedValue(detail({ statusCode: 'DRAFT', permissions: { ...NO_PERMS, canEditDraft: true } }))
+    const { wrapper, router } = await mountView()
+
+    const btn = wrapper.findAll('.actions button').find(b => b.text() === '編輯草稿')
+    await btn?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/apps/IM20261006-001/edit')
     wrapper.unmount()
   })
 

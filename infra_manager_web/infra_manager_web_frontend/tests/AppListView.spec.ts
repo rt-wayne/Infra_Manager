@@ -5,6 +5,7 @@
 //           驗：進頁打第 1 頁；列資料、狀態中文、待我簽核標記與數量；空結果文字；失敗出 toast 且不顯示成沒有資料；
 //           401 不另出 toast；篩選條件換成查詢參數（空值不送）；起日晚於迄日不打 API；換頁沿用已查詢的條件
 //           S4 回合三：狀態中文改舊系統用語；單號連到 /apps/:id（測試路由改具名）
+//           S6 回合四（2026-10-07）：測試路由補 /apps/new（標題列新增的「新增申請單」是具名連結）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -14,7 +15,7 @@ import AppListView from '../src/views/AppListView.vue'
 import { listApps, toListParams } from '../src/api/apps'
 import { useToast } from '../src/composables/useToast'
 import type { AppListFilter, AppListItem, AppListResponse } from '../src/types/app'
-import { APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
+import { APP_LIST_ROUTE, APP_NEW_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 
 vi.mock('../src/api/apps', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/api/apps')>()),
@@ -30,6 +31,7 @@ function makeRouter(): Router {
     routes: [
       { path: '/', component: Blank },
       { path: '/apps', name: APP_LIST_ROUTE, component: AppListView },
+      { path: '/apps/new', name: APP_NEW_ROUTE, component: Blank },
       { path: '/apps/:id', name: APP_VIEW_ROUTE, component: Blank }
     ]
   })

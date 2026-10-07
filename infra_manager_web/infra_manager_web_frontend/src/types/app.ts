@@ -7,6 +7,9 @@
 //           補檢視頁型別 AppDetail（對應後端 model.changerequest.AppDetail）與關卡、事件、版次、作業方式等代碼的中文對照
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：AppDetail 補 rowVerNo（樂觀鎖）、AppOption 補 formOptionId；
 //           新增 GET /form-options 回應型別 FormOptionsResponse（對應後端 model.changerequest.FormOptionsResponse）
+//           S6 回合四（Claude Opus 5.5，2026-10-07）：新增草稿表單型別——送出本文 AppDraftRequest（對應後端
+//           AppDraftRequest）、存檔回應 AppDraftSaved、400 欄位錯誤 ApiFieldErrorBody、畫面狀態 AppDraftForm；
+//           附件副檔名白名單 ATTACH_EXTS（與後端 AttachmentTypes 一致，前端只做預檢）
 // ============================================================
 
 export type AppStatus =
@@ -349,4 +352,101 @@ export interface FormOption {
 export interface FormOptionsResponse {
   options: FormOption[]
   upload: { maxMb: number; maxFiles: number }
+}
+
+/** 附件副檔名白名單（小寫、不含點）；與後端 AttachmentTypes 相同，前端只做預檢 */
+export const ATTACH_EXTS: readonly string[] = [
+  'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'txt', 'csv', 'zip', 'msg'
+]
+
+export interface AppDraftEquipment {
+  name: string
+  assetNo: string
+  modelNo: string
+  serialNo: string
+  purpose: string
+  mgmtIp: string
+}
+
+/**
+ * POST /apps、PUT /apps/{id} 本文；空字串由後端轉 null。
+ * equipments、planSteps、categoryOthers 依畫面列序全部送出（空列後端略過），400 的 field 索引才對得回畫面
+ */
+export interface AppDraftRequest {
+  title: string
+  prioCode: string
+  applicant: { deptName: string; tel: string; email: string }
+  selfExec: boolean
+  supplierExec: boolean
+  workModeCode: string
+  remoteMethod: string
+  supplier: { name: string; contact: string; tel: string; headCount: number | null }
+  workSubject: string
+  impactDesc: string
+  workDetail: string
+  riskDesc: string
+  rollbackPlan: string
+  categoryItemIds: number[]
+  categoryOthers: { formOptionId: number; text: string }[]
+  reasonIds: number[]
+  otherReason: string
+  scopeIds: number[]
+  equipments: AppDraftEquipment[]
+  planSteps: string[]
+  /** start／end：datetime-local 的 yyyy-MM-ddTHH:mm */
+  schedule: { start: string; end: string; estHours: number | null }
+  location: { omitReason: string }
+  /** 只有 PUT 帶 */
+  rowVerNo?: number
+}
+
+/** POST /apps（201）、PUT /apps/{id}（200）回應 */
+export interface AppDraftSaved {
+  appId: string
+  rowVerNo: number
+}
+
+/** 400 欄位過長時多帶 field（例 equipments[0].name）、max、actual */
+export interface ApiFieldErrorBody {
+  message: string
+  field?: string
+  max?: number
+  actual?: number
+}
+
+/** 表單畫面狀態；數字欄位綁 type=number，清空時是空字串 */
+export interface AppDraftForm {
+  title: string
+  prioCode: string
+  deptName: string
+  tel: string
+  email: string
+  selfExec: boolean
+  supplierExec: boolean
+  workModeCode: string
+  remoteMethod: string
+  supplierName: string
+  supplierContact: string
+  supplierTel: string
+  headCount: number | string
+  workSubject: string
+  impactDesc: string
+  workDetail: string
+  riskDesc: string
+  rollbackPlan: string
+  categoryItemIds: number[]
+  /** key 為 CATG 的 formOptionId */
+  categoryOthers: Record<number, string>
+  reasonIds: number[]
+  otherReason: string
+  scopeIds: number[]
+  equipments: AppDraftEquipment[]
+  planSteps: string[]
+  /** yyyy-MM-ddTHH:mm */
+  start: string
+  end: string
+  estHours: number | string
+  locOmit: boolean
+  omitReason: string
 }

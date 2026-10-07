@@ -11,12 +11,14 @@
 //           - 已登入再進 /login → 回首頁
 //           S4 回合二（Claude Opus 5.5，2026-10-06）：加 /apps 申請單列表（須登入）
 //           S4 回合三（Claude Opus 5.5，2026-10-06）：加 /apps/:id 檢視頁；列表與檢視改具名路由（名稱在 router/names.ts）
+//           S6 回合四（Claude Opus 5.5，2026-10-07）：加 /apps/new 新增草稿、/apps/:id/edit 編輯草稿（同一個 AppFormView）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import AppListView from '../views/AppListView.vue'
 import AppViewView from '../views/AppViewView.vue'
-import { APP_LIST_ROUTE, APP_VIEW_ROUTE } from './names'
+import AppFormView from '../views/AppFormView.vue'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_NEW_ROUTE, APP_VIEW_ROUTE } from './names'
 import LoginView from '../views/LoginView.vue'
 import ChangePasswordView from '../views/ChangePasswordView.vue'
 import { CHANGE_PASSWORD_PATH, LOGIN_PATH, useAuth } from '../composables/useAuth'
@@ -35,7 +37,9 @@ const router = createRouter({
     { path: LOGIN_PATH, component: LoginView, meta: { public: true } },
     { path: CHANGE_PASSWORD_PATH, component: ChangePasswordView },
     { path: '/apps', name: APP_LIST_ROUTE, component: AppListView },
-    { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView }
+    { path: '/apps/new', name: APP_NEW_ROUTE, component: AppFormView },
+    { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView },
+    { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: AppFormView }
   ]
 })
 

@@ -6,6 +6,7 @@
             S2 回合三（2026-10-06）：右上角顯示登入者姓名、修改密碼連結與登出鈕；toast 區抽成 ToastHost 元件
             沿用 main.css 色票與 19px 基礎字級，不用元件庫
             S4 回合二（Claude Opus 5.5，2026-10-06）：加「功能」卡片，連到 /apps 申請單列表
+            S6 回合四（Claude Opus 5.5，2026-10-07）：「功能」卡片加「新增申請單」連到 /apps/new
 -->
 <template>
   <main>
@@ -23,7 +24,10 @@
 
     <section class="card menu">
       <h2>功能</h2>
-      <router-link class="go" to="/apps">申請單列表</router-link>
+      <div class="menu-links">
+        <router-link class="go" to="/apps">申請單列表</router-link>
+        <router-link class="go" to="/apps/new">新增申請單</router-link>
+      </div>
     </section>
 
     <section class="card">
@@ -127,6 +131,7 @@ main { width: 100%; max-width: 960px; margin: 0 auto; padding: 24px 20px; }
 .card h2 { margin: 0 0 12px; font-size: 22px; color: var(--teal-dark); }
 .menu { margin-bottom: 16px; }
 .menu .go { display: inline-block; text-decoration: none; text-align: center; }
+.menu-links { display: flex; flex-wrap: wrap; gap: 12px; }
 
 .status { display: grid; grid-template-columns: 140px 1fr; row-gap: 8px; column-gap: 12px; margin: 0 0 16px; }
 .status dt { color: var(--gray); font-size: 17px; }

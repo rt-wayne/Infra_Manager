@@ -11,6 +11,7 @@
             快速切換單號時丟棄過期回應；執行結果未填時「例外」「後續追蹤」顯示 —，不顯示成「無」
             S6 回合一-2（2026-10-07）：附件下載鈕啟用——先 HEAD 確認（404 toast「找不到附件檔案」），再用 <a download>
             交給瀏覽器下載（殼 jar 已串流透傳，大檔不進頁面記憶體）
+            S6 回合四（2026-10-07）：「編輯草稿」改導到 /apps/:id/edit，其餘動作仍是「此功能尚未開放」
 -->
 <template>
   <main>
@@ -34,7 +35,7 @@
 
     <template v-else>
       <section v-if="actions.length" class="card actions" aria-label="可執行動作">
-        <button v-for="a in actions" :key="a.key" class="quiet" type="button" @click="notYet">{{ a.label }}</button>
+        <button v-for="a in actions" :key="a.key" class="quiet" type="button" @click="act(a.key)">{{ a.label }}</button>
       </section>
 
       <article class="card paper">
@@ -307,14 +308,14 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import StatusPill from '../components/StatusPill.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { AxiosError } from 'axios'
 import { attachmentUrl, checkAttachment, getApp } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
-import { APP_LIST_ROUTE } from '../router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE } from '../router/names'
 import {
   ATTACH_OWNER_LABELS,
   EVENT_LABELS,
@@ -331,6 +332,7 @@ import {
 import { kb, prioStyle } from '../utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const { toast } = useToast()
 
 const app = ref<AppDetail | null>(null)
@@ -358,7 +360,12 @@ const ACTIONS: { key: PermKey; label: string }[] = [
 
 const actions = computed(() => (app.value ? ACTIONS.filter(a => app.value?.permissions[a.key] === true) : []))
 
-function notYet(): void {
+/** 已開放的動作導到對應頁；其餘還沒做的出 toast */
+function act(key: PermKey): void {
+  if (key === 'canEditDraft') {
+    void router.push({ name: APP_EDIT_ROUTE, params: { id: appId.value } })
+    return
+  }
   toast('此功能尚未開放', 'amber')
 }
 
