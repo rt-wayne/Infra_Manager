@@ -8,12 +8,16 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           執行人工號未啟用 400 不取鎖；取鎖 0 列分流 404／409；鎖內狀態不是 APPROVED／IN_EXECUTION 409、
 //           鎖內申請人已變更 403；第一次儲存依 CHECK_LIST 選項順序展開、已展開不重展；未知序號 400；
 //           完成沒填時間補現在時間、未完成傳 null；暫存不寫結案人、狀態 APPROVED → IN_EXECUTION；
-//           已是 IN_EXECUTION 的暫存不改狀態；送審寫結案人並改 PENDING_REVIEW；回傳 rowVerNo + 1
+//           已是 IN_EXECUTION 的暫存不改狀態；送審寫結案人並改 PENDING_REVIEW；回傳 rowVerNo + 1。
+//           2026-10-07 S10 R2：加執行端退回（鎖外 403／意見必填與超長不取鎖、0 列分流、鎖內狀態不對 409、
+//           成功改 REJECTED 寫 EXEC_REJECT 且不動執行資料）與治理審查（非 governance 403、決定值／意見檢核不取鎖、
+//           0 列分流 404／409 狀態／409 版本、PASS → EXECUTED 空白意見存 null、RETURN → REJECTED、申請人兼治理不擋）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -40,14 +44,18 @@ import org.springframework.security.access.AccessDeniedException;
 import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
+import com.mpx.infra_manager_java.dao.changerequest.ApprovalWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.ExecWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.FormOptionDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ExecRejectRequest;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionDraft;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
+import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
+import com.mpx.infra_manager_java.util.TextTooLongException;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
 import com.mpx.infra_manager_java.web.ApiNotFoundException;
@@ -64,6 +72,7 @@ class AppExecutionServiceTest {
 	private ExecWriteDao execWriteDao;
 	private FormOptionDao formOptionDao;
 	private UserDao userDao;
+	private ApprovalWriteDao approvalWriteDao;
 	private AppExecutionService service;
 
 	@BeforeEach
@@ -73,7 +82,8 @@ class AppExecutionServiceTest {
 		execWriteDao = mock(ExecWriteDao.class);
 		formOptionDao = mock(FormOptionDao.class);
 		userDao = mock(UserDao.class);
-		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, userDao);
+		approvalWriteDao = mock(ApprovalWriteDao.class);
+		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, userDao, approvalWriteDao);
 		List<FormOptionRow> options = new ArrayList<>();
 		options.add(option(31, "CHECK_LIST", "check_in"));
 		options.add(option(32, "CHECK_LIST", "pre_state"));
@@ -250,5 +260,113 @@ class AppExecutionServiceTest {
 				"P1", false, null, false, null, null);
 		assertThatThrownBy(() -> service.save(APP, wrongGroup, APPLICANT)).isInstanceOf(ApiBadRequestException.class)
 				.hasMessage(ExecutionValidator.MSG_BAD_RESULT);
+	}
+
+	// ---- 執行端退回（⑧） ----
+
+	@Test
+	void 退回鎖外失敗都不取鎖_意見必填() {
+		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(null, "x"), APPLICANT))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppDraftService.MSG_NO_VERSION);
+		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "x"), OTHER))
+				.isInstanceOf(AccessDeniedException.class).hasMessage(AppExecutionService.MSG_REJECT_FORBIDDEN);
+		for (String blank : new String[] { null, "", "  \n " }) {
+			assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, blank), APPLICANT)).as("[" + blank + "]")
+					.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_REJECT_NEEDS_MEMO);
+		}
+		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "字".repeat(2001)), APPLICANT))
+				.isInstanceOf(TextTooLongException.class);
+		verify(appWriteDao, never()).lockForUpdate(anyString(), anyLong(), anyString());
+	}
+
+	@Test
+	void 退回鎖內狀態不對409_成功改REJECTED寫事件不清執行資料() {
+		for (String status : new String[] { "PENDING_REVIEW", "EXECUTED", "REJECTED", "IN_REVIEW" }) {
+			locked(status, List.of());
+			assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "設備未到"), IDC)).as(status)
+					.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_REJECT_NOT_EXECUTABLE);
+		}
+		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+
+		locked("IN_EXECUTION", List.of(1, 2, 3));
+		assertThat(service.reject(APP, new ExecRejectRequest(3L, "  設備未到\n"), IDC)).isEqualTo(4L);
+		verify(appWriteDao).updateStatus(APP, "REJECTED", IDC.userId());
+		verify(approvalWriteDao).insertEvent(APP, 2, "EXEC_REJECT", IDC.userId(), "設備未到");
+		verify(execWriteDao, never()).upsertExec(anyString(), anyInt(), any(), any(), anyString());
+	}
+
+	@Test
+	void 退回取鎖0列分流404與409() {
+		when(appWriteDao.lockForUpdate(APP, 3L, APPLICANT.userId())).thenReturn(0);
+		when(appWriteDao.findLockState(APP)).thenReturn(lockState(APPLICANT.userId()), (AppLockRow) null);
+		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "x"), APPLICANT))
+				.isInstanceOf(ApiNotFoundException.class);
+		when(appWriteDao.findLockState(APP)).thenReturn(lockState(APPLICANT.userId()));
+		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "x"), APPLICANT))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppFlowService.MSG_STALE);
+	}
+
+	// ---- 治理審查（⑨） ----
+
+	private static final AuthUser GOV = new AuthUser("G0001", "gov", "治理", List.of("governance"), false);
+
+	@Test
+	void 審查非governance403_決定值與意見檢核_都不取鎖() {
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), IDC))
+				.isInstanceOf(AccessDeniedException.class).hasMessage(AppExecutionService.MSG_REVIEW_FORBIDDEN);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), OTHER))
+				.as("admin 也不行").isInstanceOf(AccessDeniedException.class);
+		for (String bad : new String[] { null, "pass", "APPROVE", "REJECT" }) {
+			assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, bad, "x"), GOV)).as(bad)
+					.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_BAD_REVIEW_DECISION);
+		}
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "RETURN", " "), GOV))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_REJECT_NEEDS_MEMO);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", "字".repeat(2001)), GOV))
+				.isInstanceOf(TextTooLongException.class);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(null, "PASS", null), GOV))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppDraftService.MSG_NO_VERSION);
+		verify(appWriteDao, never()).transition(anyString(), anyLong(), anyString(), anyString(), anyString(),
+				anyBoolean());
+	}
+
+	@Test
+	void 審查0列分流404_狀態不對409_版本過期409() {
+		when(appWriteDao.transition(APP, 3L, "PENDING_REVIEW", "EXECUTED", GOV.userId(), false)).thenReturn(0);
+		when(appWriteDao.findLockState(APP)).thenReturn(null);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), GOV))
+				.isInstanceOf(ApiNotFoundException.class);
+
+		AppLockRow executed = lockState(APPLICANT.userId());
+		executed.setAppStatusCode("EXECUTED");
+		when(appWriteDao.findLockState(APP)).thenReturn(executed);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), GOV))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_REVIEW_NOT_PENDING);
+
+		AppLockRow pending = lockState(APPLICANT.userId());
+		pending.setAppStatusCode("PENDING_REVIEW");
+		when(appWriteDao.findLockState(APP)).thenReturn(pending);
+		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), GOV))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppFlowService.MSG_STALE);
+		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void 審查通過EXECUTED意見選填_退回REJECTED意見必填_申請人兼治理也可以() {
+		when(appDao.findById(APP)).thenReturn(Optional.of(app("EXECUTED", APPLICANT.userId())));
+		when(appWriteDao.transition(APP, 3L, "PENDING_REVIEW", "EXECUTED", GOV.userId(), false)).thenReturn(1);
+		AppExecutionService.SaveResult pass = service.review(APP, new GovernanceReviewRequest(3L, "PASS", "  "), GOV);
+		assertThat(pass.rowVerNo()).isEqualTo(4L);
+		assertThat(pass.statusCode()).isEqualTo("EXECUTED");
+		verify(approvalWriteDao).insertEvent(APP, 2, "GOV_PASS", GOV.userId(), null);
+
+		AuthUser applicantGov = new AuthUser(APPLICANT.userId(), "wayne", "申請人", List.of("governance"), false);
+		when(appWriteDao.transition(APP, 5L, "PENDING_REVIEW", "REJECTED", APPLICANT.userId(), false)).thenReturn(1);
+		AppExecutionService.SaveResult ret = service.review(APP,
+				new GovernanceReviewRequest(5L, "RETURN", " 備份紀錄不完整 "), applicantGov);
+		assertThat(ret.rowVerNo()).isEqualTo(6L);
+		assertThat(ret.statusCode()).isEqualTo("REJECTED");
+		verify(approvalWriteDao).insertEvent(APP, 2, "GOV_RETURN", APPLICANT.userId(), "備份紀錄不完整");
+		verify(appWriteDao, never()).updateStatus(anyString(), anyString(), anyString());
 	}
 }

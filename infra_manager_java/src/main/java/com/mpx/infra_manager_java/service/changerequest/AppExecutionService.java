@@ -11,6 +11,11 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           該版次第一次儲存時依啟用中的 CHECK_LIST 選項（SORT_NO 順序）展開檢核表 → 逐列更新本文帶到的檢核項
 //           （未知序號 400；完成沒填時間補伺服器現在時間）→ 執行結果 upsert（送治理審查時寫結案人與結案時間）→
 //           主檔狀態改 PENDING_REVIEW（有結果）或 IN_EXECUTION（暫存）。不寫事件（⑩：DDL 沒有 EXECUTE 事件碼）
+//           2026-10-07 S10 R2：加執行端退回 reject（⑧：權限與可呼叫狀態同儲存、意見必填 → REJECTED、事件 EXEC_REJECT，
+//           已暫存的檢核表與執行結果留在該版次不清）與治理審查 review（⑨：只限 governance 角色，鎖外先擋 403；
+//           鎖用 transition(PENDING_REVIEW → EXECUTED／REJECTED)，0 列分流 404／409 狀態不對／409 版本過期；
+//           PASS 事件 GOV_PASS、RETURN 事件 GOV_RETURN，退回意見必填、通過選填；審查人是申請人或執行人不擋，使用者裁示）。
+//           補件時 AppFlowService.closeOf 依這兩種事件把舊版記為 EXEC_REJECTED／GOV_RETURNED
 // ============================================================
 
 import java.sql.Timestamp;
@@ -29,15 +34,19 @@ import org.springframework.transaction.annotation.Transactional;
 import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
+import com.mpx.infra_manager_java.dao.changerequest.ApprovalWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.ExecWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.FormOptionDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ExecRejectRequest;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionDraft;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
+import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
 import com.mpx.infra_manager_java.util.TaiwanTime;
+import com.mpx.infra_manager_java.util.TextLength;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
 import com.mpx.infra_manager_java.web.ApiNotFoundException;
@@ -48,7 +57,21 @@ public class AppExecutionService {
 	public static final String MSG_EXEC_FORBIDDEN = "只有機房管理員或申請人可以填寫執行紀錄";
 	public static final String MSG_EXEC_NOT_EXECUTABLE = "申請單不在待執行或執行中，無法填寫執行紀錄，請重新載入頁面";
 	public static final String MSG_BAD_EXECUTOR = "檢核項執行人不是系統中啟用的使用者";
+	public static final String MSG_REJECT_FORBIDDEN = "只有機房管理員或申請人可以退回";
+	public static final String MSG_REJECT_NOT_EXECUTABLE = "申請單不在待執行或執行中，無法退回，請重新載入頁面";
+	public static final String MSG_REJECT_NEEDS_MEMO = "退回請填寫意見";
+	public static final String MSG_REVIEW_FORBIDDEN = "只有資訊治理人員可以審核執行結果";
+	public static final String MSG_REVIEW_NOT_PENDING = "申請單不是待治理審核狀態，無法審核，請重新載入頁面";
+	public static final String MSG_BAD_REVIEW_DECISION = "審核決定只能是通過或退回";
+	public static final String PASS = "PASS";
+	public static final String RETURN = "RETURN";
+	public static final String STATUS_PENDING_REVIEW = "PENDING_REVIEW";
+	public static final String STATUS_EXECUTED = "EXECUTED";
+	public static final String EVENT_EXEC_REJECT = "EXEC_REJECT";
+	public static final String EVENT_GOV_PASS = "GOV_PASS";
+	public static final String EVENT_GOV_RETURN = "GOV_RETURN";
 	static final String ROLE_IDC_ADMIN = "idc_admin";
+	static final String ROLE_GOVERNANCE = "governance";
 	static final String GROUP_CHECK_LIST = "CHECK_LIST";
 	static final String GROUP_EXEC_RESULT = "EXEC_RESULT";
 	static final Set<String> EXECUTABLE = Set.of("APPROVED", "IN_EXECUTION");
@@ -64,14 +87,16 @@ public class AppExecutionService {
 	private final ExecWriteDao execWriteDao;
 	private final FormOptionDao formOptionDao;
 	private final UserDao userDao;
+	private final ApprovalWriteDao approvalWriteDao;
 
 	public AppExecutionService(AppDao appDao, AppWriteDao appWriteDao, ExecWriteDao execWriteDao,
-			FormOptionDao formOptionDao, UserDao userDao) {
+			FormOptionDao formOptionDao, UserDao userDao, ApprovalWriteDao approvalWriteDao) {
 		this.appDao = appDao;
 		this.appWriteDao = appWriteDao;
 		this.execWriteDao = execWriteDao;
 		this.formOptionDao = formOptionDao;
 		this.userDao = userDao;
+		this.approvalWriteDao = approvalWriteDao;
 	}
 
 	@Transactional
@@ -144,6 +169,96 @@ public class AppExecutionService {
 			appWriteDao.updateStatus(appId, toStatus, me.userId());
 		}
 		return new SaveResult(rowVerNo + 1, toStatus);
+	}
+
+	/**
+	 * 執行端退回給申請人：APPROVED／IN_EXECUTION → REJECTED，事件 EXEC_REJECT（意見進 MEMO）；回新的 rowVerNo。
+	 * 權限與鎖的做法同 save；已暫存的檢核表與執行結果不清（留在該版次，補件後新版次從空白開始）
+	 */
+	@Transactional
+	public long reject(String appId, ExecRejectRequest request, AuthUser me) {
+		long rowVerNo = requireVersion(appId, request == null ? null : request.rowVerNo());
+
+		AppLockRow state = appWriteDao.findLockState(appId);
+		if (state == null) {
+			throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+		}
+		if (!mayExecute(me, state.getApplyUserId())) {
+			throw new AccessDeniedException(MSG_REJECT_FORBIDDEN);
+		}
+		String memo = requireMemo(request.memo());
+
+		if (appWriteDao.lockForUpdate(appId, rowVerNo, me.userId()) == 0) {
+			if (appWriteDao.findLockState(appId) == null) {
+				throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+			}
+			throw new ApiConflictException(AppFlowService.MSG_STALE);
+		}
+
+		AppRow app = appDao.findById(appId)
+				.orElseThrow(() -> new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND));
+		if (!EXECUTABLE.contains(app.getAppStatusCode())) {
+			throw new ApiConflictException(MSG_REJECT_NOT_EXECUTABLE);
+		}
+		if (!mayExecute(me, app.getApplyUserId())) {
+			throw new AccessDeniedException(MSG_REJECT_FORBIDDEN);
+		}
+		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
+		appWriteDao.updateStatus(appId, AppFlowService.STATUS_REJECTED, me.userId());
+		approvalWriteDao.insertEvent(appId, verNo, EVENT_EXEC_REJECT, me.userId(), memo);
+		return rowVerNo + 1;
+	}
+
+	/**
+	 * 治理審查：PENDING_REVIEW → EXECUTED（PASS，事件 GOV_PASS）或 REJECTED（RETURN，事件 GOV_RETURN）；
+	 * 回新的 rowVerNo 與審查後狀態。角色不需查 DB，鎖外先擋；鎖是狀態條件式 UPDATE，兩人同時審後到者 409
+	 */
+	@Transactional
+	public SaveResult review(String appId, GovernanceReviewRequest request, AuthUser me) {
+		long rowVerNo = requireVersion(appId, request == null ? null : request.rowVerNo());
+		if (!me.roles().contains(ROLE_GOVERNANCE)) {
+			throw new AccessDeniedException(MSG_REVIEW_FORBIDDEN);
+		}
+		String decision = request.decision();
+		if (!PASS.equals(decision) && !RETURN.equals(decision)) {
+			throw new ApiBadRequestException(MSG_BAD_REVIEW_DECISION);
+		}
+		String memo = RETURN.equals(decision) ? requireMemo(request.memo()) : optionalMemo(request.memo());
+		String toStatus = PASS.equals(decision) ? STATUS_EXECUTED : AppFlowService.STATUS_REJECTED;
+
+		int rows = appWriteDao.transition(appId, rowVerNo, STATUS_PENDING_REVIEW, toStatus, me.userId(), false);
+		if (rows == 0) {
+			AppLockRow state = appWriteDao.findLockState(appId);
+			if (state == null) {
+				throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+			}
+			if (!STATUS_PENDING_REVIEW.equals(state.getAppStatusCode())) {
+				throw new ApiConflictException(MSG_REVIEW_NOT_PENDING);
+			}
+			throw new ApiConflictException(AppFlowService.MSG_STALE);
+		}
+
+		AppRow app = appDao.findById(appId)
+				.orElseThrow(() -> new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND));
+		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
+		approvalWriteDao.insertEvent(appId, verNo, PASS.equals(decision) ? EVENT_GOV_PASS : EVENT_GOV_RETURN,
+				me.userId(), memo);
+		return new SaveResult(rowVerNo + 1, toStatus);
+	}
+
+	/** 退回意見：超過 2000 字 400；去頭尾空白後為空 400 */
+	private static String requireMemo(String memo) {
+		String n = optionalMemo(memo);
+		if (n == null) {
+			throw new ApiBadRequestException(MSG_REJECT_NEEDS_MEMO);
+		}
+		return n;
+	}
+
+	/** 選填意見：超過 2000 字 400；空白轉 null，其餘去頭尾空白 */
+	private static String optionalMemo(String memo) {
+		String n = TextLength.check("memo", "意見", memo, TextLength.LIMIT_SHORT);
+		return n == null || n.isBlank() ? null : n.strip();
 	}
 
 	/** 機房管理員或申請人本人（修舊系統執行不檢查角色，第 44 項） */

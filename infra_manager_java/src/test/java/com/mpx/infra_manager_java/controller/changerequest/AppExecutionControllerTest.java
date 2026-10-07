@@ -5,7 +5,8 @@ package com.mpx.infra_manager_java.controller.changerequest;
 // 修改日期: 2026-10-07
 // 變更說明: 新增：PUT /api/apps/{id}/execution 的 MockMvc 測試（S10 R1）。比照 AppFlowControllerTest 走真的登入流程。
 //           鎖定：未登入 401；缺 CSRF 403；成功回 200 {appId, rowVerNo, statusCode} 且本文（含巢狀檢核項）與登入者原樣傳給服務；
-//           服務丟出的 400／403／404／409 對應狀態碼；沒帶本文或不是 JSON 400
+//           服務丟出的 400／403／404／409 對應狀態碼；沒帶本文或不是 JSON 400。
+//           2026-10-07 S10 R2：加 POST execution/reject 與 governance-review 的 401／CSRF 403／200 本文傳遞與例外對應
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +44,9 @@ import com.mpx.infra_manager_java.controller.auth.AuthController;
 import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.auth.UserRow;
+import com.mpx.infra_manager_java.model.changerequest.ExecRejectRequest;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
+import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
 import com.mpx.infra_manager_java.service.auth.AuthService;
 import com.mpx.infra_manager_java.service.changerequest.AppExecutionService;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
@@ -176,5 +179,72 @@ class AppExecutionControllerTest {
 		putJson(s, "/api/apps/Z/execution", "{not json").andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("請求格式錯誤"));
 		verify(appExecutionService, org.mockito.Mockito.never()).save(eq("Z"), any(), any());
+	}
+
+	// ---- 執行端退回與治理審查（S10 R2） ----
+
+	private ResultActions postJson(Session s, String path, String body) throws Exception {
+		return mockMvc.perform(post(path).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
+	@Test
+	void 退回與審查_未登入401_缺CSRF403() throws Exception {
+		MvcResult me = mockMvc.perform(get("/api/auth/me")).andReturn();
+		Cookie xsrf = me.getResponse().getCookie(SecurityConfig.XSRF_COOKIE);
+		for (String path : new String[] { "/execution/reject", "/governance-review" }) {
+			mockMvc.perform(post("/api/apps/" + APP + path).cookie(xsrf).header(SecurityConfig.XSRF_HEADER, xsrf.getValue())
+					.contentType(MediaType.APPLICATION_JSON).content("{\"rowVerNo\":3}")).andExpect(status().isUnauthorized());
+		}
+		Session s = login();
+		for (String path : new String[] { "/execution/reject", "/governance-review" }) {
+			mockMvc.perform(post("/api/apps/" + APP + path).session(s.session()).contentType(MediaType.APPLICATION_JSON)
+					.content("{\"rowVerNo\":3}")).andExpect(status().isForbidden());
+		}
+		verifyNoInteractions(appExecutionService);
+	}
+
+	@Test
+	void 退回成功回200_本文傳給服務() throws Exception {
+		Session s = login();
+		when(appExecutionService.reject(eq(APP), any(), any())).thenReturn(4L);
+		postJson(s, "/api/apps/" + APP + "/execution/reject", "{\"rowVerNo\":3,\"memo\":\"設備未到\"}")
+				.andExpect(status().isOk()).andExpect(content().json("{\"appId\":\"" + APP + "\",\"rowVerNo\":4}"));
+		ArgumentCaptor<ExecRejectRequest> req = ArgumentCaptor.forClass(ExecRejectRequest.class);
+		verify(appExecutionService).reject(eq(APP), req.capture(), any());
+		assertThat(req.getValue()).isEqualTo(new ExecRejectRequest(3L, "設備未到"));
+
+		when(appExecutionService.reject(eq("C"), any(), any()))
+				.thenThrow(new ApiConflictException(AppExecutionService.MSG_REJECT_NOT_EXECUTABLE));
+		postJson(s, "/api/apps/C/execution/reject", "{\"rowVerNo\":3,\"memo\":\"x\"}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AppExecutionService.MSG_REJECT_NOT_EXECUTABLE));
+	}
+
+	@Test
+	void 審查成功回200含狀態_例外對應狀態碼() throws Exception {
+		Session s = login();
+		when(appExecutionService.review(eq(APP), any(), any()))
+				.thenReturn(new AppExecutionService.SaveResult(4L, "EXECUTED"));
+		postJson(s, "/api/apps/" + APP + "/governance-review", "{\"rowVerNo\":3,\"decision\":\"PASS\",\"memo\":null}")
+				.andExpect(status().isOk())
+				.andExpect(content().json("{\"appId\":\"" + APP + "\",\"rowVerNo\":4,\"statusCode\":\"EXECUTED\"}"));
+		ArgumentCaptor<GovernanceReviewRequest> req = ArgumentCaptor.forClass(GovernanceReviewRequest.class);
+		verify(appExecutionService).review(eq(APP), req.capture(), any());
+		assertThat(req.getValue()).isEqualTo(new GovernanceReviewRequest(3L, "PASS", null));
+
+		when(appExecutionService.review(eq("A"), any(), any()))
+				.thenThrow(new AccessDeniedException(AppExecutionService.MSG_REVIEW_FORBIDDEN));
+		when(appExecutionService.review(eq("D"), any(), any()))
+				.thenThrow(new ApiBadRequestException(AppExecutionService.MSG_REJECT_NEEDS_MEMO));
+		when(appExecutionService.review(eq("C"), any(), any()))
+				.thenThrow(new ApiConflictException(AppExecutionService.MSG_REVIEW_NOT_PENDING));
+		String body = "{\"rowVerNo\":3,\"decision\":\"RETURN\"}";
+		postJson(s, "/api/apps/A/governance-review", body).andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_FORBIDDEN));
+		postJson(s, "/api/apps/D/governance-review", body).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(AppExecutionService.MSG_REJECT_NEEDS_MEMO));
+		postJson(s, "/api/apps/C/governance-review", body).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AppExecutionService.MSG_REVIEW_NOT_PENDING));
 	}
 }

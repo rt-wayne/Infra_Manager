@@ -10,7 +10,11 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           主檔 IN_EXECUTION、執行結果列結案人與結案時間仍空；送審缺實際結束時間 400 且不加版本；
 //           送審後 PENDING_REVIEW、結案人是送出者、結案時間有值、檢核列不重複展開；之後再存 409（修舊系統重開結案單）。
 //           權限：非 idc_admin 非申請人 403 且不取鎖；idc_admin 可以填；版本過期 409。
-//           併發：同 rowVerNo 兩人同時暫存，恰一成功、另一 409。測試結束刪除本測試建的所有列
+//           併發：同 rowVerNo 兩人同時暫存，恰一成功、另一 409。測試結束刪除本測試建的所有列。
+//           2026-10-07 S10 R2：加完成條件全程（PENDING_REVIEW → 治理通過 EXECUTED、事件 GOV_PASS、之後審查／執行／退回都 409）、
+//           治理退回 → REJECTED → 補件後 IM_APP_VER v1 為 GOV_RETURNED 且 v2 檢核表與執行結果空白、
+//           執行端退回 → REJECTED 不清 v1 執行資料 → 補件後 v1 為 EXEC_REJECTED（補件兩條要 full 流程有啟用關卡，否則略過）；
+//           清理加簽核實例三表與 IM_APP_VER
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,11 +41,17 @@ import org.springframework.security.access.AccessDeniedException;
 
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager_java.config.DbSchema;
+import com.mpx.infra_manager_java.dao.changerequest.AppVerDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
 import com.mpx.infra_manager_java.model.DualRow;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.AppDraft;
+import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
+import com.mpx.infra_manager_java.model.changerequest.AppVerRow;
+import com.mpx.infra_manager_java.model.changerequest.ExecRejectRequest;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
+import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
+import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
 import com.mpx.infra_manager_java.util.TaiwanTime;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
@@ -60,6 +70,12 @@ class AppExecutionIT {
 
 	@Autowired
 	private AppWriteDao appWriteDao;
+
+	@Autowired
+	private AppFlowService appFlowService;
+
+	@Autowired
+	private AppVerDao appVerDao;
 
 	@Autowired
 	private DbClient dbClient;
@@ -99,6 +115,16 @@ class AppExecutionIT {
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_CHECK_LIST") + " WHERE APP_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_EXEC") + " WHERE APP_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_EVENT") + " WHERE APP_ID = :id", p);
+		// 補件測試會建 v2 簽核實例與 v1 快照
+		String appr = schema.table("IM_APPR");
+		String step = schema.table("IM_APPR_STEP");
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APPR_CAND_MAP") + " WHERE APPR_STEP_ID IN"
+				+ " (SELECT S.APPR_STEP_ID FROM " + step + " S JOIN " + appr + " A ON A.APPR_ID = S.APPR_ID"
+				+ " WHERE A.DOC_TYPE = 'CR' AND A.DOC_ID = :id)", p);
+		dbClient.update(itflowDb, "DELETE FROM " + step + " WHERE APPR_ID IN (SELECT APPR_ID FROM " + appr
+				+ " WHERE DOC_TYPE = 'CR' AND DOC_ID = :id)", p);
+		dbClient.update(itflowDb, "DELETE FROM " + appr + " WHERE DOC_TYPE = 'CR' AND DOC_ID = :id", p);
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_VER") + " WHERE APP_ID = :id", p);
 		appWriteDao.deleteChildren(appId);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
 	}
@@ -239,5 +265,118 @@ class AppExecutionIT {
 		} finally {
 			pool.shutdownNow();
 		}
+	}
+
+	// ---- S10 R2：執行端退回與治理審查 ----
+
+	private static final AuthUser GOV = new AuthUser("S10GOV", "s10gov", "資訊治理", List.of("governance"), false);
+
+	/** 暫存一次再送治理審查，回送審後的 rowVerNo（2） */
+	private long createPendingReview() {
+		createApproved();
+		long ver = appExecutionService.save(appId,
+				draft(0L, List.of(new ExecutionRequest.CheckItem(1, true, null, APPLICANT_ID, null))), APPLICANT)
+				.rowVerNo();
+		return appExecutionService.save(appId, submit(ver, "2026-10-07 11:30"), APPLICANT).rowVerNo();
+	}
+
+	/** 補件用的完整表單（同 AppFlowResubmitIT） */
+	private static AppDraftRequest fullForm() {
+		return new AppDraftRequest("S10 整合測試執行（已補）", "P3", new AppDraftRequest.Applicant("資訊處", "1234",
+				"it@example.com"), true, false, "ONSITE", null, null, "新主旨", null, null, null, null, null, null, null,
+				null, null, List.of(new AppDraftRequest.Equipment("核心交換器", "A-1", null, null, null, null)),
+				List.of("關機", "換板"), null, null, null);
+	}
+
+	private void assumeFullFlow() {
+		assumeTrue(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_FLOW_STEP")
+				+ " WHERE FLOW_ID = 'full' AND STATUS = 1 AND IS_NOTIFY_ONLY = 0", Map.of()), "full 流程沒有啟用關卡，略過");
+	}
+
+	private long countAt(String table, int verNo) {
+		return count("SELECT COUNT(*) AS OK FROM " + schema.table(table) + " WHERE APP_ID = :id AND APP_VER_NO = :v",
+				Map.of("id", appId, "v", verNo));
+	}
+
+	@Test
+	void 完成條件_治理通過EXECUTED_結案後三支端點都409() {
+		long ver = createPendingReview();
+		assertThat(ver).isEqualTo(2L);
+
+		assertThatThrownBy(() -> appExecutionService.review(appId, new GovernanceReviewRequest(ver, "PASS", null), IDC))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThat(appIs("PENDING_REVIEW", 2L)).as("非治理 403 不加版本").isTrue();
+
+		AppExecutionService.SaveResult passed = appExecutionService.review(appId,
+				new GovernanceReviewRequest(ver, "PASS", "  "), GOV);
+		assertThat(passed.rowVerNo()).isEqualTo(3L);
+		assertThat(passed.statusCode()).isEqualTo("EXECUTED");
+		assertThat(appIs("EXECUTED", 3L)).isTrue();
+		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_APP_EVENT") + " WHERE APP_ID = :id"
+				+ " AND APP_VER_NO = 1 AND EVENT_CODE = 'GOV_PASS' AND USER_ID = :u AND MEMO IS NULL",
+				Map.of("id", appId, "u", GOV.userId()))).as("事件 GOV_PASS、空白意見存 null").isTrue();
+
+		assertThatThrownBy(() -> appExecutionService.review(appId, new GovernanceReviewRequest(3L, "PASS", null), GOV))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_REVIEW_NOT_PENDING);
+		assertThatThrownBy(() -> appExecutionService.save(appId, draft(3L, List.of()), IDC))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_EXEC_NOT_EXECUTABLE);
+		assertThatThrownBy(() -> appExecutionService.reject(appId, new ExecRejectRequest(3L, "重做"), IDC))
+				.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_REJECT_NOT_EXECUTABLE);
+		assertThat(appIs("EXECUTED", 3L)).as("409 都 rollback").isTrue();
+	}
+
+	@Test
+	void 治理退回REJECTED_補件後v1記GOV_RETURNED_v2執行資料從空白開始() {
+		assumeFullFlow();
+		long ver = createPendingReview();
+		assertThatThrownBy(() -> appExecutionService.review(appId, new GovernanceReviewRequest(ver, "RETURN", " "), GOV))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_REJECT_NEEDS_MEMO);
+
+		AppExecutionService.SaveResult returned = appExecutionService.review(appId,
+				new GovernanceReviewRequest(ver, "RETURN", "備份紀錄不完整"), GOV);
+		assertThat(returned.statusCode()).isEqualTo("REJECTED");
+		assertThat(appIs("REJECTED", 3L)).isTrue();
+
+		long newVer = appFlowService.resubmit(appId, new ResubmitRequest(3L, "已補備份紀錄", fullForm()), APPLICANT);
+		assertThat(newVer).isEqualTo(4L);
+		assertThat(appIs("IN_REVIEW", 4L)).isTrue();
+		List<AppVerRow> versions = appVerDao.findByApp(appId);
+		assertThat(versions).hasSize(1);
+		assertThat(versions.get(0).getAppVerNo()).isEqualTo(1);
+		assertThat(versions.get(0).getCloseStatusCode()).isEqualTo("GOV_RETURNED");
+		assertThat(versions.get(0).getVerReason()).isEqualTo("備份紀錄不完整");
+		assertThat(countAt("IM_APP_CHECK_LIST", 1)).as("v1 檢核表留著").isEqualTo(checkListCount);
+		assertThat(countAt("IM_APP_EXEC", 1)).isEqualTo(1);
+		assertThat(countAt("IM_APP_CHECK_LIST", 2)).as("v2 檢核表空白").isZero();
+		assertThat(countAt("IM_APP_EXEC", 2)).as("v2 執行結果空白").isZero();
+	}
+
+	@Test
+	void 執行端退回REJECTED_不清執行資料_補件後v1記EXEC_REJECTED() {
+		assumeFullFlow();
+		createApproved();
+		long ver = appExecutionService.save(appId,
+				draft(0L, List.of(new ExecutionRequest.CheckItem(1, true, null, APPLICANT_ID, null))), IDC).rowVerNo();
+
+		assertThatThrownBy(() -> appExecutionService.reject(appId, new ExecRejectRequest(ver, null), IDC))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_REJECT_NEEDS_MEMO);
+		assertThatThrownBy(() -> appExecutionService.reject(appId, new ExecRejectRequest(ver, "x"), OTHER))
+				.isInstanceOf(AccessDeniedException.class);
+		assertThat(appIs("IN_EXECUTION", 1L)).as("400／403 不加版本").isTrue();
+
+		long rejected = appExecutionService.reject(appId, new ExecRejectRequest(ver, "設備未到貨"), IDC);
+		assertThat(rejected).isEqualTo(2L);
+		assertThat(appIs("REJECTED", 2L)).isTrue();
+		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_APP_EVENT") + " WHERE APP_ID = :id"
+				+ " AND APP_VER_NO = 1 AND EVENT_CODE = 'EXEC_REJECT' AND USER_ID = :u",
+				Map.of("id", appId, "u", IDC.userId()))).isTrue();
+		assertThat(countAt("IM_APP_CHECK_LIST", 1)).as("退回不清檢核表").isEqualTo(checkListCount);
+		assertThat(countAt("IM_APP_EXEC", 1)).as("退回不清執行結果").isEqualTo(1);
+
+		appFlowService.resubmit(appId, new ResubmitRequest(2L, null, fullForm()), APPLICANT);
+		AppVerRow v1 = appVerDao.findByApp(appId).get(0);
+		assertThat(v1.getCloseStatusCode()).isEqualTo("EXEC_REJECTED");
+		assertThat(v1.getVerReason()).isEqualTo("設備未到貨");
+		assertThat(countAt("IM_APP_CHECK_LIST", 2)).as("v2 檢核表空白").isZero();
 	}
 }

@@ -39,7 +39,7 @@
 | 回合 | 範圍 | 狀態 |
 |------|------|------|
 | R1 後端執行 | ①～⑦、⑫。新增 `ExecutionRequest`（含檢核項 record）、`ExecutionValidator`（暫存與送審兩級檢核，純函式好測）、`AppExecutionService`；改 `AppWriteDao` 或新增 `ExecWriteDao`（展開檢核表、逐列 UPDATE、執行結果 upsert）、`AppFlowController`（或新 `AppExecutionController`）。測試：validator 各分支、service 權限／狀態／分流、controller 401／CSRF 403／200；IT：APPROVED → 暫存 IN_EXECUTION → 送審 PENDING_REVIEW、併發兩人執行一 200 一 409、非 idc_admin 非申請人 403 | 完成（2026-10-07；採新 `ExecWriteDao`＋新 `AppExecutionController`，執行人啟用檢查放 `UserDao.isActive`；IT 已寫、階段結束跑） |
-| R2 後端退回＋治理審查 | ⑧～⑩。新增 `GovernanceReviewRequest`；`AppExecutionService` 加 reject、review。測試：單元各分支；IT：完成條件全程（APPROVED → IN_EXECUTION → PENDING_REVIEW → EXECUTED）、GOV_RETURN → REJECTED 後補件 `IM_APP_VER.CLOSE_STATUS_CODE = GOV_RETURNED`、EXEC_REJECT → 補件 `EXEC_REJECTED` 且 v2 檢核表為空 | 未開始 |
+| R2 後端退回＋治理審查 | ⑧～⑩。新增 `GovernanceReviewRequest`；`AppExecutionService` 加 reject、review。測試：單元各分支；IT：完成條件全程（APPROVED → IN_EXECUTION → PENDING_REVIEW → EXECUTED）、GOV_RETURN → REJECTED 後補件 `IM_APP_VER.CLOSE_STATUS_CODE = GOV_RETURNED`、EXEC_REJECT → 補件 `EXEC_REJECTED` 且 v2 檢核表為空 | 完成（2026-10-07；另加 `ExecRejectRequest`、`POST /{id}/execution/reject` 與 `POST /{id}/governance-review` 掛在 `AppExecutionController`；通過意見空白存 null、退回不清 v1 檢核表與執行結果；IT 已寫、階段結束跑） |
 | R3 前端 | ⑪、⑬、⑮。新增 `ExecuteView.vue`、路由與 `router/names.ts`；改 `AppViewView.vue`（執行入口、治理審查面板、執行確認列從事件取值）、`api/apps.ts`、`types/app.ts`。測試：vitest 執行頁暫存／送審／退回／409 重載、檢視頁審查面板。**注意（R1 實作帶出）**：後端對 `done=true` 且沒帶 `doneAt` 的檢核項填伺服器現在時間，所以前端重存時必須把已存的 `doneAt` 原樣帶回，否則每次暫存都會把完成時間刷成當下；沒勾異常／後續追蹤時後端把對應說明存 null，前端取消勾選前可提示 | 未開始 |
 
 ## 測試要鎖的點
