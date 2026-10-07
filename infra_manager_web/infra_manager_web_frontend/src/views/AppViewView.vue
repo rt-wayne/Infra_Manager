@@ -9,6 +9,8 @@
             失敗 → toast 後端訊息並顯示錯誤文字（404「找不到申請單」）；401 由登入處理器導頁，本頁不另出 toast
             S4 審查修正：類別「其他」補充顯示為「類別（其他）：…」；長字串一律可斷行（1024 寬不出水平捲軸）；
             快速切換單號時丟棄過期回應；執行結果未填時「例外」「後續追蹤」顯示 —，不顯示成「無」
+            S6 回合一-2（2026-10-07）：附件下載鈕啟用——先 HEAD 確認（404 toast「找不到附件檔案」），再用 <a download>
+            交給瀏覽器下載（殼 jar 已串流透傳，大檔不進頁面記憶體）
 -->
 <template>
   <main>
@@ -260,10 +262,10 @@
         <h2>附件</h2>
         <p v-if="app.attachments.length === 0" class="muted">（沒有附件）</p>
         <template v-else>
-          <p class="sub">附件下載待開放</p>
           <ul class="files">
             <li v-for="f in app.attachments" :key="f.attachId">
-              <button class="quiet small" type="button" disabled title="附件下載待開放">下載</button>
+              <button class="quiet small" type="button" :disabled="downloading === f.attachId"
+                @click="download(f.attachId)">下載</button>
               <span class="fname">{{ f.fileName || '（未命名）' }}</span>
               <span class="sub">{{ kb(f.byteQty) }}・{{ labelOf(ATTACH_OWNER_LABELS, f.ownerType) }}・{{ f.uploadedAt ?? '' }}</span>
             </li>
@@ -308,7 +310,8 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import StatusPill from '../components/StatusPill.vue'
 import ToastHost from '../components/ToastHost.vue'
-import { getApp } from '../api/apps'
+import { AxiosError } from 'axios'
+import { attachmentUrl, checkAttachment, getApp } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
 import { APP_LIST_ROUTE } from '../router/names'
@@ -357,6 +360,31 @@ const actions = computed(() => (app.value ? ACTIONS.filter(a => app.value?.permi
 
 function notYet(): void {
   toast('此功能尚未開放', 'amber')
+}
+
+const downloading = ref<number | null>(null)
+
+/** HEAD 沒有本文，拿不到後端訊息，依狀態碼給文字 */
+async function download(attachId: number): Promise<void> {
+  const id = appId.value
+  downloading.value = attachId
+  try {
+    await checkAttachment(id, attachId)
+  } catch (e) {
+    if (!isUnauthorized(e)) {
+      const status = e instanceof AxiosError ? e.response?.status : undefined
+      toast(status === 404 ? '找不到附件檔案' : errorMessage(e), 'red')
+    }
+    return
+  } finally {
+    downloading.value = null
+  }
+  const a = document.createElement('a')
+  a.href = attachmentUrl(id, attachId)
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 function dash(v: string | null | undefined): string {

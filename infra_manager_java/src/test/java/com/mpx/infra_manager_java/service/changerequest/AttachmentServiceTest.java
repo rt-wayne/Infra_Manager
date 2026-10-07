@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 // 變更說明: 新增：附件下載服務的單元測試（S4，用 @TempDir 當附件根目錄）。鎖定：附件不屬於該單 404「找不到附件」、
 //           FILE_PATH 逸出根目錄 404（不洩漏存在與否）、索引有但檔案不在 404「附件檔案不存在」、根目錄未設定 500 類例外、
 //           正常情況回原始檔名／MIME／長度（長度以 DB 為準、MIME 空白退回 octet-stream）
+//           2026-10-07 S6 回合一-2：長度改以實體檔為準（DB 值不同仍以實際為準）、MIME 改由副檔名決定（不照 DB、白名單外 octet-stream）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,19 +62,38 @@ class AttachmentServiceTest {
 	}
 
 	@Test
-	void 正常下載回原始檔名MIME與DB記錄的長度() throws IOException {
+	void 正常下載回原始檔名_副檔名決定的MIME_實際檔案長度() throws IOException {
 		Path file = root.resolve("s4/IM20261006-907/a1.pdf");
 		Files.createDirectories(file.getParent());
 		Files.writeString(file, "hello", StandardCharsets.UTF_8);
-		when(attachDao.findByApp(APP)).thenReturn(List.of(row(1L, "s4/IM20261006-907/a1.pdf", 999L, "application/pdf",
+		when(attachDao.findByApp(APP)).thenReturn(List.of(row(1L, "s4/IM20261006-907/a1.pdf", 5L, "application/pdf",
 				"報價單.pdf")));
 
 		AttachmentFile f = service().open(APP, 1L);
 
 		assertThat(f.fileName()).isEqualTo("報價單.pdf");
 		assertThat(f.mimeType()).isEqualTo("application/pdf");
-		assertThat(f.length()).isEqualTo(999L);
+		assertThat(f.length()).isEqualTo(5L);
 		assertThat(f.resource().getContentAsString(StandardCharsets.UTF_8)).isEqualTo("hello");
+	}
+
+	@Test
+	void DB記錄的長度與實際不同時以實際檔案為準() throws IOException {
+		Files.writeString(root.resolve("b.pdf"), "hello", StandardCharsets.UTF_8);
+		when(attachDao.findByApp(APP)).thenReturn(List.of(row(6L, "b.pdf", 999L, "application/pdf", "b.pdf")));
+
+		assertThat(service().open(APP, 6L).length()).isEqualTo(5L);
+	}
+
+	@Test
+	void MIME不照DB值_白名單外副檔名回octet_stream() throws IOException {
+		Files.writeString(root.resolve("x.html"), "<script>", StandardCharsets.UTF_8);
+		Files.writeString(root.resolve("Y.PNG"), "png", StandardCharsets.UTF_8);
+		when(attachDao.findByApp(APP)).thenReturn(List.of(row(7L, "x.html", 8L, "text/html", "x.html"),
+				row(8L, "Y.PNG", 3L, "text/html", "y.png")));
+
+		assertThat(service().open(APP, 7L).mimeType()).isEqualTo("application/octet-stream");
+		assertThat(service().open(APP, 8L).mimeType()).isEqualTo("image/png");
 	}
 
 	@Test

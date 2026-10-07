@@ -72,7 +72,9 @@
 - 第 73 項附件根目錄未定，正式部署前一定要定
 
 ## 交接
-- 目前回合：一，拆兩半（2026-10-07）：**一-1 殼 jar 部分已完成**；**下一步：一-2**＝後端 N5（`Files.size`，與 DB 值不同寫 warn）、N6（下載 MIME 白名單外改 `application/octet-stream`）＋前端啟用下載按鈕（`AppViewView.vue` 附件區）。B7 手動（`-Xmx128m` 經 3201 下載 50 MB×3）留到回合三有上傳後一起做
+- 目前回合：**回合一已完成（2026-10-07）**；**下一步：回合三**（上傳端點，副檔名白名單直接用 `AttachmentTypes.isAllowed`）。B7 手動（`-Xmx128m` 經 3201 下載 50 MB×3）留到回合三有上傳後一起做
+- 一-2 已改動：新增 `AttachmentTypes`（⑧A 17 種副檔名 → MIME，取最後一個點、不分大小寫、隱藏檔／點在結尾／點在資料夾名都算沒副檔名；白名單外 `application/octet-stream`；回合三上傳共用）；`AttachmentService.open` 長度改 `Files.size`（讀不到 → 404「附件檔案不存在」，與 DB 值不同寫 warn，第 95 項 N5）、MIME 改由 `FILE_PATH` 副檔名查白名單（不再照 DB 值，第 95 項 N6）。前端 `apps.ts` 加 `attachmentUrl`／`checkAttachment`；`AppViewView.vue` 下載鈕啟用：先 HEAD 確認（404 toast「找不到附件檔案」、401 交給共用處理器、其他照 `errorMessage`），通過後用 `<a download>` 交給瀏覽器邊收邊寫檔。測試：`AttachmentTypesTest` 3、`AttachmentServiceTest` +2、`AppControllerTest` +1（HEAD 200 帶長度／404／401），後端 244 → 250；前端 `AppViewView.spec` +2，共 37。3201／3202 已用新版重啟
+- 一-2 自行決定（①A 依建議）：MIME 依 `FILE_PATH`（伺服器產生、上傳時已驗副檔名）而非 DB 的 MIME 欄或原始檔名；下載走「HEAD＋原生連結」兩次請求（只用 axios blob 會整檔進記憶體）。實機下載沒驗：wayne 密碼已被使用者改過、S4 樣本附件沒有實體檔，留到回合三上傳後一起測
 - 一-1 已改動：`ApiProxyController` 改全程串流（void 處理器、在 exchange callback 內同步寫 `HttpServletResponse`，64 KB 緩衝）；上限常數 `MAX_BODY` 1 MB／`MAX_MULTIPART_BODY` 51 MB（`multipart/` 開頭不分大小寫），Content-Length 超過直接 413 `{"message":"請求內容過大"}` 不打後端，chunked 邊轉邊計數；回應白名單加 Content-Length／Content-Disposition／X-Content-Type-Options／Cache-Control（第 83 項 ② 一併完成）；新增 `NoMultipartConfig`（同名 bean 關掉 multipart 解析）；`BackendClientConfig.build(builder, readTimeout)`。測試：`ApiProxyStreamingTest` 7（真 Tomcat＋JDK 假後端）、`ApiProxyControllerTest` +5（25 → 30），殼 jar 共 43；修正前實測 multipart 到後端 0 byte（應 307,369）。3201 已用新版重啟，實機超過 1 MB 回 413
 - 一-1 自行決定（①A 依建議）：multipart 用程式關（`NoMultipartConfig`）而非 `spring.servlet.multipart.enabled=false`——真檔 properties 不進 git，漏改會靜默壞掉；回應寫到一半後端斷線時丟不帶訊息的 `BrokenResponseException` 讓 Tomcat 中斷連線（原例外訊息含後端位址會進 ERROR log）；未寫出任何 byte 前失敗仍回 502
 - B6 量測結果（read timeout 縮 2 秒）：回應本文整段計入 read timeout（後端 header 先回、本文 3.3 秒才完 → 中斷）；上傳本文的時間不計入（3.3 秒慢速上傳 → 200 且完整）。正式 120 秒 ⇒ 經 3201 的下載整體上限 120 秒（50 MB 需約 3.5 Mbps 以上），上傳不受限；已登記細節調整期第 97 項

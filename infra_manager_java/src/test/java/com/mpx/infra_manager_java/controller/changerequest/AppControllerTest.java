@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           鎖定：三個端點未登入 401；列表參數（status／mine／from／to／page）正確轉成 AppListQuery 且回 JSON；
 //           日期格式錯誤 400「請求格式錯誤」；服務丟 400／404 時帶原訊息；下載回 Content-Disposition（UTF-8 檔名）、
 //           Content-Type、Content-Length、nosniff 與位元組內容；attachId 非數字 400
+//           2026-10-07 S6 回合一-2（Claude Opus 5.5）：下載端點的 HEAD（前端下載前先確認）：存在 200 帶 Content-Length、不存在 404、未登入 401
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -223,6 +225,25 @@ class AppControllerTest {
 		mockMvc.perform(get("/api/apps/IM20261006-907/attachments/7").session(session))
 				.andExpect(status().isNotFound())
 				.andExpect(content().json("{\"message\":\"" + AttachmentService.MSG_FILE_MISSING + "\"}"));
+	}
+
+	@Test
+	void 下載的HEAD_存在回200帶長度_不存在回404_未登入401() throws Exception {
+		MockHttpSession session = login();
+		byte[] bytes = { 1, 2, 3 };
+		when(attachmentService.open("IM20261006-907", 8L))
+				.thenReturn(new AttachmentFile(new ByteArrayResource(bytes), "a.pdf", "application/pdf", bytes.length));
+		when(attachmentService.open("IM20261006-907", 9L))
+				.thenThrow(new ApiNotFoundException(AttachmentService.MSG_FILE_MISSING));
+
+		// HEAD 的本文由 Tomcat 丟棄，MockMvc 不模擬這段，所以只驗狀態碼與長度
+		mockMvc.perform(head("/api/apps/IM20261006-907/attachments/8").session(session))
+				.andExpect(status().isOk())
+				.andExpect(header().longValue(HttpHeaders.CONTENT_LENGTH, bytes.length));
+		mockMvc.perform(head("/api/apps/IM20261006-907/attachments/9").session(session))
+				.andExpect(status().isNotFound());
+		mockMvc.perform(head("/api/apps/IM20261006-907/attachments/8"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test

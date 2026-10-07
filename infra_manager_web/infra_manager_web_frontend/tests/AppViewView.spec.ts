@@ -8,23 +8,26 @@
 //           S4 審查修正：類別「其他」補充的顯示；結果未填時例外／後續追蹤顯示 —；快速切換單號丟棄過期回應；
 //           「送審」改為只在事件紀錄表斷言（原斷言會被任何位置的同字命中）
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：測試資料補 rowVerNo、formOptionId（型別新增必填欄位）
+//           S6 回合一-2（2026-10-07）：下載鈕改為可用；下載先 HEAD 再開 <a download>、404 toast、401 不出 toast
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppViewView from '../src/views/AppViewView.vue'
-import { getApp } from '../src/api/apps'
+import { checkAttachment, getApp } from '../src/api/apps'
 import { useToast } from '../src/composables/useToast'
 import { APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 import type { AppDetail, AppPermissions } from '../src/types/app'
 
 vi.mock('../src/api/apps', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/api/apps')>()),
-  getApp: vi.fn()
+  getApp: vi.fn(),
+  checkAttachment: vi.fn()
 }))
 
 const getMock = vi.mocked(getApp)
+const checkMock = vi.mocked(checkAttachment)
 const Blank = { template: '<div />' }
 
 function makeRouter(): Router {
@@ -165,13 +168,54 @@ describe('AppViewView', () => {
 
     expect(text).toContain('拓樸圖.pdf')
     expect(text).toContain('2.0 KB')
-    expect(text).toContain('附件下載待開放')
+    expect(text).not.toContain('附件下載待開放')
     const download = wrapper.find('.files button')
-    expect(download.attributes('disabled')).toBeDefined()
+    expect(download.attributes('disabled')).toBeUndefined()
 
     const events = wrapper.findAll('table.grid').at(-1)
     expect(events?.text()).toContain('送審')
     expect(wrapper.find('.actions').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('下載：HEAD 確認後用 <a download> 開附件網址', async () => {
+    getMock.mockResolvedValue(detail())
+    checkMock.mockResolvedValue(undefined)
+    const clicked: string[] = []
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push(this.getAttribute('href') + '|' + this.hasAttribute('download'))
+    })
+    const { wrapper } = await mountView()
+
+    await wrapper.find('.files button').trigger('click')
+    await flushPromises()
+
+    expect(checkMock).toHaveBeenCalledWith('IM20261006-001', 9)
+    expect(clicked).toEqual(['/infra_manager_web/api/v1/apps/IM20261006-001/attachments/9|true'])
+    expect(document.querySelector('a[download]')).toBeNull()
+    click.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('下載：HEAD 404 出 toast「找不到附件檔案」、不開連結；401 不另出 toast', async () => {
+    getMock.mockResolvedValue(detail())
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const { wrapper } = await mountView()
+
+    checkMock.mockRejectedValueOnce(httpError(404, ''))
+    await wrapper.find('.files button').trigger('click')
+    await flushPromises()
+    expect(toastMsgs()).toContain('找不到附件檔案')
+
+    useToast().toasts.value.splice(0)
+    checkMock.mockRejectedValueOnce(httpError(401, '尚未登入'))
+    await wrapper.find('.files button').trigger('click')
+    await flushPromises()
+    expect(toastMsgs()).toEqual([])
+
+    expect(click).not.toHaveBeenCalled()
+    expect(wrapper.find('.files button').attributes('disabled')).toBeUndefined()
+    click.mockRestore()
     wrapper.unmount()
   })
 
