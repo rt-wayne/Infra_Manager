@@ -9,6 +9,8 @@ package com.mpx.infra_manager_web.config;
 //           host.properties 的 @PropertySource 原本掛在範本 ApiForwarder 上，隨其刪除搬到這裡；
 //           刻意不加 ignoreResourceNotFound：沒有 host.properties 就啟動失敗（與範本行為一致，快速失敗）
 //           2026-10-06 複審修正：固定 HTTP/1.1（JDK HttpClient 預設 HTTP/2，對 http:// 後端會多送 h2c 升級 header）
+//           2026-10-07 S6 回合一：抽出 build(builder, readTimeout) 給串流測試縮短逾時量測；實測 read timeout 涵蓋
+//                「等 header＋讀完整個回應本文」，不含上傳本文的時間 → 經殼 jar 的下載整體上限 120 秒
 // ============================================================
 
 import java.net.http.HttpClient;
@@ -29,13 +31,18 @@ public class BackendClientConfig {
 
 	@Bean
 	public RestClient backendRestClient(RestClient.Builder builder) {
+		return build(builder, READ_TIMEOUT);
+	}
+
+	/** 測試可縮短 read timeout 量測涵蓋範圍；其餘設定與正式相同 */
+	public static RestClient build(RestClient.Builder builder, Duration readTimeout) {
 		HttpClient httpClient = HttpClient.newBuilder()
 				.connectTimeout(CONNECT_TIMEOUT)
 				.version(HttpClient.Version.HTTP_1_1)
 				.followRedirects(HttpClient.Redirect.NEVER)
 				.build();
 		JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-		factory.setReadTimeout(READ_TIMEOUT);
+		factory.setReadTimeout(readTimeout);
 		return builder.requestFactory(factory).build();
 	}
 }

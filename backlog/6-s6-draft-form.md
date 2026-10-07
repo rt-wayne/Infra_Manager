@@ -72,7 +72,10 @@
 - 第 73 項附件根目錄未定，正式部署前一定要定
 
 ## 交接
-- 目前回合：二 b，因規模拆兩半（2026-10-07）：**二 b-1**＝編號計數器＋`POST /api/apps` 建草稿（主檔＋6 張子表 `CATG_MAP`／`CATG_OTHER`／`REASON_MAP`／`SCOPE_MAP`／`EQUIP`／`PLAN_STEP` 寫入、B8 長度檢查、套 `FLOW_POLICY`）＋`AppSeqIT`；**二 b-2**＝`PUT /api/apps/{id}`（樂觀鎖、只有申請人、非 DRAFT 409、子表刪除重建，共用 b-1 的寫入與檢查元件）。**二 b 全部完成，下一步：回合一（殼 jar 串流透傳；S4 已結案，⑨A 的前提成立）**，第一步照上方回合一「先加會失敗的 multipart 測試」
+- 目前回合：一，拆兩半（2026-10-07）：**一-1 殼 jar 部分已完成**；**下一步：一-2**＝後端 N5（`Files.size`，與 DB 值不同寫 warn）、N6（下載 MIME 白名單外改 `application/octet-stream`）＋前端啟用下載按鈕（`AppViewView.vue` 附件區）。B7 手動（`-Xmx128m` 經 3201 下載 50 MB×3）留到回合三有上傳後一起做
+- 一-1 已改動：`ApiProxyController` 改全程串流（void 處理器、在 exchange callback 內同步寫 `HttpServletResponse`，64 KB 緩衝）；上限常數 `MAX_BODY` 1 MB／`MAX_MULTIPART_BODY` 51 MB（`multipart/` 開頭不分大小寫），Content-Length 超過直接 413 `{"message":"請求內容過大"}` 不打後端，chunked 邊轉邊計數；回應白名單加 Content-Length／Content-Disposition／X-Content-Type-Options／Cache-Control（第 83 項 ② 一併完成）；新增 `NoMultipartConfig`（同名 bean 關掉 multipart 解析）；`BackendClientConfig.build(builder, readTimeout)`。測試：`ApiProxyStreamingTest` 7（真 Tomcat＋JDK 假後端）、`ApiProxyControllerTest` +5（25 → 30），殼 jar 共 43；修正前實測 multipart 到後端 0 byte（應 307,369）。3201 已用新版重啟，實機超過 1 MB 回 413
+- 一-1 自行決定（①A 依建議）：multipart 用程式關（`NoMultipartConfig`）而非 `spring.servlet.multipart.enabled=false`——真檔 properties 不進 git，漏改會靜默壞掉；回應寫到一半後端斷線時丟不帶訊息的 `BrokenResponseException` 讓 Tomcat 中斷連線（原例外訊息含後端位址會進 ERROR log）；未寫出任何 byte 前失敗仍回 502
+- B6 量測結果（read timeout 縮 2 秒）：回應本文整段計入 read timeout（後端 header 先回、本文 3.3 秒才完 → 中斷）；上傳本文的時間不計入（3.3 秒慢速上傳 → 200 且完整）。正式 120 秒 ⇒ 經 3201 的下載整體上限 120 秒（50 MB 需約 3.5 Mbps 以上），上傳不受限；已登記細節調整期第 97 項
 - 二 b-2 已改動：`ApiConflictException`＋`ApiExceptionHandler` 409；`AppLockRow`；`AppWriteDao.updateApp`（條件含版本、DRAFT、申請人、`STATUS=1`，`ROW_VER_NO+1`；與 `insertApp` 共用 `fields()`）／`findLockState`；`AppDraftService.update`（單號格式不對 404 → 缺 `rowVerNo` 400 → 檢查 → 依新優先等級重算 `FLOW_ID` → 更新 0 列時依現況分 404／403／409 → 子表刪除重建 → 回新版本）；`PUT /api/apps/{id}` 回 200 `{appId, rowVerNo}`。測試：`AppDraftServiceTest` +5、`AppDraftControllerTest` +3（後端 236 → 244）；`AppWriteDaoIT` +1（更新後版本 +1、舊版本與非申請人 0 列），測試 DB 實跑通過
 - 二 b-2 自行決定（①A 依建議）：409 分兩種訊息——「申請單已不是草稿，無法編輯」與「已在其他地方修改過」，前端都提示重新載入；編輯時 `FLOW_ID` 跟著新的優先等級重算（草稿還沒進流程，以存檔當下為準）；admin 不能編輯（⑤A）
 - 二 b-1 偏離施工計畫假設：**優先等級也是存草稿必填**（`PRIO_CODE` DB NOT NULL、流程由它決定），不只標題；`FLOW_ID` 沒設定的 PRIO 選項在 by_priority 下退回 `full`

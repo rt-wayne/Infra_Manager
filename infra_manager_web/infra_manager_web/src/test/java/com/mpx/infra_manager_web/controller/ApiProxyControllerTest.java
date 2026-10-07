@@ -12,6 +12,9 @@ package com.mpx.infra_manager_web.controller;
 //                context path 不會被算進後端路徑、base 結尾斜線自動去掉、剛好打 /api/v1、HEAD 轉 OPTIONS 不轉
 //           2026-10-06 第二輪複審：補 Content-Length 有帶、非 http(s) 位址回 502、502 的 log 記整條例外鏈
 //                （真 JDK 用戶端的行為另見 config/BackendClientConfigTest）
+//           2026-10-07 S6 回合一：本文上限邊界（JSON 1 MB、multipart 51 MB，剛好等於放行、多 1 byte 回 413 且不打後端；
+//                multipart 判斷不分大小寫）、回應 header 白名單（Content-Disposition 等透傳、其他不轉）
+//                （真 Tomcat 串流與 multipart 本文另見 ApiProxyStreamingTest）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -407,6 +410,73 @@ class ApiProxyControllerTest {
 		server.expect(requestTo(BASE + "/apps/")).andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
 
 		mockMvc.perform(get("/api/v1/apps/")).andExpect(status().isOk());
+		server.verify();
+	}
+
+	private static final String TOO_LARGE_JSON = "{\"message\":\"" + ApiProxyController.TOO_LARGE_MESSAGE + "\"}";
+
+	@Test
+	void jsonBody_exactlyAtLimit_isForwarded() throws Exception {
+		server.expect(requestTo(BASE + "/apps"))
+				.andExpect(header(HttpHeaders.CONTENT_LENGTH, String.valueOf(ApiProxyController.MAX_BODY)))
+				.andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+		mockMvc.perform(post("/api/v1/apps").contentType(MediaType.APPLICATION_JSON)
+						.content(new byte[(int) ApiProxyController.MAX_BODY]))
+				.andExpect(status().isOk());
+		server.verify();
+	}
+
+	@Test
+	void jsonBody_overLimit_returns413WithoutCallingBackend() throws Exception {
+		mockMvc.perform(post("/api/v1/apps").contentType(MediaType.APPLICATION_JSON)
+						.content(new byte[(int) ApiProxyController.MAX_BODY + 1]))
+				.andExpect(status().isPayloadTooLarge())
+				.andExpect(MockMvcResultMatchers.content().json(TOO_LARGE_JSON));
+		server.verify();
+	}
+
+	@Test
+	void multipartBody_overJsonLimitButWithinMultipartLimit_isForwarded() throws Exception {
+		server.expect(requestTo(BASE + "/apps/IM1/attachments"))
+				.andExpect(header(HttpHeaders.CONTENT_LENGTH, String.valueOf(ApiProxyController.MAX_MULTIPART_BODY)))
+				.andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+		mockMvc.perform(post("/api/v1/apps/IM1/attachments")
+						.header(HttpHeaders.CONTENT_TYPE, "multipart/form-data; boundary=x")
+						.content(new byte[(int) ApiProxyController.MAX_MULTIPART_BODY]))
+				.andExpect(status().isOk());
+		server.verify();
+	}
+
+	@Test
+	void multipartBody_overMultipartLimit_returns413WithoutCallingBackend() throws Exception {
+		mockMvc.perform(post("/api/v1/apps/IM1/attachments")
+						.header(HttpHeaders.CONTENT_TYPE, "Multipart/Form-Data; boundary=x")
+						.content(new byte[(int) ApiProxyController.MAX_MULTIPART_BODY + 1]))
+				.andExpect(status().isPayloadTooLarge())
+				.andExpect(MockMvcResultMatchers.content().json(TOO_LARGE_JSON));
+		server.verify();
+	}
+
+	@Test
+	void responseHeaderWhitelist_isPassedThrough_othersAreDropped() throws Exception {
+		HttpHeaders backendHeaders = new HttpHeaders();
+		backendHeaders.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''a.pdf");
+		backendHeaders.set("X-Content-Type-Options", "nosniff");
+		backendHeaders.set(HttpHeaders.CACHE_CONTROL, "private, no-store");
+		backendHeaders.set("X-Backend-Only", "secret");
+		server.expect(requestTo(BASE + "/attachments/1"))
+				.andRespond(withSuccess(new byte[] { 1, 2, 3 }, MediaType.APPLICATION_PDF).headers(backendHeaders));
+
+		mockMvc.perform(get("/api/v1/attachments/1"))
+				.andExpect(status().isOk())
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PDF_VALUE))
+				.andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''a.pdf"))
+				.andExpect(header().string("X-Content-Type-Options", "nosniff"))
+				.andExpect(header().string(HttpHeaders.CACHE_CONTROL, "private, no-store"))
+				.andExpect(header().doesNotExist("X-Backend-Only"))
+				.andExpect(MockMvcResultMatchers.content().bytes(new byte[] { 1, 2, 3 }));
 		server.verify();
 	}
 }

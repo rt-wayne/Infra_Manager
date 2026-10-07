@@ -23,9 +23,16 @@ package com.mpx.infra_manager_web.controller;
 //                base URL 去尾斜線並在建構時驗證、Cookie 讀全部 header、method 改為明列
 //           2026-10-06 第二輪複審修正：轉發本文補 Content-Length（原本一律 chunked）、後端位址限 http／https（ftp:// 原會變 500）、
 //                502 的 log 改記整條例外鏈（原只記最底層，ConnectException 會被顯示成 ClosedChannelException）
+//           2026-10-07 S6 回合一（裁示 ①A ③A）：請求與回應改全程串流（不再整包讀進記憶體），multipart 本文改能原樣轉到後端
+//                （解析器由 NoMultipartConfig 關掉，取代上方「首版不支援上傳」的例外）；
+//                本文上限：非 multipart 1 MB、multipart 51 MB，Content-Length 超過直接 413 不呼叫後端，沒帶長度的邊轉邊計數；
+//                回應 header 白名單加 Content-Length／Content-Disposition／X-Content-Type-Options／Cache-Control（亦完成第 83 項 ②）；
+//                回應已開始寫才斷線時不能改回 502，改丟例外讓連線中斷，瀏覽器才看得出檔案不完整
 // ============================================================
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -38,9 +45,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
@@ -49,6 +55,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.util.UriUtils;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
 @RequestMapping(ApiProxyController.PREFIX)
@@ -60,11 +67,18 @@ public class ApiProxyController {
 	static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
 	static final String MESSAGE = "後端服務呼叫失敗";
 	static final String BAD_REQUEST_MESSAGE = "請求格式錯誤";
+	static final String TOO_LARGE_MESSAGE = "請求內容過大";
+	static final long MAX_BODY = 1L << 20;
+	static final long MAX_MULTIPART_BODY = 51L << 20;
+	static final List<String> PASS_RESPONSE_HEADERS = List.of(HttpHeaders.CONTENT_DISPOSITION,
+			"X-Content-Type-Options", HttpHeaders.CACHE_CONTROL);
 
 	private static final Logger log = LoggerFactory.getLogger(ApiProxyController.class);
+	private static final int BUFFER_SIZE = 64 * 1024;
 	private static final MediaType JSON_UTF8 = new MediaType("application", "json", StandardCharsets.UTF_8);
 	private static final byte[] FAILURE_BODY = jsonMessage(MESSAGE);
 	private static final byte[] BAD_REQUEST_BODY = jsonMessage(BAD_REQUEST_MESSAGE);
+	private static final byte[] TOO_LARGE_BODY = jsonMessage(TOO_LARGE_MESSAGE);
 
 	private final RestClient restClient;
 	/** 已去尾斜線的後端位址；未設定或格式不合法時為 null，呼叫時回 502 */
@@ -80,69 +94,193 @@ public class ApiProxyController {
 
 	@RequestMapping(path = "/**", method = { RequestMethod.GET, RequestMethod.HEAD, RequestMethod.POST,
 			RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE })
-	public ResponseEntity<byte[]> proxy(HttpServletRequest request) throws IOException {
+	public void proxy(HttpServletRequest request, HttpServletResponse response) throws IOException {
 		HttpMethod method = HttpMethod.valueOf(request.getMethod());
 		String remoteAddr = request.getRemoteAddr();
 		String path = pathWithinPrefix(request);
 		if (path == null) {
-			return badRequest(method, request.getRequestURI(), remoteAddr, "path");
+			badRequest(response, method, request.getRequestURI(), remoteAddr, "path");
+			return;
 		}
 		String contentType = request.getHeader(HttpHeaders.CONTENT_TYPE);
 		if (contentType != null && !isValidMediaType(contentType)) {
-			return badRequest(method, path, remoteAddr, "content-type");
+			badRequest(response, method, path, remoteAddr, "content-type");
+			return;
 		}
 		if (base == null) {
 			log.warn("forward {} {} from {} failed: backend not configured", method, path, remoteAddr);
-			return badGateway();
+			writeJson(response, HttpStatus.BAD_GATEWAY, FAILURE_BODY);
+			return;
 		}
 		URI target = buildTarget(path, request.getQueryString());
 		if (target == null) {
-			return badRequest(method, path, remoteAddr, "uri");
+			badRequest(response, method, path, remoteAddr, "uri");
+			return;
+		}
+		long limit = isMultipart(contentType) ? MAX_MULTIPART_BODY : MAX_BODY;
+		long declared = request.getContentLengthLong();
+		if (declared > limit) {
+			tooLarge(response, method, path, remoteAddr);
+			return;
 		}
 
-		byte[] body = request.getInputStream().readAllBytes();
+		boolean hasBody = declared > 0 || (declared < 0 && request.getHeader(HttpHeaders.TRANSFER_ENCODING) != null);
+		Forward state = new Forward(limit);
 		try {
 			RestClient.RequestBodySpec spec = restClient.method(method).uri(target)
 					.headers(h -> copyRequestHeaders(request, h));
-			if (body.length > 0) {
-				// 帶長度：JDK 用戶端才會送 Content-Length 而非 chunked，後端的 Content-Length 快速 413 才用得到
-				spec.headers(h -> h.setContentLength(body.length));
+			if (hasBody) {
+				if (declared > 0) {
+					// 帶長度：JDK 用戶端才會送 Content-Length 而非 chunked，後端的 Content-Length 快速 413 才用得到
+					spec.headers(h -> h.setContentLength(declared));
+				}
 				// 直接寫出，不經 HttpMessageConverter（它會在沒有 Content-Type 時補 application/octet-stream）
-				spec.body(out -> out.write(body));
+				spec.body(out -> state.copyRequestBody(request.getInputStream(), out));
 			}
-			ResponseEntity<byte[]> resp = spec.exchange((req, res) -> toResponse(res.getStatusCode(), res.getHeaders(), res.getBody().readAllBytes()));
-			log.info("forward {} {} from {} -> {}", method, path, remoteAddr, resp.getStatusCode().value());
-			return resp;
+			Integer status = spec.exchange((req, res) -> state.tooLarge ? null : state.writeResponse(res, response));
+			if (status == null) {
+				tooLarge(response, method, path, remoteAddr);
+				return;
+			}
+			log.info("forward {} {} from {} -> {}", method, path, remoteAddr, status);
 		} catch (RestClientException e) {
-			log.warn("forward {} {} from {} failed: {}", method, path, remoteAddr, causeChain(e));
-			return badGateway();
-		}
-	}
-
-	private static ResponseEntity<byte[]> toResponse(HttpStatusCode status, HttpHeaders in, byte[] body) {
-		HttpHeaders out = new HttpHeaders();
-		String contentType = in.getFirst(HttpHeaders.CONTENT_TYPE);
-		if (contentType != null) {
-			out.set(HttpHeaders.CONTENT_TYPE, contentType);
-		} else if (body.length > 0) {
-			out.set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE);
-		}
-		for (String cookie : in.getOrEmpty(HttpHeaders.SET_COOKIE)) {
-			if (cookie.startsWith(COOKIE_PREFIX)) {
-				out.add(HttpHeaders.SET_COOKIE, cookie);
+			if (state.tooLarge) {
+				tooLarge(response, method, path, remoteAddr);
+			} else if (state.clientGone) {
+				log.info("forward {} {} from {} aborted by client", method, path, remoteAddr);
+			} else if (state.responseStarted) {
+				// 已開始回後端的狀態與 header：改不成 502，往外丟讓 Tomcat 中斷連線，瀏覽器才知道檔案不完整
+				// 不丟原例外：它的訊息含後端位址，Tomcat 會整段印進 ERROR log
+				log.warn("forward {} {} from {} broken mid-response: {}", method, path, remoteAddr, causeChain(e));
+				throw new BrokenResponseException();
+			} else {
+				log.warn("forward {} {} from {} failed: {}", method, path, remoteAddr, causeChain(e));
+				writeJson(response, HttpStatus.BAD_GATEWAY, FAILURE_BODY);
 			}
 		}
-		ResponseEntity.BodyBuilder builder = ResponseEntity.status(status).headers(out);
-		return body.length > 0 ? builder.body(body) : builder.build();
 	}
 
-	private static ResponseEntity<byte[]> badRequest(HttpMethod method, String path, String remoteAddr, String reason) {
+	/** 一次轉發的進度：請求本文計數、是否已開始寫回應、瀏覽器是否已斷線 */
+	private static final class Forward {
+
+		private final long limit;
+		private long count;
+		boolean tooLarge;
+		boolean responseStarted;
+		boolean clientGone;
+
+		Forward(long limit) {
+			this.limit = limit;
+		}
+
+		/** 邊讀邊轉；累計超過上限就中止（沒有 Content-Length 的 chunked 本文靠這裡擋） */
+		void copyRequestBody(InputStream in, OutputStream out) throws IOException {
+			byte[] buf = new byte[BUFFER_SIZE];
+			int n;
+			while ((n = in.read(buf)) != -1) {
+				count += n;
+				if (count > limit) {
+					tooLarge = true;
+					throw new IOException("request body over limit");
+				}
+				out.write(buf, 0, n);
+			}
+		}
+
+		/** 寫狀態、白名單 header，再把後端本文串流給瀏覽器；回後端狀態碼 */
+		Integer writeResponse(ClientHttpResponse res, HttpServletResponse out) throws IOException {
+			HttpHeaders in = res.getHeaders();
+			InputStream body = res.getBody();
+			int first = body.read();
+			responseStarted = true;
+			out.setStatus(res.getStatusCode().value());
+			String contentType = in.getFirst(HttpHeaders.CONTENT_TYPE);
+			if (contentType != null) {
+				out.setHeader(HttpHeaders.CONTENT_TYPE, contentType);
+			} else if (first != -1) {
+				out.setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_OCTET_STREAM_VALUE);
+			}
+			if (in.getContentLength() >= 0) {
+				out.setContentLengthLong(in.getContentLength());
+			}
+			for (String name : PASS_RESPONSE_HEADERS) {
+				String value = in.getFirst(name);
+				if (value != null) {
+					out.setHeader(name, value);
+				}
+			}
+			for (String cookie : in.getOrEmpty(HttpHeaders.SET_COOKIE)) {
+				if (cookie.startsWith(COOKIE_PREFIX)) {
+					out.addHeader(HttpHeaders.SET_COOKIE, cookie);
+				}
+			}
+			if (first != -1) {
+				OutputStream os = out.getOutputStream();
+				byte[] buf = new byte[BUFFER_SIZE];
+				buf[0] = (byte) first;
+				int pending = 1;
+				int n;
+				while (true) {
+					write(os, buf, pending);
+					if ((n = body.read(buf)) == -1) {
+						break;
+					}
+					pending = n;
+				}
+				flush(os);
+			}
+			return res.getStatusCode().value();
+		}
+
+		/** 寫給瀏覽器失敗 = 瀏覽器已斷線（例如取消下載），與後端讀取失敗分開記 */
+		private void write(OutputStream os, byte[] buf, int len) throws IOException {
+			try {
+				os.write(buf, 0, len);
+			} catch (IOException e) {
+				clientGone = true;
+				throw e;
+			}
+		}
+
+		private void flush(OutputStream os) throws IOException {
+			try {
+				os.flush();
+			} catch (IOException e) {
+				clientGone = true;
+				throw e;
+			}
+		}
+	}
+
+	/** 回應寫到一半後端斷了：不帶訊息與原因，避免後端位址進 log */
+	static final class BrokenResponseException extends IOException {
+
+		BrokenResponseException() {
+			super("backend response broken");
+		}
+	}
+
+	private static boolean isMultipart(String contentType) {
+		return contentType != null && contentType.regionMatches(true, 0, "multipart/", 0, "multipart/".length());
+	}
+
+	private static void tooLarge(HttpServletResponse response, HttpMethod method, String path, String remoteAddr)
+			throws IOException {
+		log.warn("reject {} {} from {}: too-large", method, path, remoteAddr);
+		writeJson(response, HttpStatus.PAYLOAD_TOO_LARGE, TOO_LARGE_BODY);
+	}
+
+	private static void badRequest(HttpServletResponse response, HttpMethod method, String path, String remoteAddr,
+			String reason) throws IOException {
 		log.warn("reject {} {} from {}: {}", method, path, remoteAddr, reason);
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(JSON_UTF8).body(BAD_REQUEST_BODY);
+		writeJson(response, HttpStatus.BAD_REQUEST, BAD_REQUEST_BODY);
 	}
 
-	private static ResponseEntity<byte[]> badGateway() {
-		return ResponseEntity.status(HttpStatus.BAD_GATEWAY).contentType(JSON_UTF8).body(FAILURE_BODY);
+	private static void writeJson(HttpServletResponse response, HttpStatus status, byte[] body) throws IOException {
+		response.setStatus(status.value());
+		response.setContentType(JSON_UTF8.toString());
+		response.setContentLength(body.length);
+		response.getOutputStream().write(body);
 	}
 
 	/**
