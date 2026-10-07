@@ -16,6 +16,9 @@
             簽核展開面板（意見欄＋同意／退件，退件前端先擋空白再 confirm）。成功 toast 後重新載入（不清空畫面）；
             409 一律 toast 後端訊息並重新載入讓使用者看到最新狀態；400／403 只 toast；401 交給登入處理器。
             其餘動作（補件、執行、治理審核、刪除、AI）仍是「此功能尚未開放」
+            S9 R3（Claude Opus 5.5，2026-10-07）：「補件重送」導到 /apps/:id/resubmit；「刪除申請單」展開面板（輸入單號＋原因，
+            單號一致且原因不空白才能按），成功導回列表並 toast；歷史版次區每一版底下列出該版的歷次簽核（approvalHistory，
+            含撤回、取消那幾輪）；流程動作失敗時 409／403／404 都重新載入（第 104 項 N2），重載後面板對應的權限沒了就收起（N1）
 -->
 <template>
   <main>
@@ -63,6 +66,19 @@
         <textarea id="reason" v-model="reason" rows="2" maxlength="2000" :disabled="busy"></textarea>
         <div class="actions">
           <button class="go" type="button" :disabled="busy" @click="recall">↩ 撤回到草稿</button>
+          <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
+        </div>
+      </section>
+
+      <section v-else-if="panel === 'delete'" class="card flow del" aria-label="刪除申請單">
+        <h2>刪除申請單</h2>
+        <p class="sub">{{ app.permissions.deleteMode === 'ADMIN' ? '管理員刪除：任何狀態都可刪，進行中的簽核會一併取消' : '尚無任何關卡簽核，申請人可自行刪除' }}；刪除後列表與待辦都不再顯示這張單</p>
+        <label for="del-id">請輸入申請單號 <b>{{ app.appId }}</b> 確認</label>
+        <input id="del-id" v-model="confirmId" type="text" autocomplete="off" :disabled="busy" />
+        <label for="del-reason">刪除原因</label>
+        <textarea id="del-reason" v-model="delReason" rows="2" maxlength="500" :disabled="busy"></textarea>
+        <div class="actions">
+          <button class="danger" type="button" :disabled="busy || !canConfirmDelete" @click="remove">✗ 確認刪除</button>
           <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
         </div>
       </section>
@@ -303,14 +319,36 @@
         </template>
       </section>
 
-      <section v-if="app.versions.length" class="card">
-        <h2>歷史版次</h2>
-        <ul class="plain">
-          <li v-for="v in app.versions" :key="v.verNo ?? 0">
-            <b>v{{ v.verNo }}</b>・{{ labelOf(VERSION_CLOSE_LABELS, v.closeStatusCode) || '—' }}・{{ v.snapAt ?? '' }}
-            <span v-if="v.reason"> — {{ v.reason }}</span>
-          </li>
-        </ul>
+      <section v-if="versionGroups.length" class="card">
+        <h2>歷史版次與歷次簽核</h2>
+        <div v-for="g in versionGroups" :key="g.verNo ?? 0" class="ver">
+          <p class="ver-head">
+            <b>v{{ g.verNo ?? '—' }}</b>
+            <template v-if="g.version">・{{ labelOf(VERSION_CLOSE_LABELS, g.version.closeStatusCode) || '—' }}・{{ g.version.snapAt ?? '' }}</template>
+            <template v-else>・目前版次</template>
+            <span v-if="g.version?.reason" class="pre"> — {{ g.version.reason }}</span>
+          </p>
+          <p v-if="g.approvals.length === 0" class="sub">（這一版沒有其他簽核紀錄）</p>
+          <div v-for="p in g.approvals" :key="p.apprId" class="past">
+            <p class="sub">
+              <span class="pill" :class="apprCls(p.statusCode)">{{ labelOf(APPR_STATUS_LABELS, p.statusCode) || '—' }}</span>
+              {{ p.startedAt ?? '' }} ～ {{ p.closedAt ?? '' }}
+            </p>
+            <table class="ptable grid">
+              <colgroup><col class="c-step" /><col class="c-who2" /><col class="c-st" /><col class="c-at" /><col /></colgroup>
+              <thead><tr><th>關卡</th><th>簽核人</th><th>狀態</th><th>日期</th><th>意見</th></tr></thead>
+              <tbody>
+                <tr v-for="s in p.steps" :key="(s.seqNo ?? 0) + (s.stepCode ?? '')">
+                  <td><b>{{ s.stepName }}</b></td>
+                  <td>{{ dash(s.deciderName) }}</td>
+                  <td><span class="pill" :class="stepCls(s.statusCode)">{{ labelOf(STEP_STATUS_LABELS, s.statusCode) || '—' }}</span></td>
+                  <td>{{ s.decidedAt ?? '' }}</td>
+                  <td class="pre">{{ s.memo ?? '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section v-if="app.events.length" class="card">
@@ -341,11 +379,12 @@ import { useRoute, useRouter } from 'vue-router'
 import StatusPill from '../components/StatusPill.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { AxiosError } from 'axios'
-import { attachmentUrl, checkAttachment, decideApp, getApp, recallApp, submitApp } from '../api/apps'
+import { attachmentUrl, checkAttachment, decideApp, deleteApp, getApp, recallApp, submitApp } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE } from '../router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE } from '../router/names'
 import {
+  APPR_STATUS_LABELS,
   ATTACH_OWNER_LABELS,
   EVENT_LABELS,
   LOC_SOURCE_LABELS,
@@ -356,7 +395,9 @@ import {
   type AppDetail,
   type AppEvent,
   type AppExecution,
+  type AppPastApproval,
   type AppPermissions,
+  type AppVersion,
   type Decision,
   type FlowActionResponse
 } from '../types/app'
@@ -391,20 +432,29 @@ const ACTIONS: { key: PermKey; label: string }[] = [
 
 const actions = computed(() => (app.value ? ACTIONS.filter(a => app.value?.permissions[a.key] === true) : []))
 
-type Panel = 'decide' | 'recall' | null
+type Panel = 'decide' | 'recall' | 'delete' | null
 
-/** 展開中的操作面板（簽核意見／撤回原因）；送審不需要面板，confirm 後直接送 */
+/** 展開中的操作面板（簽核意見／撤回原因／刪除確認）；送審不需要面板，confirm 後直接送 */
 const panel = ref<Panel>(null)
 const memo = ref('')
 const reason = ref('')
-/** 送審／撤回／簽核進行中：鎖住全部動作鈕，避免連點或同時送兩個動作 */
+const confirmId = ref('')
+const delReason = ref('')
+/** 送審／撤回／簽核／刪除進行中：鎖住全部動作鈕，避免連點或同時送兩個動作 */
 const busy = ref(false)
 
+/** 面板與開啟它所需的權限；重新載入後權限沒了就收起面板 */
+const PANEL_PERMS: Record<Exclude<Panel, null>, PermKey> = { decide: 'canDecide', recall: 'canRecall', delete: 'canDelete' }
+
 function panelOf(key: PermKey): Panel {
-  if (key === 'canDecide') return 'decide'
-  if (key === 'canRecall') return 'recall'
+  for (const [p, k] of Object.entries(PANEL_PERMS)) {
+    if (k === key) return p as Exclude<Panel, null>
+  }
   return null
 }
+
+/** 單號要一字不差（前後空白不算），原因不得空白；後端會再檢查一次 */
+const canConfirmDelete = computed(() => confirmId.value.trim() === appId.value && delReason.value.trim() !== '')
 
 /** 目前輪到的關卡名稱（序號最小的 PENDING），給簽核面板標題用 */
 const currentStepName = computed(() => {
@@ -416,6 +466,10 @@ const currentStepName = computed(() => {
 function act(key: PermKey): void {
   if (key === 'canEditDraft') {
     void router.push({ name: APP_EDIT_ROUTE, params: { id: appId.value } })
+    return
+  }
+  if (key === 'canResubmit') {
+    void router.push({ name: APP_RESUBMIT_ROUTE, params: { id: appId.value } })
     return
   }
   if (key === 'canSubmit') {
@@ -434,9 +488,15 @@ function statusOf(e: unknown): number | undefined {
   return e instanceof AxiosError ? e.response?.status : undefined
 }
 
+/** 409（版本過期、狀態已變、關卡被搶簽）、403（權限已變）、404（已被刪除）：畫面上的資料已過期，要重新載入 */
+function isStale(e: unknown): boolean {
+  const s = statusOf(e)
+  return s === 409 || s === 403 || s === 404
+}
+
 /**
  * 三個流程動作共用：帶目前的 rowVerNo 呼叫 API，成功就收面板、toast、重新載入；
- * 失敗 toast 後端訊息；409（版本過期、狀態已變、關卡被搶簽）另外重新載入，讓使用者直接看到最新狀態
+ * 失敗 toast 後端訊息；資料已過期（isStale）另外重新載入，讓使用者直接看到最新狀態
  */
 async function runFlow(okMsg: string, call: (rowVerNo: number) => Promise<FlowActionResponse>): Promise<void> {
   const a = app.value
@@ -452,7 +512,25 @@ async function runFlow(okMsg: string, call: (rowVerNo: number) => Promise<FlowAc
   } catch (e: unknown) {
     if (isUnauthorized(e)) return
     toast(errorMessage(e), 'red')
-    if (statusOf(e) === 409) await load(appId.value, true)
+    if (isStale(e)) await load(appId.value, true)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 刪除成功導回列表（這張單已查不到）；失敗同 runFlow */
+async function remove(): Promise<void> {
+  const a = app.value
+  if (!a || busy.value || !canConfirmDelete.value) return
+  busy.value = true
+  try {
+    await deleteApp(appId.value, { rowVerNo: a.rowVerNo, confirmId: confirmId.value.trim(), reason: delReason.value.trim() })
+    toast(`已刪除申請單 ${appId.value}`, 'teal')
+    await router.push({ name: APP_LIST_ROUTE })
+  } catch (e: unknown) {
+    if (isUnauthorized(e)) return
+    toast(errorMessage(e), 'red')
+    if (isStale(e)) await load(appId.value, true)
   } finally {
     busy.value = false
   }
@@ -537,6 +615,29 @@ const uRange = computed(() => {
   return ''
 })
 
+function apprCls(code: string | null): string {
+  switch (code) {
+    case 'APPROVED': return 'green'
+    case 'REJECTED': return 'red'
+    case 'PENDING': return 'blue'
+    default: return 'gray'
+  }
+}
+
+interface VersionGroup { verNo: number | null; version: AppVersion | null; approvals: AppPastApproval[] }
+
+/** 每個舊版次一組，底下掛該版的過去簽核；目前版次若有撤回、取消那幾輪也獨立成一組（排最後） */
+const versionGroups = computed<VersionGroup[]>(() => {
+  const a = app.value
+  if (!a) return []
+  const history = a.approvalHistory
+  const groups: VersionGroup[] = a.versions.map(v => ({ verNo: v.verNo, version: v, approvals: history.filter(h => h.verNo === v.verNo) }))
+  const known = new Set(a.versions.map(v => v.verNo))
+  const rest = history.filter(h => !known.has(h.verNo))
+  if (rest.length) groups.push({ verNo: a.verNo, version: null, approvals: rest })
+  return groups
+})
+
 function stepCls(code: string | null): string {
   switch (code) {
     case 'APPROVED': return 'green'
@@ -580,7 +681,7 @@ const govRow = computed<SignRow>(() => {
 /** 每次載入遞增；回應回來時編號不是最新就丟掉，避免慢回來的舊單蓋掉新單 */
 let seq = 0
 
-/** keep：動作成功或 409 後重新載入，保留畫面不閃「載入中」；換單號時不保留並收起面板 */
+/** keep：動作成功或資料過期後重新載入，保留畫面不閃「載入中」；換單號時不保留並收起面板 */
 async function load(id: string, keep = false): Promise<void> {
   const mine = ++seq
   if (!keep) {
@@ -588,11 +689,16 @@ async function load(id: string, keep = false): Promise<void> {
     panel.value = null
     memo.value = ''
     reason.value = ''
+    confirmId.value = ''
+    delReason.value = ''
   }
   error.value = ''
   try {
     const data = await getApp(id)
-    if (mine === seq) app.value = data
+    if (mine !== seq) return
+    app.value = data
+    // 重載後已沒有開這個面板的權限（例如關卡被別人簽走）：收起來，免得留著一個一定會失敗的按鈕
+    if (panel.value && data.permissions[PANEL_PERMS[panel.value]] !== true) panel.value = null
   } catch (e: unknown) {
     if (mine !== seq) return
     if (isUnauthorized(e)) {
@@ -630,7 +736,13 @@ main { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px 20px; }
 
 .flow label { display: block; font-weight: 700; margin: 10px 0 4px; }
 .flow textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; font-size: 17px; resize: vertical; }
-.flow textarea:disabled { background: var(--bg); }
+.flow textarea:disabled, .flow input:disabled { background: var(--bg); }
+.flow input { width: 100%; max-width: 360px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font: inherit; font-size: 17px; }
+.del { border-color: var(--red); }
+.ver + .ver { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ver-head { margin: 0 0 6px; }
+.past { margin: 6px 0 0 12px; min-width: 0; }
+.past .sub { margin: 4px 0; }
 .flow .actions { margin-top: 12px; }
 .go { background: var(--teal); border: 1px solid var(--teal); color: #fff; border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; }
 .danger { background: #fff; border: 1px solid var(--red); color: var(--red); border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; }

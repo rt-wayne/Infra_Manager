@@ -5,17 +5,19 @@
 //           驗：新增預設（申請人＝登入者、P3）；標題空白不打 API；新增 POST → 網址換編輯頁 → 上傳附件 → 回檢視頁；
 //           編輯還原欄位、拿掉已停用選項、PUT 帶 rowVerNo；400 帶 field 標紅該欄；409 出「重新載入」；
 //           非申請人／非草稿不給編輯；選檔預檢（類型、大小、總數）；附件上傳失敗留在清單、不回檢視頁、再存只重傳失敗的
+//           S9 R3（Claude Opus 5.5，2026-10-07）：補件模式——退件資訊、confirm、先上傳再補件（巢狀本文）、上傳失敗不送補件、
+//           非 canResubmit 不給補件、409 出「重新載入」
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppFormView from '../src/views/AppFormView.vue'
-import { createApp, getApp, getFormOptions, updateApp, uploadAttachment } from '../src/api/apps'
+import { createApp, getApp, getFormOptions, resubmitApp, updateApp, uploadAttachment } from '../src/api/apps'
 import { resetAuthStateForTest, useAuth } from '../src/composables/useAuth'
 import { useToast } from '../src/composables/useToast'
 import type { AppAttachment, AppDetail, FormOption, FormOptionsResponse } from '../src/types/app'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_NEW_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_NEW_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 
 vi.mock('../src/api/apps', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/api/apps')>()),
@@ -23,7 +25,8 @@ vi.mock('../src/api/apps', async importOriginal => ({
   getApp: vi.fn(),
   createApp: vi.fn(),
   updateApp: vi.fn(),
-  uploadAttachment: vi.fn()
+  uploadAttachment: vi.fn(),
+  resubmitApp: vi.fn()
 }))
 
 const optsMock = vi.mocked(getFormOptions)
@@ -31,6 +34,7 @@ const getMock = vi.mocked(getApp)
 const createMock = vi.mocked(createApp)
 const updateMock = vi.mocked(updateApp)
 const uploadMock = vi.mocked(uploadAttachment)
+const resubmitMock = vi.mocked(resubmitApp)
 const Blank = { template: '<div />' }
 const ID = 'IM20261007-001'
 
@@ -41,7 +45,8 @@ function makeRouter(): Router {
       { path: '/apps', name: APP_LIST_ROUTE, component: Blank },
       { path: '/apps/new', name: APP_NEW_ROUTE, component: AppFormView },
       { path: '/apps/:id', name: APP_VIEW_ROUTE, component: Blank },
-      { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: AppFormView }
+      { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: AppFormView },
+      { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: AppFormView }
     ]
   })
 }
@@ -92,6 +97,7 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
     planSteps: [], schedule: { start: null, end: null, estHours: null },
     location: { sourceCode: null, areaName: null, rackName: null, uRange: null, siteId: null, rackId: null, uStart: null, uEnd: null, omitReason: null },
     resubmitMemo: null, checklist: [], execution: null, approval: { apprId: null, statusCode: null, startedAt: null, closedAt: null, steps: [] },
+    approvalHistory: [],
     attachments: [attach(7, '舊檔.pdf'), { ...attach(8, '關卡檔.pdf'), ownerType: 'STEP' }],
     versions: [], events: [],
     permissions: { canDecide: false, canResubmit: false, canRecall: false, canExecute: false, canReview: false, canDelete: false, canAiReview: false, canSubmit: false, canEditDraft: true, deleteMode: null },
@@ -126,7 +132,7 @@ async function pick(wrapper: VueWrapper, files: File[]): Promise<void> {
 describe('AppFormView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    for (const m of [optsMock, getMock, createMock, updateMock, uploadMock]) m.mockReset()
+    for (const m of [optsMock, getMock, createMock, updateMock, uploadMock, resubmitMock]) m.mockReset()
     resetAuthStateForTest()
     useAuth().me.value = { loggedIn: true, userName: '王小明' }
     optsMock.mockResolvedValue(options())
@@ -299,5 +305,108 @@ describe('AppFormView', () => {
     expect(uploadMock.mock.calls[2][1].name).toBe('b.pdf')
     expect(router.currentRoute.value.fullPath).toBe(`/apps/${ID}`)
     wrapper.unmount()
+  })
+
+  describe('補件模式', () => {
+    function rejected(over: Partial<AppDetail> = {}): AppDetail {
+      const base = detail()
+      return detail({
+        statusCode: 'REJECTED',
+        rowVerNo: 7,
+        approval: {
+          apprId: 50, statusCode: 'REJECTED', startedAt: '2026-10-07 09:00', closedAt: '2026-10-07 10:00',
+          steps: [
+            { seqNo: 1, stepCode: 'MGR', stepName: '主管', stepMode: 'SEQUENTIAL', notifyOnly: false, statusCode: 'REJECTED',
+              deciderName: '李主管', decidedAt: '2026-10-07 10:00', memo: '請補回復計畫', candidateNames: ['李主管'] }
+          ]
+        },
+        permissions: { ...base.permissions, canEditDraft: false, canResubmit: true },
+        ...over
+      })
+    }
+
+    it('顯示退件資訊與補件說明欄；confirm 後先上傳附件再補件（巢狀本文帶 rowVerNo）', async () => {
+      getMock.mockResolvedValue(rejected())
+      uploadMock.mockResolvedValue(attach(30, 'plan.pdf'))
+      resubmitMock.mockResolvedValue({ appId: ID, rowVerNo: 8 })
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { wrapper, router } = await mountAt(`/apps/${ID}/resubmit`)
+
+      expect(wrapper.find('h1').text()).toContain('補件並重送')
+      expect(wrapper.find('.reject').text()).toContain('李主管')
+      expect(wrapper.find('.reject').text()).toContain('請補回復計畫')
+      expect(wrapper.find('button[type="submit"]').text()).toBe('補件並送審')
+
+      await pick(wrapper, [file('plan.pdf')])
+      await wrapper.find('#f-resub').setValue('已補回復計畫')
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+
+      expect(confirmSpy).toHaveBeenCalledOnce()
+      expect(uploadMock.mock.invocationCallOrder[0]).toBeLessThan(resubmitMock.mock.invocationCallOrder[0])
+      const [id, body] = resubmitMock.mock.calls[0]
+      expect(id).toBe(ID)
+      expect(body.rowVerNo).toBe(7)
+      expect(body.resubMemo).toBe('已補回復計畫')
+      expect(body.form.title).toBe('換交換器')
+      expect(body.form.rowVerNo).toBeUndefined()
+      expect(updateMock).not.toHaveBeenCalled()
+      expect(toastMsgs()).toContain('已補件並重新送審')
+      expect(router.currentRoute.value.fullPath).toBe(`/apps/${ID}`)
+      confirmSpy.mockRestore()
+      wrapper.unmount()
+    })
+
+    it('confirm 取消就不送；附件上傳失敗時不送補件', async () => {
+      getMock.mockResolvedValue(rejected())
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const { wrapper, router } = await mountAt(`/apps/${ID}/resubmit`)
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+      expect(resubmitMock).not.toHaveBeenCalled()
+
+      confirmSpy.mockReturnValue(true)
+      uploadMock.mockRejectedValueOnce(httpError(400, '不支援的檔案類型'))
+      await pick(wrapper, [file('a.pdf')])
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+      expect(uploadMock).toHaveBeenCalledOnce()
+      expect(resubmitMock).not.toHaveBeenCalled()
+      expect(wrapper.find('.bar-msg').text()).toContain('補件尚未送出')
+      expect(router.currentRoute.value.fullPath).toBe(`/apps/${ID}/resubmit`)
+      confirmSpy.mockRestore()
+      wrapper.unmount()
+    })
+
+    it('不是可補件狀態時不給補件', async () => {
+      const perms = rejected().permissions
+      getMock.mockResolvedValue(rejected({ permissions: { ...perms, canResubmit: false } }))
+      const a = await mountAt(`/apps/${ID}/resubmit`)
+      expect(a.wrapper.find('[role="alert"]').text()).toBe('只有申請人可以補件')
+      expect(a.wrapper.find('form').exists()).toBe(false)
+      a.wrapper.unmount()
+
+      getMock.mockResolvedValue(rejected({ statusCode: 'IN_REVIEW', permissions: { ...perms, canResubmit: false } }))
+      const b = await mountAt(`/apps/${ID}/resubmit`)
+      expect(b.wrapper.find('[role="alert"]').text()).toBe('申請單不是退件狀態，無法補件')
+      b.wrapper.unmount()
+    })
+
+    it('409 時出「重新載入」、不自動重載（保留剛改的內容）', async () => {
+      getMock.mockResolvedValue(rejected())
+      resubmitMock.mockRejectedValue(httpError(409, '申請單不是退件狀態，無法補件，請重新載入頁面'))
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const { wrapper } = await mountAt(`/apps/${ID}/resubmit`)
+      await wrapper.find('#f-title').setValue('我改過的標題')
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+
+      expect(getMock).toHaveBeenCalledOnce()
+      expect(wrapper.find<HTMLInputElement>('#f-title').element.value).toBe('我改過的標題')
+      expect(wrapper.find('.bar-msg').text()).toBe('申請單不是退件狀態，無法補件，請重新載入頁面')
+      expect(wrapper.findAll('button').some(b => b.text().startsWith('重新載入'))).toBe(true)
+      confirmSpy.mockRestore()
+      wrapper.unmount()
+    })
   })
 })

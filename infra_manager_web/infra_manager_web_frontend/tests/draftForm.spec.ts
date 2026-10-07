@@ -5,6 +5,7 @@
 //           驗：新增預設值；檢視回應還原成表單（日期格式、CATG 其他說明、步驟補滿 4 列、「不適用」預設字）；
 //           轉成本文（類別其他說明每個大類一筆、沒勾廠商不送廠商欄、非遠端不送連線方式、不適用沒寫原因送「不適用」、數字空字串轉 null）；
 //           耗時計算；副檔名規則與後端相同；附件預檢；400 field 只收安全字元
+//           S9 R3（Claude Opus 5.5，2026-10-07）：測試資料補 approvalHistory（型別新增必填欄位）
 // ============================================================
 import { describe, expect, it } from 'vitest'
 import {
@@ -39,7 +40,7 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
     schedule: { start: '2026-10-08 22:00', end: '2026-10-09 01:30', estHours: 3.5 },
     location: { sourceCode: null, areaName: null, rackName: null, uRange: null, siteId: null, rackId: null, uStart: null, uEnd: null, omitReason: '不適用' },
     resubmitMemo: null, checklist: [], execution: null, approval: { apprId: null, statusCode: null, startedAt: null, closedAt: null, steps: [] },
-    attachments: [], versions: [], events: [],
+    approvalHistory: [], attachments: [], versions: [], events: [],
     permissions: { canDecide: false, canResubmit: false, canRecall: false, canExecute: false, canReview: false, canDelete: false, canAiReview: false, canSubmit: false, canEditDraft: true, deleteMode: null },
     createdAt: null, updatedAt: null,
     ...over

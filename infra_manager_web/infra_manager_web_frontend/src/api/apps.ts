@@ -9,6 +9,7 @@
 //           上傳單次 timeout 600000 ms（施工計畫假設 #2：VPN／外點傳 50 MB），其餘呼叫維持 120000
 //           S7 R3（Claude Fable 5.1，2026-10-07）：加 submitApp／recallApp／decideApp（送審、撤回、簽核；
 //           body 都帶 rowVerNo，版本不符或狀態已變 409、非當事人 403、必填缺漏 400，訊息都由後端帶）
+//           S9 R3（Claude Opus 5.5，2026-10-07）：加 resubmitApp（退件單補件重送）／deleteApp（DELETE 帶 JSON 本文）
 // ============================================================
 import http from './http'
 import type {
@@ -19,9 +20,12 @@ import type {
   AppListFilter,
   AppListResponse,
   DecisionRequest,
+  DeleteRequest,
+  DeleteResponse,
   FlowActionRequest,
   FlowActionResponse,
-  FormOptionsResponse
+  FormOptionsResponse,
+  ResubmitRequest
 } from '../types/app'
 
 export const UPLOAD_TIMEOUT_MS = 600000
@@ -96,6 +100,16 @@ export function recallApp(appId: string, body: FlowActionRequest): Promise<FlowA
 /* POST /apps/{id}/decisions 目前關卡同意或退件（只限該關候選人）→ 200 { appId, rowVerNo } */
 export function decideApp(appId: string, body: DecisionRequest): Promise<FlowActionResponse> {
   return http.post<FlowActionResponse>(flowPath(appId, 'decisions'), body).then(r => r.data)
+}
+
+/* POST /apps/{id}/resubmit 補件重送（只限申請人、退件狀態）→ 200 { appId, rowVerNo }；必填缺漏 400 整筆不存 */
+export function resubmitApp(appId: string, body: ResubmitRequest): Promise<FlowActionResponse> {
+  return http.post<FlowActionResponse>(flowPath(appId, 'resubmit'), body).then(r => r.data)
+}
+
+/* DELETE /apps/{id} 軟刪除（admin 任何狀態；申請人限尚無人簽過且未退件）→ 200 { appId }；單號不符或原因空白 400 */
+export function deleteApp(appId: string, body: DeleteRequest): Promise<DeleteResponse> {
+  return http.delete<DeleteResponse>('/apps/' + encodeURIComponent(appId), { data: body }).then(r => r.data)
 }
 
 /* POST /apps/{id}/attachments 一次一檔（part 名 file）→ 201 附件資訊；onProgress 收 0～100 */

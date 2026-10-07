@@ -12,6 +12,9 @@
 //           附件副檔名白名單 ATTACH_EXTS（與後端 AttachmentTypes 一致，前端只做預檢）
 //           S7 R3（Claude Fable 5.1，2026-10-07）：新增簽核流程型別——送審／撤回本文 FlowActionRequest、簽核本文
 //           DecisionRequest（對應後端同名 record）、三者共用的回應 FlowActionResponse（{appId, rowVerNo}）
+//           S9 R3（Claude Opus 5.5，2026-10-07）：AppDetail 補 approvalHistory（歷次簽核 AppPastApproval，目前那筆以外、
+//           含撤回與取消的實例）；新增補件本文 ResubmitRequest（巢狀 {rowVerNo, resubMemo, form}）、刪除本文 DeleteRequest
+//           （{rowVerNo, confirmId, reason}）與回應 DeleteResponse；簽核實例狀態中文 APPR_STATUS_LABELS
 // ============================================================
 
 export type AppStatus =
@@ -114,6 +117,15 @@ export const STEP_STATUS_LABELS: Record<string, string> = {
   APPROVED: '同意',
   REJECTED: '退件',
   SKIPPED: '跳過',
+  CANCELLED: '已取消'
+}
+
+/** 簽核實例（IM_APPR）的狀態 */
+export const APPR_STATUS_LABELS: Record<string, string> = {
+  PENDING: '簽核中',
+  APPROVED: '核准',
+  REJECTED: '退件',
+  RECALLED: '已撤回',
   CANCELLED: '已取消'
 }
 
@@ -247,6 +259,16 @@ export interface AppApproval {
   steps: AppStep[]
 }
 
+/** 過去的簽核實例（退件、撤回、取消那幾輪）；verNo 是該輪所屬版次，steps 的 candidateNames 一律空陣列 */
+export interface AppPastApproval {
+  apprId: number
+  verNo: number | null
+  statusCode: string | null
+  startedAt: string | null
+  closedAt: string | null
+  steps: AppStep[]
+}
+
 export interface AppAttachment {
   attachId: number
   ownerType: string | null
@@ -325,6 +347,8 @@ export interface AppDetail {
   checklist: AppCheckItem[]
   execution: AppExecution | null
   approval: AppApproval
+  /** 依實例建立順序（舊到新） */
+  approvalHistory: AppPastApproval[]
   attachments: AppAttachment[]
   versions: AppVersion[]
   events: AppEvent[]
@@ -428,6 +452,24 @@ export interface DecisionRequest {
 export interface FlowActionResponse {
   appId: string
   rowVerNo: number
+}
+
+/** POST /apps/{id}/resubmit 本文：退件單改內容後重送；resubMemo 選填（上限 2000 字），form 與草稿存檔同格式（不帶 rowVerNo） */
+export interface ResubmitRequest {
+  rowVerNo: number
+  resubMemo?: string
+  form: AppDraftRequest
+}
+
+/** DELETE /apps/{id} 本文：confirmId 要與單號一致；reason 必填（上限 500 字） */
+export interface DeleteRequest {
+  rowVerNo: number
+  confirmId: string
+  reason: string
+}
+
+export interface DeleteResponse {
+  appId: string
 }
 
 /** 400 欄位過長時多帶 field（例 equipments[0].name）、max、actual */

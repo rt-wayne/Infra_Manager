@@ -11,13 +11,18 @@
             - 附件選檔時預檢副檔名／空檔／單檔大小／總檔數（本文送一半被 413 擋下時瀏覽器只會顯示連線錯誤）；拖放與貼上截圖留細節調整期
             - 400：後端有帶 field 就標紅該欄並捲過去（④B：不擋字數、CLOB 不用 maxlength）；409：提示並提供「重新載入」
             - 401 由登入處理器導頁，本頁不另出 toast
+            S9 R3（Claude Opus 5.5，2026-10-07）：第三種模式「補件重送」（/apps/:id/resubmit，依路由名稱判斷）：
+            - 只限退件單的申請人（permissions.canResubmit）；上方顯示退件資訊（退件那一關的意見，或執行／治理退回事件）
+            - 多一個「補件說明」欄（選填、上限 2000 字由後端擋）；按鈕「補件並送審」先 confirm
+            - 順序「先上傳附件、再補件」（裁示 ⑤A：退件單申請人可上傳；補件後就是審核中、不能再傳），
+              任一檔失敗就不送補件；409 或 403 比照編輯草稿顯示「重新載入」按鈕（不自動重載，免得洗掉剛改的內容）
 -->
 <template>
   <main ref="rootEl">
     <header class="hero">
       <div class="head">
-        <h1>{{ isEdit ? '編輯草稿' : '新增申請單' }} <span v-if="savedId" class="id">{{ savedId }}</span></h1>
-        <p class="sub">存草稿只要求標題與事件分級，其餘欄位送審時才檢查</p>
+        <h1>{{ TITLES[mode] }} <span v-if="savedId" class="id">{{ savedId }}</span></h1>
+        <p class="sub">{{ isResubmit ? '改好內容後按「補件並送審」，會成為新的版次並重新跑簽核' : '存草稿只要求標題與事件分級，其餘欄位送審時才檢查' }}</p>
       </div>
       <router-link class="link" :to="backTo">{{ savedId ? '← 回申請單' : '← 回列表' }}</router-link>
     </header>
@@ -26,6 +31,15 @@
     <p v-else-if="loading" class="card muted">載入中…</p>
 
     <form v-else class="paper" novalidate @submit.prevent="save">
+      <section v-if="isResubmit" class="card reject" aria-label="退件資訊">
+        <h2>退件資訊</h2>
+        <template v-if="reject">
+          <p class="reject-who">{{ reject.label }}<span v-if="reject.by">・{{ reject.by }}</span><span v-if="reject.at" class="sub">・{{ reject.at }}</span></p>
+          <p class="reject-memo">{{ reject.memo || '（沒有填寫意見）' }}</p>
+        </template>
+        <p v-else class="muted">（找不到退件紀錄）</p>
+      </section>
+
       <fieldset class="card sec">
         <legend>一、基本資料</legend>
         <div class="grid">
@@ -218,7 +232,7 @@
       </fieldset>
 
       <fieldset class="card sec">
-        <legend>附件 <span class="sub">（單檔 ≤ {{ upload.maxMb }} MB、最多 {{ upload.maxFiles }} 個；按「儲存草稿」後才上傳）</span></legend>
+        <legend>附件 <span class="sub">（單檔 ≤ {{ upload.maxMb }} MB、最多 {{ upload.maxFiles }} 個；按「{{ SUBMIT_LABELS[mode] }}」後才上傳）</span></legend>
         <ul v-if="existing.length" class="files">
           <li v-for="f in existing" :key="f.attachId">
             <span class="tag">已上傳</span>
@@ -245,12 +259,17 @@
         </ul>
       </fieldset>
 
+      <fieldset v-if="isResubmit" class="card sec">
+        <legend>補件說明 <span class="sub">（選填：這次改了什麼，給簽核人看）</span></legend>
+        <textarea id="f-resub" v-model="resubMemo" v-bind="fx('resubMemo')" rows="3" aria-label="補件說明" />
+      </fieldset>
+
       <div class="bar">
         <p v-if="formError" class="bar-msg" role="alert">{{ formError }}</p>
         <div class="bar-btns">
           <button v-if="conflict" class="quiet" type="button" :disabled="saving" @click="reload">重新載入（放棄這次修改）</button>
           <router-link class="quiet cancel" :to="backTo">取消</router-link>
-          <button class="go" type="submit" :disabled="saving">{{ saving ? savingText : '儲存草稿' }}</button>
+          <button class="go" type="submit" :disabled="saving">{{ saving ? savingText : SUBMIT_LABELS[mode] }}</button>
         </div>
       </div>
     </form>
@@ -264,16 +283,18 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 import { AxiosError } from 'axios'
 import ToastHost from '../components/ToastHost.vue'
-import { createApp, getApp, getFormOptions, updateApp, uploadAttachment } from '../api/apps'
+import { createApp, getApp, getFormOptions, resubmitApp, updateApp, uploadAttachment } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useAuth } from '../composables/useAuth'
 import { useToast } from '../composables/useToast'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from '../router/names'
 import {
   ATTACH_EXTS,
+  EVENT_LABELS,
   WORK_MODE_LABELS,
   type ApiFieldErrorBody,
   type AppAttachment,
+  type AppDetail,
   type AppDraftForm,
   type FormOption
 } from '../types/app'
@@ -302,6 +323,28 @@ interface QueueItem {
 }
 const QUEUE_LABELS: Record<QueueStatus, string> = { wait: '待上傳', uploading: '上傳中', error: '失敗' }
 
+type FormMode = 'new' | 'edit' | 'resubmit'
+const TITLES: Record<FormMode, string> = { new: '新增申請單', edit: '編輯草稿', resubmit: '補件並重送' }
+const SUBMIT_LABELS: Record<FormMode, string> = { new: '儲存草稿', edit: '儲存草稿', resubmit: '補件並送審' }
+
+interface RejectInfo {
+  label: string
+  by: string
+  at: string
+  memo: string
+}
+
+/** 退件來源：簽核退件看目前實例裡退件那一關；執行階段／治理複驗退回看最後一筆對應事件 */
+function rejectInfoOf(d: AppDetail): RejectInfo | null {
+  const step = d.approval.steps.find(s => s.statusCode === 'REJECTED')
+  if (step) {
+    return { label: `簽核退件（${step.stepName ?? '關卡'}）`, by: step.deciderName ?? '', at: step.decidedAt ?? '', memo: step.memo ?? '' }
+  }
+  const ev = [...d.events].reverse().find(e => e.code === 'EXEC_REJECT' || e.code === 'GOV_RETURN')
+  if (ev) return { label: EVENT_LABELS[ev.code ?? ''] ?? '退回', by: ev.userName ?? '', at: ev.at ?? '', memo: ev.memo ?? '' }
+  return null
+}
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuth()
@@ -313,7 +356,10 @@ const editId = computed(() => {
   const id = route.params.id
   return typeof id === 'string' ? id : ''
 })
-const isEdit = computed(() => editId.value !== '')
+const isResubmit = computed(() => route.name === APP_RESUBMIT_ROUTE)
+const mode = computed<FormMode>(() => (isResubmit.value ? 'resubmit' : editId.value !== '' ? 'edit' : 'new'))
+const resubMemo = ref('')
+const reject = ref<RejectInfo | null>(null)
 
 const form = ref<AppDraftForm>(emptyForm())
 const options = ref<FormOption[]>([])
@@ -390,10 +436,15 @@ async function load(): Promise<void> {
     options.value = opts.options
     upload.value = opts.upload
     if (detail) {
-      if (!detail.permissions.canEditDraft) {
+      if (isResubmit.value && !detail.permissions.canResubmit) {
+        loadError.value = detail.statusCode === 'REJECTED' ? '只有申請人可以補件' : '申請單不是退件狀態，無法補件'
+        return
+      }
+      if (!isResubmit.value && !detail.permissions.canEditDraft) {
         loadError.value = detail.statusCode === 'DRAFT' ? '只有申請人可以編輯草稿' : '申請單已不是草稿，無法編輯'
         return
       }
+      reject.value = isResubmit.value ? rejectInfoOf(detail) : null
       form.value = keepActive(formFromDetail(detail), opts.options)
       existing.value = detail.attachments.filter(a => a.ownerType === 'APP')
       applicantName.value = detail.applicant.name ?? ''
@@ -419,13 +470,15 @@ async function load(): Promise<void> {
   }
 }
 
-/** 新增存檔後網址換成編輯頁時單號已是 savedId，不重新載入（否則會清掉待上傳清單） */
+/** 新增存檔後網址換成編輯頁時單號已是 savedId，不重新載入（否則會清掉待上傳清單）；同一單號在編輯與補件間切換才重載 */
 watch(
-  editId,
-  id => {
-    if (id && id === savedId.value) return
+  [editId, isResubmit],
+  ([id], old) => {
+    const sameMode = old !== undefined && old[1] === isResubmit.value
+    if (id && id === savedId.value && sameMode) return
     queue.value = []
     rejects.value = []
+    resubMemo.value = ''
     void load()
   },
   { immediate: true }
@@ -557,6 +610,10 @@ async function save(): Promise<void> {
     void markField('title')
     return
   }
+  if (isResubmit.value) {
+    await resubmit()
+    return
+  }
   saving.value = true
   savingText.value = '儲存中…'
   const catgIds = catgs.value.map(c => c.formOptionId)
@@ -584,6 +641,42 @@ async function save(): Promise<void> {
   }
   formError.value = '草稿內容已儲存，但有附件上傳失敗；可移除失敗的檔案，或再按「儲存草稿」重試'
   toast('有附件上傳失敗', 'amber')
+}
+
+/**
+ * 補件：先上傳附件（補件後就是審核中、不能再傳），全部成功才送補件；任一檔失敗就停在本頁、內容不送出。
+ * 409（版本或狀態已變）與 403 不自動重載（會洗掉剛改的內容），比照編輯草稿顯示「重新載入（放棄這次修改）」
+ */
+async function resubmit(): Promise<void> {
+  if (!window.confirm('確定要補件並重新送審？送出後會成為新的版次，從第一關重新簽核。')) return
+  saving.value = true
+  const id = savedId.value
+  if (queue.value.length) {
+    const ok = await uploadQueue(id)
+    if (!ok) {
+      saving.value = false
+      formError.value = '有附件上傳失敗，補件尚未送出；可移除失敗的檔案，或再按「補件並送審」重試'
+      toast('有附件上傳失敗', 'amber')
+      return
+    }
+  }
+  savingText.value = '送出中…'
+  const catgIds = catgs.value.map(c => c.formOptionId)
+  try {
+    await resubmitApp(id, {
+      rowVerNo: rowVerNo.value ?? 0,
+      resubMemo: resubMemo.value,
+      form: toDraftRequest(form.value, catgIds)
+    })
+  } catch (e: unknown) {
+    saving.value = false
+    saveFailed(e)
+    if (statusOf(e) === 403) conflict.value = true
+    return
+  }
+  saving.value = false
+  toast('已補件並重新送審', 'teal')
+  await router.push({ name: APP_VIEW_ROUTE, params: { id } })
 }
 </script>
 
@@ -662,6 +755,10 @@ progress { width: 160px; height: 14px; }
 .bar-msg { flex: 1 1 300px; margin: 0; color: var(--red); font-weight: 700; overflow-wrap: anywhere; }
 .bar-btns { display: flex; flex-wrap: wrap; gap: 10px; }
 .cancel { text-decoration: none; display: inline-flex; align-items: center; }
+.reject { border-color: var(--red); background: #fdf2f2; }
+.reject h2 { margin: 0 0 6px; font-size: 19px; color: var(--red); }
+.reject-who { margin: 0 0 4px; font-weight: 700; }
+.reject-memo { margin: 0; white-space: pre-wrap; }
 .go { background: var(--teal); border: none; color: #fff; font-weight: 700; border-radius: 7px; padding: 10px 24px; font-size: 19px; cursor: pointer; min-width: 160px; }
 .go:hover:not(:disabled) { filter: brightness(1.08); }
 .go:disabled { opacity: .55; cursor: default; }

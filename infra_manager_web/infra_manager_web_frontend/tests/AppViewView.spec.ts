@@ -10,25 +10,29 @@
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：測試資料補 rowVerNo、formOptionId（型別新增必填欄位）
 //           S6 回合一-2（2026-10-07）：下載鈕改為可用；下載先 HEAD 再開 <a download>、404 toast、401 不出 toast
 //           S6 回合四（2026-10-07）：「編輯草稿」鈕導到 /apps/:id/edit
+//           S9 R3（Claude Opus 5.5，2026-10-07）：「尚未開放」改用還沒做的執行紀錄鈕（簽核、撤回 S7 已開放）；
+//           補件鈕導到 /apps/:id/resubmit；刪除面板（單號一致＋原因才能按、成功回列表、409 重載並收起面板）；歷次簽核掛在版次下
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppViewView from '../src/views/AppViewView.vue'
-import { checkAttachment, getApp } from '../src/api/apps'
+import { checkAttachment, deleteApp, getApp } from '../src/api/apps'
 import { useToast } from '../src/composables/useToast'
-import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
+import { APP_EDIT_ROUTE, APP_LIST_ROUTE, APP_RESUBMIT_ROUTE, APP_VIEW_ROUTE } from '../src/router/names'
 import type { AppDetail, AppPermissions } from '../src/types/app'
 
 vi.mock('../src/api/apps', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/api/apps')>()),
   getApp: vi.fn(),
-  checkAttachment: vi.fn()
+  checkAttachment: vi.fn(),
+  deleteApp: vi.fn()
 }))
 
 const getMock = vi.mocked(getApp)
 const checkMock = vi.mocked(checkAttachment)
+const deleteMock = vi.mocked(deleteApp)
 const Blank = { template: '<div />' }
 
 function makeRouter(): Router {
@@ -37,7 +41,8 @@ function makeRouter(): Router {
     routes: [
       { path: '/apps', name: APP_LIST_ROUTE, component: Blank },
       { path: '/apps/:id', name: APP_VIEW_ROUTE, component: AppViewView },
-      { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: Blank }
+      { path: '/apps/:id/edit', name: APP_EDIT_ROUTE, component: Blank },
+      { path: '/apps/:id/resubmit', name: APP_RESUBMIT_ROUTE, component: Blank }
     ]
   })
 }
@@ -99,6 +104,7 @@ function detail(over: Partial<AppDetail> = {}): AppDetail {
         { seqNo: 2, stepCode: 'IT', stepName: '資訊主管', stepMode: 'SEQUENTIAL', notifyOnly: false, statusCode: 'PENDING', deciderName: null, decidedAt: null, memo: null, candidateNames: ['趙經理'] }
       ]
     },
+    approvalHistory: [],
     attachments: [{ attachId: 9, ownerType: 'APP', ownerId: 'IM20261006-001', fileName: '拓樸圖.pdf', byteQty: 2048, mimeType: 'application/pdf', uploadedAt: '2026-10-06 09:40' }],
     versions: [],
     events: [{ eventId: 1, verNo: 1, code: 'SUBMIT', userName: '王小明', at: '2026-10-06 10:00', memo: null }],
@@ -132,6 +138,7 @@ describe('AppViewView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     getMock.mockReset()
+    deleteMock.mockReset()
   })
 
   afterEach(() => {
@@ -221,14 +228,96 @@ describe('AppViewView', () => {
     wrapper.unmount()
   })
 
-  it('動作鈕依 permissions 顯示，點了出「此功能尚未開放」', async () => {
-    getMock.mockResolvedValue(detail({ permissions: { ...NO_PERMS, canDecide: true, canRecall: true } }))
+  it('動作鈕依 permissions 顯示，還沒做的出「此功能尚未開放」', async () => {
+    getMock.mockResolvedValue(detail({ permissions: { ...NO_PERMS, canDecide: true, canRecall: true, canExecute: true } }))
     const { wrapper } = await mountView()
 
     const buttons = wrapper.findAll('.actions button')
-    expect(buttons.map(b => b.text())).toEqual(['簽核', '撤回到草稿'])
-    await buttons[0].trigger('click')
-    expect(toastMsgs()).toContain('此功能尚未開放')
+    expect(buttons.map(b => b.text())).toEqual(['簽核', '撤回到草稿', '填寫執行紀錄'])
+    const before = toastMsgs().filter(m => m === '此功能尚未開放').length
+    await buttons[2].trigger('click')
+    expect(toastMsgs().filter(m => m === '此功能尚未開放').length).toBe(before + 1)
+    wrapper.unmount()
+  })
+
+  it('補件重送鈕導到補件頁', async () => {
+    getMock.mockResolvedValue(detail({ statusCode: 'REJECTED', permissions: { ...NO_PERMS, canResubmit: true } }))
+    const { wrapper, router } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '補件重送')?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/apps/IM20261006-001/resubmit')
+    wrapper.unmount()
+  })
+
+  it('刪除：單號一致且有原因才能按；成功帶本文呼叫 API、回列表並 toast', async () => {
+    getMock.mockResolvedValue(detail({ rowVerNo: 6, permissions: { ...NO_PERMS, canDelete: true, deleteMode: 'ADMIN' } }))
+    deleteMock.mockResolvedValue({ appId: 'IM20261006-001' })
+    const { wrapper, router } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '刪除申請單')?.trigger('click')
+    const confirmBtn = () => wrapper.findAll('button').find(b => b.text().includes('確認刪除'))
+    expect(wrapper.find('.del').text()).toContain('管理員刪除')
+    expect(confirmBtn()?.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#del-id').setValue('IM20261006-002')
+    await wrapper.find('#del-reason').setValue('重複建單')
+    expect(confirmBtn()?.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('#del-id').setValue(' IM20261006-001 ')
+    expect(confirmBtn()?.attributes('disabled')).toBeUndefined()
+    await confirmBtn()?.trigger('click')
+    await flushPromises()
+
+    expect(deleteMock).toHaveBeenCalledWith('IM20261006-001', { rowVerNo: 6, confirmId: 'IM20261006-001', reason: '重複建單' })
+    expect(toastMsgs()).toContain('已刪除申請單 IM20261006-001')
+    expect(router.currentRoute.value.fullPath).toBe('/apps')
+    wrapper.unmount()
+  })
+
+  it('刪除 409：toast 後端訊息、重新載入，新狀態不能刪就收起面板', async () => {
+    getMock.mockResolvedValue(detail({ permissions: { ...NO_PERMS, canDelete: true, deleteMode: 'APPLICANT_PRE_REVIEW' } }))
+    deleteMock.mockRejectedValue(httpError(409, '申請單已在其他地方修改過，請重新載入頁面'))
+    const { wrapper, router } = await mountView()
+
+    await wrapper.findAll('.actions button').find(b => b.text() === '刪除申請單')?.trigger('click')
+    await wrapper.find('#del-id').setValue('IM20261006-001')
+    await wrapper.find('#del-reason').setValue('不需要了')
+    getMock.mockResolvedValue(detail({ rowVerNo: 1, permissions: NO_PERMS }))
+    await wrapper.findAll('button').find(b => b.text().includes('確認刪除'))?.trigger('click')
+    await flushPromises()
+
+    expect(toastMsgs()).toContain('申請單已在其他地方修改過，請重新載入頁面')
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.del').exists()).toBe(false)
+    expect(router.currentRoute.value.fullPath).toBe('/apps/IM20261006-001')
+    wrapper.unmount()
+  })
+
+  it('歷次簽核掛在所屬版次底下；目前版次撤回的那輪另成一組', async () => {
+    const step = { seqNo: 1, stepCode: 'MGR', stepName: '部門主管', stepMode: 'SEQUENTIAL', notifyOnly: false, decidedAt: '2026-10-05 11:00', candidateNames: [] }
+    getMock.mockResolvedValue(
+      detail({
+        verNo: 2,
+        versions: [{ verNo: 1, closeStatusCode: 'REJECTED', reason: '請補回復計畫', snapAt: '2026-10-05 12:00' }],
+        approvalHistory: [
+          { apprId: 3, verNo: 1, statusCode: 'REJECTED', startedAt: '2026-10-05 10:00', closedAt: '2026-10-05 11:00',
+            steps: [{ ...step, statusCode: 'REJECTED', deciderName: '李主管', memo: '請補回復計畫' }] },
+          { apprId: 4, verNo: 2, statusCode: 'RECALLED', startedAt: '2026-10-06 08:00', closedAt: '2026-10-06 08:30',
+            steps: [{ ...step, statusCode: 'CANCELLED', deciderName: null, decidedAt: null, memo: null }] }
+        ]
+      })
+    )
+    const { wrapper } = await mountView()
+
+    const groups = wrapper.findAll('.ver')
+    expect(groups).toHaveLength(2)
+    expect(groups[0].text()).toContain('v1')
+    expect(groups[0].text()).toContain('簽核退件')
+    expect(groups[0].find('.past').text()).toContain('李主管')
+    expect(groups[0].find('.past').text()).toContain('退件')
+    expect(groups[1].text()).toContain('目前版次')
+    expect(groups[1].find('.past').text()).toContain('已撤回')
     wrapper.unmount()
   })
 
