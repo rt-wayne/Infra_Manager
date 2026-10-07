@@ -17,9 +17,10 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 9 | S9 補件、版次、刪除：resubmit 寫 `IM_APP_VER` 快照；軟刪除。完成條件：補件後 v2，v1 簽核紀錄查得到 | `backlog/9-s9-resubmit-version-delete.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S7 簽核引擎（第 7 項）已於 2026-10-07 結案（階段 code review 零阻擋，非阻擋 9 項登記第 104 項）。依衝刺施工順序下一個是 S9 補件、版次、刪除（第 9 項）——開工先做開工分析（補件寫 `IM_APP_VER` 快照、新版次重開 `IM_APPR`、軟刪除與 `deleteMode`），列待確認項後施工。第 102 項（前端改版成示意頁）使用者說「晚點改」，排 S9 之前或之後由使用者決定，開工前要先裁示 (a)(b)(c)
+- 下一步：S9（第 9 項）2026-10-07 開工，開工分析 15 項決策已定（使用者裁示 ⑤A：REJECTED 單申請人可上傳附件、只開上傳），計畫見詳情檔。下一回合 R1 後端補件：`POST /api/apps/{id}/resubmit`（快照 `IM_APP_VER`、`CURR_VER_NO+1`、抽出 `startApproval`、放寬上傳條件），完成條件 IT 綠燈後 commit。第 102 項（前端改版成示意頁）使用者說「晚點改」，S9 R3 改同幾頁，排程由使用者決定，開工前要先裁示 (a)(b)(c)
 - 已改動：—
 - 要記得的事：**測試 DB 的 `IM_ROLE` 曾經是空的**（2026-10-07 S7 verify 時發現，V1 §8.1 預載 6 筆不在），由 Claude 以「不存在才插入」補回 6 筆、未動既有列；原因不明，使用者若知道是誰清的請告知。**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
 - 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認；第 102 項（前端改版成示意頁）開工前要使用者裁示 (a)(b)(c) 三項
@@ -53,7 +54,6 @@
 | 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則）。**S4 的「抽 5 張新舊畫面一致」驗收（2026-10-06 裁示 ②A）併入本項，匯入完成後對列表頁與檢視頁執行**。匯入時設備位置「不適用」原因要把舊代碼轉中文（`not_idc`、`rack_not_ready`，對照舊 `view.ejs:127`；S4 code review G8），否則檢視頁顯示英文代碼。匯入後要把 `IM_APP_SEQ.LAST_NO` 回填到各日期的最大號（S6 編號計數器只增不減，不回填則當天新單撞舊單；S6 開工分析範圍外發現） | 3 | — |
 | 5 | S5 表單設定與範本：`IM_FORM_OPTION`（V1 已建）；範本 CRUD（修改／刪除權限**開工前先裁示第 30 項**，涉及漏洞第 43 項）。完成條件：3 份範本可見；權限規則依第 30 項裁示結果驗證 | 5 | — |
 | 8 | S8 信件 outbox：`IM_MAIL_OUTBOX`、worker、樣板、admin 信件頁、測試信；定 `IM_SMTP_*` 細項。完成條件：三種信寄到測試信箱；SMTP 中斷 failed 可重寄 | 8 | — |
-| 9 | S9 補件、版次、刪除：resubmit 寫 `IM_APP_VER` 快照；軟刪除。完成條件：補件後 v2，v1 簽核紀錄查得到 | 9 | — |
 | 10 | S10 執行與治理審查：Execute、execute-reject、Review。完成條件：APPROVED→IN_EXECUTION→PENDING_REVIEW→EXECUTED；GOV_RETURN→REJECTED | 10 | — |
 | 11 | S11 AI 概念驗證與審查（**開工前先裁示第 17 項 AI 去留與第 18 項金鑰存放**；選 B 則本階段改為「舊報告唯讀顯示」）：先驗證 SDK 在正式通道的 structured output／tool 退回／自訂 header（第 40 項）；再做非同步審查 + hash 把關。完成條件：同單審兩次第二次略過；refusal 有單元測試；**概念驗證失敗就停下回報** | 11 | — |
 | 12 | S12 AI 對話、寄出、費用：messages、send、aiPricing、v1～v3 顯示。完成條件：三種舊格式正常顯示 | 12 | — |
