@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.template;
 //           單筆 FORM_JSON 往返後內容一致（CLOB 綁定）；建立者修改後名稱與內容更新；他人修改 403 且不寫入；
 //           admin 可刪；刪除後列表消失、單筆 404、再刪 404，DB 列 STATUS=0 且 UPDATE_BY 為刪除者。
 //           測試結束硬刪本測試建的範本列（只限本測試回傳的 TMPL_ID）
+//           2026-10-07 R3：套用兩次後次數 2、最後套用人為套用者、UPDATE_DATE 不動；已刪除的範本套用不累計
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -166,6 +167,27 @@ class TemplateServiceIT {
 		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_TMPL")
 				+ " WHERE TMPL_ID = :id AND STATUS = 0 AND UPDATE_BY = :u", Map.of("id", id, "u", ADMIN.userId())))
 				.isTrue();
+	}
+
+	@Test
+	void 套用兩次_次數與最後套用人更新_不動更新時間() {
+		String id = create("S5IT 套用", "內容");
+
+		templateService.recordUse(id, OWNER);
+		templateService.recordUse(id, OWNER);
+
+		TemplateDetail d = templateService.get(id, OTHER);
+		assertThat(d.useCnt()).isEqualTo(2);
+		assertThat(d.lastUsedAt()).isNotBlank();
+		assertThat(d.lastUsedByName()).isEqualTo(d.ownerName());
+		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_TMPL")
+				+ " WHERE TMPL_ID = :id AND UPDATE_DATE IS NULL AND LAST_USE_USER_ID = :u",
+				Map.of("id", id, "u", OWNER_ID))).isTrue();
+
+		templateService.delete(id, OWNER);
+		templateService.recordUse(id, OWNER);
+		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_TMPL")
+				+ " WHERE TMPL_ID = :id AND USE_CNT = 2", Map.of("id", id))).isTrue();
 	}
 
 	private boolean exists(String sql, Map<String, Object> params) {

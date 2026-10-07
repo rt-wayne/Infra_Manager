@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.template;
 //           修改／刪除——建立者與 admin 可以、其他人 403 且不寫入（第 43 項裁示 A）；找不到或 ID 格式不對 404；
 //           UPDATE 0 列（期間被刪）404。檢視——form 解析、canEdit、FORM_JSON 壞掉時 form 為 null；
 //           列表——updatedAt 沒改過時用建立時間
+//           2026-10-07 R3：套用——任何登入者都累計；範本不存在或 ID 格式不對時不丟例外（不擋建單）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -252,5 +253,20 @@ class TemplateServiceTest {
 		assertThat(first.canEdit()).isTrue();
 		assertThat(items.get(1).canEdit()).isFalse();
 		assertThat(items.get(1).useCnt()).isZero();
+	}
+
+	@Test
+	void 套用_任何登入者都累計_範本不存在或ID格式不對時不丟例外() {
+		when(templateDao.recordUse("tpl_firewall_upgrade", "T0002")).thenReturn(1);
+		service.recordUse("tpl_firewall_upgrade", OTHER);
+		verify(templateDao).recordUse("tpl_firewall_upgrade", "T0002");
+
+		when(templateDao.recordUse("tpl_gone", "T0002")).thenReturn(0);
+		service.recordUse("tpl_gone", OTHER);
+
+		service.recordUse("../etc", OTHER);
+		service.recordUse("", OTHER);
+		verify(templateDao, never()).recordUse(eq("../etc"), anyString());
+		verify(templateDao, never()).recordUse(eq(""), anyString());
 	}
 }

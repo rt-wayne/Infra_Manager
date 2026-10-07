@@ -4,6 +4,7 @@
 // 變更說明: 新增：範本列表頁測試（S5 R2）；以 vi.mock 替換 templates API，不打真後端
 //           驗：列出名稱／建立者／套用次數／最後套用；canEdit 才有修改與刪除；空清單提示；載入失敗出錯誤與 toast；
 //           刪除先 confirm、取消不打 API、確定後打 DELETE 並重新載入；刪除 403 出後端訊息；超過 20 筆分頁
+//           S5 R3：每列都有「建單」連到 /apps/new?template=<id>（不限建立者）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -12,7 +13,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import TemplateListView from '../src/views/TemplateListView.vue'
 import { deleteTemplate, listTemplates } from '../src/api/templates'
 import { useToast } from '../src/composables/useToast'
-import { TEMPLATE_EDIT_ROUTE, TEMPLATE_LIST_ROUTE, TEMPLATE_NEW_ROUTE } from '../src/router/names'
+import { APP_NEW_ROUTE, TEMPLATE_EDIT_ROUTE, TEMPLATE_LIST_ROUTE, TEMPLATE_NEW_ROUTE } from '../src/router/names'
 import type { TemplateListItem } from '../src/types/template'
 
 vi.mock('../src/api/templates', async importOriginal => ({
@@ -43,6 +44,7 @@ async function mountList(): Promise<VueWrapper> {
     history: createMemoryHistory(),
     routes: [
       { path: '/', component: Blank },
+      { path: '/apps/new', name: APP_NEW_ROUTE, component: Blank },
       { path: '/templates', name: TEMPLATE_LIST_ROUTE, component: TemplateListView },
       { path: '/templates/new', name: TEMPLATE_NEW_ROUTE, component: Blank },
       { path: '/templates/:id/edit', name: TEMPLATE_EDIT_ROUTE, component: Blank }
@@ -87,7 +89,8 @@ describe('TemplateListView', () => {
     expect(rows[0].find('a[href="/templates/a/edit"]').exists()).toBe(true)
     expect(rows[0].find('button').text()).toBe('刪除')
     expect(rows[1].text()).toContain('尚未套用')
-    expect(rows[1].find('a').exists()).toBe(false)
+    expect(rows[1].findAll('a').map(a => a.text())).toEqual(['建單'])
+    expect(rows[1].find('a').attributes('href')).toBe('/apps/new?template=b')
     expect(rows[1].find('button').exists()).toBe(false)
     expect(w.find('a[href="/templates/new"]').exists()).toBe(true)
   })

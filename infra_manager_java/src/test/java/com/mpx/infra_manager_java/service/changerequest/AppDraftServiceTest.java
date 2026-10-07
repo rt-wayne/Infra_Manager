@@ -7,6 +7,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           FLOW_ID，沒設定退回 full）；申請人與建立者為登入者、單號用台灣今天；檢查失敗時不取號也不寫入
 //           2026-10-07 回合二 b-2：加編輯草稿——成功時主檔→刪子表→重建子表的順序與新版本號；缺版本號 400、
 //           單號格式不對 404；更新 0 列時依現況分 404／403／409（非草稿、版本不符），且不動子表
+//           2026-10-07 S5 R3：用範本建單時寫完子表才累計套用次數；沒帶範本不呼叫；檢查失敗不累計
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +38,7 @@ import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
 import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
+import com.mpx.infra_manager_java.service.template.TemplateService;
 import com.mpx.infra_manager_java.util.TaiwanTime;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
@@ -50,8 +52,9 @@ class AppDraftServiceTest {
 	private final SysParamService sysParamService = mock(SysParamService.class);
 	private final AppSeqService appSeqService = mock(AppSeqService.class);
 	private final AppWriteDao appWriteDao = mock(AppWriteDao.class);
+	private final TemplateService templateService = mock(TemplateService.class);
 	private final AppDraftService service = new AppDraftService(formOptionDao, sysParamService, appSeqService,
-			appWriteDao);
+			appWriteDao, templateService);
 
 	private static FormOptionRow prio(String code, String flowId) {
 		FormOptionRow o = new FormOptionRow();
@@ -76,7 +79,7 @@ class AppDraftServiceTest {
 		when(sysParamService.flowPolicy()).thenReturn(SysParamService.POLICY_FULL_ONLY);
 		when(appSeqService.nextNo(eq("IM"), any(), eq("T0001"))).thenReturn(12);
 
-		String appId = service.create(request("新單", "P1"), USER);
+		String appId = service.create(request("新單", "P1"), USER, null);
 
 		String expected = AppSeqService.onlineAppId(TaiwanTime.today(), 12);
 		assertThat(appId).isEqualTo(expected);
@@ -86,13 +89,28 @@ class AppDraftServiceTest {
 				eq(TaiwanTime.startOf(TaiwanTime.today())), draft.capture());
 		assertThat(draft.getValue().title()).isEqualTo("新單");
 		verify(appWriteDao).insertChildren(expected, "T0001", draft.getValue());
+		verifyNoInteractions(templateService);
+	}
+
+	@Test
+	void 用範本建草稿_寫完子表後累計套用次數() {
+		when(formOptionDao.findActive()).thenReturn(OPTIONS);
+		when(sysParamService.flowPolicy()).thenReturn(SysParamService.POLICY_FULL_ONLY);
+		when(appSeqService.nextNo(anyString(), any(), anyString())).thenReturn(1);
+
+		service.create(request("新單", "P3"), USER, "tpl_firewall_upgrade");
+
+		InOrder order = inOrder(appWriteDao, templateService);
+		order.verify(appWriteDao).insertChildren(anyString(), eq("T0001"), any());
+		order.verify(templateService).recordUse("tpl_firewall_upgrade", USER);
 	}
 
 	@Test
 	void 檢查失敗不取號也不寫入() {
 		when(formOptionDao.findActive()).thenReturn(OPTIONS);
-		assertThatThrownBy(() -> service.create(request(" ", "P1"), USER)).isInstanceOf(ApiBadRequestException.class);
-		verifyNoInteractions(appSeqService, appWriteDao);
+		assertThatThrownBy(() -> service.create(request(" ", "P1"), USER, "tpl_firewall_upgrade"))
+				.isInstanceOf(ApiBadRequestException.class);
+		verifyNoInteractions(appSeqService, appWriteDao, templateService);
 	}
 
 	@Test
@@ -190,7 +208,7 @@ class AppDraftServiceTest {
 		when(formOptionDao.findActive()).thenReturn(OPTIONS);
 		when(sysParamService.flowPolicy()).thenReturn(SysParamService.POLICY_BY_PRIORITY);
 		when(appSeqService.nextNo(anyString(), any(), anyString())).thenReturn(1);
-		service.create(request("急件", "P2"), USER);
+		service.create(request("急件", "P2"), USER, null);
 		verify(appWriteDao).insertApp(anyString(), eq("p2_high"), eq("T0001"), any(), any());
 	}
 }

@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.template;
 //           表單內容以 AppDraftValidator 同一套規則檢查並正規化（標題可空），再序列化成 FORM_JSON；
 //           序列化用本類別專屬的 JsonMapper，避免全域 ObjectMapper 設定日後改變存進 DB 的格式。
 //           不做樂觀鎖（IM_TMPL 沒有版本欄，同舊系統後寫者為準）
+//           2026-10-07 R3：加 recordUse（建單交易內累計套用次數；範本不存在時略過、不擋建單）
 // ============================================================
 
 import java.security.SecureRandom;
@@ -111,6 +112,20 @@ public class TemplateService {
 			throw new ApiNotFoundException(MSG_NOT_FOUND);
 		}
 		log.info("範本刪除 tmplId={} userId={}", tmplId, me.userId());
+	}
+
+	/**
+	 * 用範本建單成功時累計套用次數；由 AppDraftService.create 在建單交易內呼叫。
+	 * ID 格式不對或範本已被刪除時只記 info、不中斷建單（草稿內容已由前端帶入，範本存不存在不影響這張單）
+	 */
+	public void recordUse(String tmplId, AuthUser me) {
+		if (tmplId == null || !TMPL_ID.matcher(tmplId).matches()) {
+			log.info("範本套用略過（ID 格式不符） userId={}", me.userId());
+			return;
+		}
+		if (templateDao.recordUse(tmplId, me.userId()) == 0) {
+			log.info("範本套用略過（範本不存在或已刪除） tmplId={} userId={}", tmplId, me.userId());
+		}
 	}
 
 	static boolean canEdit(TemplateRow r, AuthUser me) {

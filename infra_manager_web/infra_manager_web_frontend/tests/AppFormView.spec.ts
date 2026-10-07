@@ -7,6 +7,9 @@
 //           非申請人／非草稿不給編輯；選檔預檢（類型、大小、總數）；附件上傳失敗留在清單、不回檢視頁、再存只重傳失敗的
 //           S9 R3（Claude Opus 5.5，2026-10-07）：補件模式——退件資訊、confirm、先上傳再補件（巢狀本文）、上傳失敗不送補件、
 //           非 canResubmit 不給補件、409 出「重新載入」
+//           S5 R3（Claude Opus 5.5，2026-10-07）：套用範本——沒範本不顯示下拉、編輯不打範本清單；選範本帶入欄位、拿掉已停用選項、
+//           保留申請人聯絡資料、POST 帶 templateId；改過內容先 confirm、取消不套用；?template= 直接帶入；
+//           範本載入失敗出 toast 且下拉回原值；清單載入失敗只顯示提示
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -14,6 +17,8 @@ import { AxiosError, AxiosHeaders } from 'axios'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import AppFormView from '../src/views/AppFormView.vue'
 import { createApp, getApp, getFormOptions, resubmitApp, updateApp, uploadAttachment } from '../src/api/apps'
+import { getTemplate, listTemplates } from '../src/api/templates'
+import type { TemplateDetail, TemplateListItem } from '../src/types/template'
 import { resetAuthStateForTest, useAuth } from '../src/composables/useAuth'
 import { useToast } from '../src/composables/useToast'
 import type { AppAttachment, AppDetail, FormOption, FormOptionsResponse } from '../src/types/app'
@@ -29,6 +34,14 @@ vi.mock('../src/api/apps', async importOriginal => ({
   resubmitApp: vi.fn()
 }))
 
+vi.mock('../src/api/templates', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/api/templates')>()),
+  listTemplates: vi.fn(),
+  getTemplate: vi.fn()
+}))
+
+const listTplMock = vi.mocked(listTemplates)
+const getTplMock = vi.mocked(getTemplate)
 const optsMock = vi.mocked(getFormOptions)
 const getMock = vi.mocked(getApp)
 const createMock = vi.mocked(createApp)
@@ -132,10 +145,11 @@ async function pick(wrapper: VueWrapper, files: File[]): Promise<void> {
 describe('AppFormView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    for (const m of [optsMock, getMock, createMock, updateMock, uploadMock, resubmitMock]) m.mockReset()
+    for (const m of [optsMock, getMock, createMock, updateMock, uploadMock, resubmitMock, listTplMock, getTplMock]) m.mockReset()
     resetAuthStateForTest()
     useAuth().me.value = { loggedIn: true, userName: '王小明' }
     optsMock.mockResolvedValue(options())
+    listTplMock.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -185,6 +199,7 @@ describe('AppFormView', () => {
     expect(body.categoryItemIds).toEqual([101])
     expect(body.categoryOthers.map(c => c.formOptionId)).toEqual([100, 200])
     expect('rowVerNo' in body).toBe(false)
+    expect(createMock.mock.calls[0][1]).toBeUndefined()
     expect(uploadMock).toHaveBeenCalledTimes(2)
     expect(uploadMock.mock.calls[0][0]).toBe(ID)
     expect(replaced).toEqual([`/apps/${ID}/edit`, `/apps/${ID}`])
@@ -407,6 +422,133 @@ describe('AppFormView', () => {
       expect(wrapper.findAll('button').some(b => b.text().startsWith('重新載入'))).toBe(true)
       confirmSpy.mockRestore()
       wrapper.unmount()
+    })
+  })
+
+  describe('套用範本', () => {
+    const TPL = 'tpl_firewall_upgrade'
+
+    function tplItem(tmplId: string, tmplName: string): TemplateListItem {
+      return {
+        tmplId, tmplName, prioCode: 'P2', prioName: '高', prioColor: null, ownerName: '王小明',
+        useCnt: 0, lastUsedAt: null, lastUsedByName: null, updatedAt: '2026-10-07 10:00', canEdit: false
+      }
+    }
+
+    function tplDetail(): TemplateDetail {
+      return {
+        tmplId: TPL, tmplName: '防火牆韌體升級', ownerName: '王小明', useCnt: 7, lastUsedAt: null, lastUsedByName: null,
+        createdAt: '2026-05-01 09:30', updatedAt: '2026-05-01 09:30', canEdit: false,
+        form: {
+          title: '防火牆韌體升級', prioCode: 'P2', selfExec: true, supplierExec: false, workModeCode: 'ONSITE', remoteMethod: null,
+          supplier: null, workSubject: '韌體升級', impactDesc: null, workDetail: null, riskDesc: null, rollbackPlan: null,
+          categoryItemIds: [101, 999], categoryOthers: [], reasonIds: [300], otherReason: null, scopeIds: [],
+          equipments: [{ name: 'FW-01', assetNo: null, modelNo: null, serialNo: null, purpose: null, mgmtIp: null }],
+          planSteps: ['備份設定檔'], schedule: { estHours: 2 }, location: null
+        }
+      }
+    }
+
+    it('沒有範本時不顯示下拉；編輯模式不打範本清單', async () => {
+      const a = await mountAt('/apps/new')
+      expect(listTplMock).toHaveBeenCalledOnce()
+      expect(a.wrapper.find('#f-tpl').exists()).toBe(false)
+      a.wrapper.unmount()
+
+      listTplMock.mockClear()
+      getMock.mockResolvedValue(detail())
+      const b = await mountAt(`/apps/${ID}/edit`)
+      expect(listTplMock).not.toHaveBeenCalled()
+      expect(b.wrapper.find('#f-tpl').exists()).toBe(false)
+      b.wrapper.unmount()
+    })
+
+    it('選範本：帶入欄位、拿掉已停用選項、保留申請人聯絡資料；POST 帶 templateId', async () => {
+      listTplMock.mockResolvedValue([tplItem(TPL, '防火牆韌體升級'), tplItem('tpl_b', '另一份')])
+      getTplMock.mockResolvedValue(tplDetail())
+      createMock.mockResolvedValue({ appId: ID, rowVerNo: 0 })
+      const { wrapper } = await mountAt('/apps/new')
+      expect(wrapper.findAll('#f-tpl option').map(o => o.text())).toEqual(['— 不套用 —', '防火牆韌體升級', '另一份'])
+
+      await wrapper.find('#f-tel').setValue('5678')
+      const confirmSpy = vi.spyOn(window, 'confirm')
+      await wrapper.find('#f-tpl').setValue(TPL)
+      await flushPromises()
+
+      expect(confirmSpy).not.toHaveBeenCalled()
+      expect(getTplMock).toHaveBeenCalledWith(TPL)
+      expect(wrapper.find<HTMLInputElement>('#f-title').element.value).toBe('防火牆韌體升級')
+      expect(wrapper.find<HTMLInputElement>('#f-subject').element.value).toBe('韌體升級')
+      expect(wrapper.find<HTMLInputElement>('input[type="radio"][value="P2"]').element.checked).toBe(true)
+      expect(wrapper.find<HTMLInputElement>('#f-tel').element.value).toBe('5678')
+      expect(toastMsgs()).toContain('已套用範本「防火牆韌體升級」')
+
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+      const [body, templateId] = createMock.mock.calls[0]
+      expect(templateId).toBe(TPL)
+      expect(body.categoryItemIds).toEqual([101])
+      expect(body.reasonIds).toEqual([300])
+      expect(body.applicant.tel).toBe('5678')
+      expect(body.planSteps).toEqual(['備份設定檔', '', '', ''])
+      confirmSpy.mockRestore()
+      wrapper.unmount()
+    })
+
+    it('改過內容後選範本先 confirm；取消不套用、下拉回原值；改選「不套用」POST 不帶 templateId', async () => {
+      listTplMock.mockResolvedValue([tplItem(TPL, '防火牆韌體升級')])
+      getTplMock.mockResolvedValue(tplDetail())
+      createMock.mockResolvedValue({ appId: ID, rowVerNo: 0 })
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+      const { wrapper } = await mountAt('/apps/new')
+
+      await wrapper.find('#f-title').setValue('我自己寫的')
+      await wrapper.find('#f-tpl').setValue(TPL)
+      await flushPromises()
+      expect(confirmSpy).toHaveBeenCalledOnce()
+      expect(getTplMock).not.toHaveBeenCalled()
+      expect(wrapper.find<HTMLSelectElement>('#f-tpl').element.value).toBe('')
+      expect(wrapper.find<HTMLInputElement>('#f-title').element.value).toBe('我自己寫的')
+
+      await wrapper.find('#f-tpl').setValue(TPL)
+      await flushPromises()
+      expect(wrapper.find<HTMLInputElement>('#f-title').element.value).toBe('防火牆韌體升級')
+
+      await wrapper.find('#f-tpl').setValue('')
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+      expect(createMock.mock.calls[0][1]).toBeUndefined()
+      expect(createMock.mock.calls[0][0].title).toBe('防火牆韌體升級')
+      confirmSpy.mockRestore()
+      wrapper.unmount()
+    })
+
+    it('網址帶 ?template= 時直接帶入', async () => {
+      listTplMock.mockResolvedValue([tplItem(TPL, '防火牆韌體升級')])
+      getTplMock.mockResolvedValue(tplDetail())
+      const { wrapper } = await mountAt(`/apps/new?template=${TPL}`)
+      expect(getTplMock).toHaveBeenCalledWith(TPL)
+      expect(wrapper.find<HTMLSelectElement>('#f-tpl').element.value).toBe(TPL)
+      expect(wrapper.find<HTMLInputElement>('#f-subject').element.value).toBe('韌體升級')
+      wrapper.unmount()
+    })
+
+    it('範本載入失敗出 toast、下拉回原值；清單載入失敗只顯示提示、仍可填寫', async () => {
+      listTplMock.mockResolvedValue([tplItem(TPL, '防火牆韌體升級')])
+      getTplMock.mockRejectedValue(httpError(404, '找不到範本，可能已被刪除'))
+      const a = await mountAt('/apps/new')
+      await a.wrapper.find('#f-tpl').setValue(TPL)
+      await flushPromises()
+      expect(toastMsgs()).toContain('找不到範本，可能已被刪除')
+      expect(a.wrapper.find<HTMLSelectElement>('#f-tpl').element.value).toBe('')
+      a.wrapper.unmount()
+
+      listTplMock.mockRejectedValue(httpError(500, '後端錯誤'))
+      const b = await mountAt('/apps/new')
+      expect(b.wrapper.text()).toContain('範本清單載入失敗，可直接填寫')
+      expect(b.wrapper.find('#f-title').exists()).toBe(true)
+      expect(toastMsgs()).not.toContain('後端錯誤')
+      b.wrapper.unmount()
     })
   })
 })

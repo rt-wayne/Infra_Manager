@@ -18,6 +18,10 @@
               任一檔失敗就不送補件；409 或 403 比照編輯草稿顯示「重新載入」按鈕（不自動重載，免得洗掉剛改的內容）
             S5 R2（Claude Opus 5.5，2026-10-07）：一～四區塊原樣抽成 components/DraftFields.vue（kind="app"，與範本編輯頁共用），
             畫面與行為不變；keepActive、MAX_ROWS 移到 utils/draftForm
+            S5 R3（Claude Opus 5.5，2026-10-07）：新增模式最上方加「套用範本」下拉（同舊系統位置），也接受 ?template=<id>：
+            - 就地填入、不重載頁面（舊系統整頁重載會丟掉已填內容）；改過內容先 confirm；申請人聯絡資料與預定時間保留
+            - 已停用的選項自動拿掉（同編輯還原）；範本清單載入失敗只顯示一行提示、不擋填寫
+            - 第一次存檔 POST 帶 templateId，後端同交易累計套用次數；之後存檔走 PUT 不再累計
 -->
 <template>
   <main ref="rootEl">
@@ -40,6 +44,15 @@
           <p class="reject-memo">{{ reject.memo || '（沒有填寫意見）' }}</p>
         </template>
         <p v-else class="muted">（找不到退件紀錄）</p>
+      </section>
+
+      <section v-if="mode === 'new' && (templates.length || tplListError)" class="card tpl" aria-label="套用範本">
+        <label for="f-tpl">套用範本 <span class="sub">（選填：選取後自動填入欄位，申請人聯絡資料與預定時間保留，其餘仍可再修改）</span></label>
+        <select id="f-tpl" :value="tplId" :disabled="applying || saving" @change="onPickTemplate">
+          <option value="">— 不套用 —</option>
+          <option v-for="t in templates" :key="t.tmplId" :value="t.tmplId">{{ t.tmplName }}</option>
+        </select>
+        <p v-if="tplListError" class="sub">{{ tplListError }}</p>
       </section>
 
       <DraftFields v-model="form" :options="options" :bad-field="badField" kind="app" :applicant-name="applicantName" />
@@ -98,6 +111,7 @@ import { AxiosError } from 'axios'
 import ToastHost from '../components/ToastHost.vue'
 import DraftFields from '../components/DraftFields.vue'
 import { createApp, getApp, getFormOptions, resubmitApp, updateApp, uploadAttachment } from '../api/apps'
+import { getTemplate, listTemplates } from '../api/templates'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useAuth } from '../composables/useAuth'
 import { useToast } from '../composables/useToast'
@@ -111,8 +125,10 @@ import {
   type AppDraftForm,
   type FormOption
 } from '../types/app'
+import type { TemplateListItem } from '../types/template'
 import { emptyForm, formFromDetail, keepActive, precheckFile, safeFieldPath, toDraftRequest } from '../utils/draftForm'
 import { kb } from '../utils/format'
+import { formFromTemplate } from '../utils/templateForm'
 
 const ACCEPT = ATTACH_EXTS.map(e => '.' + e).join(',')
 
@@ -185,6 +201,19 @@ const queue = ref<QueueItem[]>([])
 const rejects = ref<string[]>([])
 let fileSeq = 0
 
+/** 套用範本（只有新增模式）：清單載入失敗不擋填寫；tplId 為目前套用的範本，第一次存檔時帶給後端累計次數 */
+const templates = ref<TemplateListItem[]>([])
+const tplListError = ref('')
+const tplId = ref('')
+const applying = ref(false)
+/** 上次載入或套用後的內容；不同代表使用者改過，套用前要 confirm */
+let baseline = ''
+
+/** 套用時保留的欄位不算進「改過」：申請人聯絡資料與預定開始／結束時間 */
+function contentKey(f: AppDraftForm): string {
+  return JSON.stringify({ ...f, deptName: '', tel: '', email: '', start: '', end: '' })
+}
+
 const backTo = computed<RouteLocationRaw>(() =>
   savedId.value ? { name: APP_VIEW_ROUTE, params: { id: savedId.value } } : { name: APP_LIST_ROUTE }
 )
@@ -209,7 +238,11 @@ async function load(): Promise<void> {
   conflict.value = false
   badField.value = null
   try {
-    const [opts, detail] = await Promise.all([getFormOptions(), id ? getApp(id) : Promise.resolve(null)])
+    const [opts, detail, tpls] = await Promise.all([
+      getFormOptions(),
+      id ? getApp(id) : Promise.resolve(null),
+      id ? Promise.resolve(null) : listTemplates().catch((): null => null)
+    ])
     if (mine !== seq) return
     options.value = opts.options
     upload.value = opts.upload
@@ -234,6 +267,12 @@ async function load(): Promise<void> {
       applicantName.value = auth.userName.value
       rowVerNo.value = null
       savedId.value = ''
+      templates.value = tpls ?? []
+      tplListError.value = tpls ? '' : '範本清單載入失敗，可直接填寫'
+      tplId.value = ''
+      baseline = contentKey(form.value)
+      const q = route.query.template
+      if (typeof q === 'string' && q !== '') await applyTemplate(q)
     }
   } catch (e: unknown) {
     if (mine !== seq) return
@@ -264,6 +303,45 @@ watch(
 
 function reload(): void {
   void load()
+}
+
+/** 範本內容填入表單（已停用選項拿掉）；申請人聯絡資料與預定時間保留目前值。成功回 true */
+async function applyTemplate(id: string): Promise<boolean> {
+  const mine = seq
+  applying.value = true
+  try {
+    const d = await getTemplate(id)
+    if (mine !== seq) return false
+    const cur = form.value
+    form.value = {
+      ...keepActive(formFromTemplate(d.form), options.value),
+      deptName: cur.deptName, tel: cur.tel, email: cur.email, start: cur.start, end: cur.end
+    }
+    tplId.value = d.tmplId
+    baseline = contentKey(form.value)
+    toast(`已套用範本「${d.tmplName}」`, 'teal')
+    return true
+  } catch (e: unknown) {
+    if (mine === seq && !isUnauthorized(e)) toast(errorMessage(e, '範本載入失敗，請稍後再試'), 'red')
+    return false
+  } finally {
+    applying.value = false
+  }
+}
+
+/** 下拉選了範本：改過內容先 confirm；取消或套用失敗時下拉回到原本的值。選「不套用」只取消累計，不清內容 */
+async function onPickTemplate(e: Event): Promise<void> {
+  const sel = e.target as HTMLSelectElement
+  const next = sel.value
+  if (next === '') {
+    tplId.value = ''
+    return
+  }
+  if (contentKey(form.value) !== baseline && !window.confirm('套用範本會覆蓋目前填寫的內容（申請人聯絡資料與預定時間保留），確定要套用？')) {
+    sel.value = tplId.value
+    return
+  }
+  if (!(await applyTemplate(next))) sel.value = tplId.value
 }
 
 function onPick(e: Event): void {
@@ -376,7 +454,7 @@ async function save(): Promise<void> {
       const r = await updateApp(savedId.value, toDraftRequest(form.value, catgIds, rowVerNo.value ?? 0))
       rowVerNo.value = r.rowVerNo
     } else {
-      const r = await createApp(toDraftRequest(form.value, catgIds))
+      const r = await createApp(toDraftRequest(form.value, catgIds), tplId.value || undefined)
       savedId.value = r.appId
       rowVerNo.value = r.rowVerNo
       await router.replace({ name: APP_EDIT_ROUTE, params: { id: r.appId } })
@@ -456,6 +534,8 @@ textarea {
 }
 textarea.bad { border-color: var(--red); box-shadow: 0 0 0 2px rgba(220, 38, 38, .2); }
 label { display: block; margin-bottom: 2px; color: var(--dark); font-weight: 700; }
+.tpl select { width: 100%; max-width: 560px; min-width: 0; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 7px; font-size: 17px; background: #fff; color: var(--dark); }
+.tpl .sub { margin: 4px 0 0; }
 
 .quiet { background: #fff; border: 1px solid var(--line); color: var(--dark); border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; font-weight: 400; }
 .quiet:disabled { opacity: .55; cursor: default; }

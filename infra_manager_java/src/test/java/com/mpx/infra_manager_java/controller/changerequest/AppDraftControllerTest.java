@@ -10,11 +10,13 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           服務丟出的 403／404／409／400 原樣對應狀態碼與訊息
 //           2026-10-07 回合三：加 POST /api/apps/{id}/attachments——201 回附件資訊、CSRF 放表單參數不算（只認 header，B5）、
 //           不是 multipart 415、缺 file part 400、服務例外對應 409／400
+//           2026-10-07 S5 R3：POST 的 query 參數 templateId 原樣轉給服務；沒帶時傳 null
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -127,22 +129,32 @@ class AppDraftControllerTest {
 	@Test
 	void 登入後建草稿回201() throws Exception {
 		Session s = login();
-		when(appDraftService.create(any(), any())).thenReturn("IM20261007-001");
+		when(appDraftService.create(any(), any(), any())).thenReturn("IM20261007-001");
 		mockMvc.perform(post("/api/apps").session(s.session()).cookie(s.xsrf())
 				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
 				.content(BODY)).andExpect(status().isCreated())
 				.andExpect(content().json("{\"appId\":\"IM20261007-001\",\"rowVerNo\":0}"));
 		ArgumentCaptor<AppDraftRequest> req = ArgumentCaptor.forClass(AppDraftRequest.class);
 		ArgumentCaptor<AuthUser> user = ArgumentCaptor.forClass(AuthUser.class);
-		verify(appDraftService).create(req.capture(), user.capture());
+		verify(appDraftService).create(req.capture(), user.capture(), isNull());
 		assertThat(req.getValue().title()).isEqualTo("更換核心交換器");
 		assertThat(user.getValue().userId()).isEqualTo("E0001");
 	}
 
 	@Test
+	void 帶templateId時轉給服務() throws Exception {
+		Session s = login();
+		when(appDraftService.create(any(), any(), any())).thenReturn("IM20261007-002");
+		mockMvc.perform(post("/api/apps").param("templateId", "tpl_firewall_upgrade").session(s.session())
+				.cookie(s.xsrf()).header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue())
+				.contentType(MediaType.APPLICATION_JSON).content(BODY)).andExpect(status().isCreated());
+		verify(appDraftService).create(any(), any(), eq("tpl_firewall_upgrade"));
+	}
+
+	@Test
 	void 超長回400帶欄位資訊() throws Exception {
 		Session s = login();
-		when(appDraftService.create(any(), any())).thenThrow(new TextTooLongException("title", "標題", 200, 201));
+		when(appDraftService.create(any(), any(), any())).thenThrow(new TextTooLongException("title", "標題", 200, 201));
 		mockMvc.perform(post("/api/apps").session(s.session()).cookie(s.xsrf())
 				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
 				.content(BODY)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.field").value("title"))

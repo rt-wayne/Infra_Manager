@@ -8,6 +8,7 @@
               按鈕只是方便，實際權限以後端 403 為準
             - 刪除先 confirm；成功後重新載入列表；失敗出 toast（403／404 訊息由後端帶）
             - 401 由登入處理器導頁，本頁不另出 toast
+            S5 R3（2026-10-07）：每列加「建單」（任何登入者），導到 /apps/new?template=<id> 帶入範本內容
 -->
 <template>
   <main>
@@ -20,7 +21,7 @@
     </header>
 
     <section class="card">
-      <p class="hint">建立申請單時可選範本帶入內容；範本只有建立者本人與管理員可以修改、刪除</p>
+      <p class="hint">按「建單」或在新增申請單頁上方選範本，即可帶入內容；範本只有建立者本人與管理員可以修改、刪除</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-else-if="!items" class="muted">載入中…</p>
       <p v-else-if="items.length === 0" class="muted">目前沒有範本</p>
@@ -54,13 +55,15 @@
               </td>
               <td class="time">{{ t.updatedAt || '—' }}</td>
               <td>
-                <div v-if="t.canEdit" class="acts">
-                  <router-link class="quiet small" :to="{ name: TEMPLATE_EDIT_ROUTE, params: { id: t.tmplId } }">修改</router-link>
-                  <button class="quiet small danger" type="button" :disabled="busyId !== ''" @click="remove(t)">
-                    {{ busyId === t.tmplId ? '刪除中…' : '刪除' }}
-                  </button>
+                <div class="acts">
+                  <router-link class="quiet small use" :to="{ name: APP_NEW_ROUTE, query: { template: t.tmplId } }">建單</router-link>
+                  <template v-if="t.canEdit">
+                    <router-link class="quiet small" :to="{ name: TEMPLATE_EDIT_ROUTE, params: { id: t.tmplId } }">修改</router-link>
+                    <button class="quiet small danger" type="button" :disabled="busyId !== ''" @click="remove(t)">
+                      {{ busyId === t.tmplId ? '刪除中…' : '刪除' }}
+                    </button>
+                  </template>
                 </div>
-                <span v-else class="sub">—</span>
               </td>
             </tr>
           </tbody>
@@ -80,7 +83,7 @@ import ToastHost from '../components/ToastHost.vue'
 import { deleteTemplate, listTemplates } from '../api/templates'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
-import { TEMPLATE_EDIT_ROUTE, TEMPLATE_NEW_ROUTE } from '../router/names'
+import { APP_NEW_ROUTE, TEMPLATE_EDIT_ROUTE, TEMPLATE_NEW_ROUTE } from '../router/names'
 import type { TemplateListItem } from '../types/template'
 import { prioStyle } from '../utils/format'
 
@@ -155,7 +158,7 @@ main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 .c-cnt { width: 84px; }
 .c-last { width: 150px; }
 .c-time { width: 104px; }
-.c-act { width: 150px; }
+.c-act { width: 196px; }
 .name { font-weight: 700; }
 .num { text-align: right; padding-right: 18px; }
 .prio { display: inline-block; min-width: 36px; text-align: center; padding: 0 6px; border-radius: 6px; background: var(--line); font-weight: 700; font-size: 15px; }

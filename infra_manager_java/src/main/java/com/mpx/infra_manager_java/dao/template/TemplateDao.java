@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.dao.template;
 // 變更說明: 新增：IM_TMPL 範本的讀寫（S5 R1）。只看 STATUS=1；刪除為軟刪除（STATUS=0）。
 //           列表不搬 FORM_JSON，優先等級以 JSON_VALUE 取出後對 IM_FORM_OPTION 帶名稱與顏色；
 //           FORM_JSON 以 Types.CLOB 綁定
+//           2026-10-07 R3：加 recordUse（用範本建單時累計套用次數）
 // ============================================================
 
 import java.sql.Types;
@@ -85,6 +86,14 @@ public class TemplateDao {
 		p.put("formJson", new SqlParameterValue(Types.CLOB, formJson));
 		p.put("userId", userId);
 		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 套用次數 +1 並記最後套用時間與人；不動 UPDATE_DATE（套用不算修改）。回更新列數（0＝已不存在或已刪除） */
+	public int recordUse(String tmplId, String userId) {
+		String sql = "UPDATE " + schema.table("IM_TMPL")
+				+ " SET USE_CNT = NVL(USE_CNT, 0) + 1, LAST_USE_DATE = SYSDATE, LAST_USE_USER_ID = :userId"
+				+ " WHERE TMPL_ID = :id AND STATUS = 1";
+		return dbClient.update(itflowDb, sql, Map.of("id", tmplId, "userId", userId));
 	}
 
 	/** 軟刪除；回更新列數（0＝已不存在或已刪除） */

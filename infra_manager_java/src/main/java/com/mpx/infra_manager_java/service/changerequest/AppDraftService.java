@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           建草稿不寫 IM_APP_EVENT（事件碼沒有「建立」，與舊系統一致）。
 //           2026-10-07 回合二 b-2：加 update（編輯草稿）。條件式 UPDATE 一句同時檢查版本、DRAFT、申請人，
 //           0 列時再查一次決定回 404／403／409；成功後子表整批刪除重建，與主檔同一交易。流程依新的優先等級重算
+//           2026-10-07 S5 R3：create 加 templateId（用範本建單），寫完子表後同交易累計範本套用次數（同舊系統在建單時累計）
 // ============================================================
 
 import java.time.LocalDate;
@@ -27,6 +28,7 @@ import com.mpx.infra_manager_java.model.changerequest.AppDraftRequest;
 import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
+import com.mpx.infra_manager_java.service.template.TemplateService;
 import com.mpx.infra_manager_java.util.TaiwanTime;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
@@ -46,18 +48,20 @@ public class AppDraftService {
 	private final SysParamService sysParamService;
 	private final AppSeqService appSeqService;
 	private final AppWriteDao appWriteDao;
+	private final TemplateService templateService;
 
 	public AppDraftService(FormOptionDao formOptionDao, SysParamService sysParamService, AppSeqService appSeqService,
-			AppWriteDao appWriteDao) {
+			AppWriteDao appWriteDao, TemplateService templateService) {
 		this.formOptionDao = formOptionDao;
 		this.sysParamService = sysParamService;
 		this.appSeqService = appSeqService;
 		this.appWriteDao = appWriteDao;
+		this.templateService = templateService;
 	}
 
-	/** 建草稿，回新單號 */
+	/** 建草稿，回新單號；templateId 非 null 時同交易累計該範本的套用次數 */
 	@Transactional
-	public String create(AppDraftRequest request, AuthUser user) {
+	public String create(AppDraftRequest request, AuthUser user, String templateId) {
 		List<FormOptionRow> options = formOptionDao.findActive();
 		AppDraft draft = AppDraftValidator.validate(request, options);
 		String flowId = flowFor(draft.prioCode(), sysParamService.flowPolicy(), options);
@@ -67,6 +71,9 @@ public class AppDraftService {
 				appSeqService.nextNo(AppSeqService.PREFIX_ONLINE, today, user.userId()));
 		appWriteDao.insertApp(appId, flowId, user.userId(), TaiwanTime.startOf(today), draft);
 		appWriteDao.insertChildren(appId, user.userId(), draft);
+		if (templateId != null) {
+			templateService.recordUse(templateId, user);
+		}
 		return appId;
 	}
 

@@ -12,6 +12,7 @@
 //           S9 R3（Claude Opus 5.5，2026-10-07）：加 resubmitApp（退件單補件重送）／deleteApp（DELETE 帶 JSON 本文）
 //           S10 R3（Claude Opus 5.5，2026-10-07）：加 saveExecution（填寫執行紀錄）／rejectExecution（執行端退回）／
 //           reviewExecution（治理審查）
+//           S5 R3（Claude Opus 5.5，2026-10-07）：createApp 加選填 templateId（query 參數，用範本建單時累計套用次數）
 // ============================================================
 import http from './http'
 import type {
@@ -79,9 +80,10 @@ export function getFormOptions(): Promise<FormOptionsResponse> {
   return http.get<FormOptionsResponse>('/form-options').then(r => r.data)
 }
 
-/* POST /apps 建草稿 → 201 { appId, rowVerNo: 0 } */
-export function createApp(body: AppDraftRequest): Promise<AppDraftSaved> {
-  return http.post<AppDraftSaved>('/apps', body).then(r => r.data)
+/* POST /apps 建草稿 → 201 { appId, rowVerNo: 0 }；用範本建單時帶 ?templateId=，後端同交易累計套用次數 */
+export function createApp(body: AppDraftRequest, templateId?: string): Promise<AppDraftSaved> {
+  const config = templateId ? { params: { templateId } } : undefined
+  return http.post<AppDraftSaved>('/apps', body, config).then(r => r.data)
 }
 
 /* PUT /apps/{id} 編輯草稿（body.rowVerNo 必帶）→ 200 { appId, rowVerNo }；版本不符 409 */

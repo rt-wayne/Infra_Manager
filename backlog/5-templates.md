@@ -31,5 +31,5 @@
 |------|------|------|
 | R1 | 後端 CRUD：model、`TemplateDao`、`TemplateService`、`TemplateController`；`AppDraftValidator` 加「標題可空」入口；單元測試＋`TemplateServiceIT`（經服務層打真實 DB，階段末跑） | 完成 |
 | R2 | 前端：`types/template.ts`、`api/templates.ts`、`TemplateListView`、`TemplateEditView`（表單欄位沿用 AppFormView 的寫法）、路由與首頁入口；型別檢查＋build＋spec。實作：一～四區塊抽成共用元件 `components/DraftFields.vue`（`kind="app"／"template"`），申請單表單與範本頁共用、R3 套用也填同一份狀態；列表前端分頁（後端一次回全部） | 完成 |
-| R3 | 套用範本：AppFormView 新增時可選範本帶入（已停用選項自動拿掉，同第 99 項 ②），`POST /api/apps` 帶 `templateId` 時同交易累計 `USE_CNT`／`LAST_USE_*`；測試種子 `db/oracle/sample/S5_sample_templates.sql`（3 份，掛 T0001） | 未開始 |
+| R3 | 套用範本：AppFormView 新增時可選範本帶入（已停用選項自動拿掉，同第 99 項 ②），`POST /api/apps` 帶 `templateId` 時同交易累計 `USE_CNT`／`LAST_USE_*`；測試種子 `db/oracle/sample/S5_sample_templates.sql`（3 份，掛 T0001）。實作：`templateId` 走 query 參數（本文格式與 PUT 共用）；範本不存在或 ID 格式不符只記 log、不擋建單；只有第一次存（POST）累計，之後 PUT 不算；選範本時表單內容已改過先 confirm，不重載頁面；範本列表每列加「建單」連到 `/apps/new?template=<id>`；種子不帶 formOptionId（各環境 ID 不同） | 完成 |
 | 階段末 | `./mvnw verify`、`code-reviewer`、補 PRD／CHANGELOG（第 30、43 項結案） | 未開始 |

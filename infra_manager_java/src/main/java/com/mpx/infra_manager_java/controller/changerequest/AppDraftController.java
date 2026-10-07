@@ -10,6 +10,8 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           非申請人 403、找不到 404、非草稿或版本不符 409
 //           2026-10-07 回合三：加 POST /api/apps/{id}/attachments 上傳草稿附件（multipart，part 名 file，一次一檔），
 //           回 201，格式同檢視 API 的 attachments 元素；不是 multipart 回 415、缺 part 回 400
+//           2026-10-07 S5 R3：POST 加選填 query 參數 templateId（用範本建單時累計套用次數）；
+//           放 query 不放本文，因為本文格式與 PUT 共用，PUT 不該收這個欄位
 // ============================================================
 
 import java.util.Map;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,8 +51,9 @@ public class AppDraftController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	public Map<String, Object> create(@RequestBody AppDraftRequest request, Authentication authentication) {
-		String appId = appDraftService.create(request, principal(authentication));
+	public Map<String, Object> create(@RequestBody AppDraftRequest request,
+			@RequestParam(name = "templateId", required = false) String templateId, Authentication authentication) {
+		String appId = appDraftService.create(request, principal(authentication), templateId);
 		return Map.of("appId", appId, "rowVerNo", 0);
 	}
 
