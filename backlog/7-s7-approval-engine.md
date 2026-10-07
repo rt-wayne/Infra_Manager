@@ -66,7 +66,11 @@
 - R-d 送審後某關候選人全部停用會卡死，無改派功能（舊系統亦然）
 
 ## 交接欄
-- 目前回合：R2 程式完成、待 `verify`（需測試 DB 密碼）
+- 目前回合：R2 完成（`verify` 全綠：IT 18／0 失敗／0 略過，兩個完成條件都過）→ 下一回合 R3 前端
+- 2026-10-07 verify 時發現測試 DB 的 `IM_ROLE` 是空的（V1 §8.1 預載 6 筆不在），導致所有 ROLE 關卡零候選人、登入也拿不到角色；
+  已由 Claude 以「不存在才插入」補回 6 筆（admin／it_manager／dept_manager／idc_admin／governance／infra，CREATE_BY SYSTEM），
+  未刪未改任何既有列。原因不明（repo 內沒有任何會刪 `IM_ROLE` 的程式或腳本），使用者若知道是誰清的請告知
+- 併發 IT 因種子只有一位 idc_admin，改為測試自建臨時第二位候選人（`S7ITU…`，無密碼不可登入，結束刪除）
 - 已完成：R2（2026-10-07）——`DecisionRequest`、`DecisionPolicy`（放 `service/changerequest`，不是計畫寫的 `service/approval`）、
   `AppFlowService.decide`、`AppFlowController` `POST /{id}/decisions`、`ApprovalWriteDao.decideStep`／`activateNext`（skipWaiting 直接重用
   `closeOpenSteps(…, "SKIPPED", …)`）、`AppWriteDao.updateStatus`。單元測試 `DecisionPolicyTest`（3）＋`AppFlowServiceTest` 加 5 個簽核測試，
@@ -83,5 +87,6 @@
   IT `AppFlowSubmitIT` 已寫、尚未對真實 DB 跑（R2 一起 verify）。`AppFlowControllerTest` 未寫（R1 預算用完，R2 補或收尾一起）
 - R1 自行決定（衝刺規則，使用者可推翻）：admin 代送審時 403 訊息為「只有申請人或管理員可以送審」；撤回原因全空白存 null；
   `transition` 的申請人條件用 boolean 參數轉 0／1 綁定（避免 Oracle null 綁定型別問題）；送審時 `IM_APP.CURR_VER_NO` 為 null 視為 1
-- 下一步：向使用者要測試 DB 密碼，跑 `./mvnw verify`（`AppFlowSubmitIT`＋`AppFlowDecisionIT`，含兩個完成條件），IT 紅的當場修；
-  綠了再進 R3 前端
+- 下一步：R3 前端（`api/apps.ts` submitApp／recallApp／decideApp、`types/app.ts`、`AppViewView.vue` act() 接真動作），
+  做完手動驗收；`AppFlowControllerTest` 收尾回合補。跑 IT 不需要密碼：`./mvnw verify -Dspring-boot.repackage.skip=true`
+  （連線走公司連線資訊 API；skip 是因為 3201／3202 跑著時 jar 被鎖、repackage 會失敗）
