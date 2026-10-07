@@ -72,8 +72,9 @@
 - 第 73 項附件根目錄未定，正式部署前一定要定
 
 ## 交接
-- 目前回合：二 b，因規模拆兩半（2026-10-07）：**二 b-1**＝編號計數器＋`POST /api/apps` 建草稿（主檔＋6 張子表 `CATG_MAP`／`CATG_OTHER`／`REASON_MAP`／`SCOPE_MAP`／`EQUIP`／`PLAN_STEP` 寫入、B8 長度檢查、套 `FLOW_POLICY`）＋`AppSeqIT`；**二 b-2**＝`PUT /api/apps/{id}`（樂觀鎖、只有申請人、非 DRAFT 409、子表刪除重建，共用 b-1 的寫入與檢查元件）。下一步：二 b-1
-- 二 b-1 開工前要讀：`DbClient` 寫入 API（`update`／批次）、`util/TextLength`、`web/ApiExceptionHandler`（400 `{message, field, max, actual}` 已有？）、`AuthUser`、`TaiwanTime`、`AppController`、`AppDao`（欄位對應）、V1 的 `IM_FLOW`／`IM_FORM_OPTION.FLOW_ID`（by_priority 取流程）。表欄位已查：V1 第 397～711 行
+- 目前回合：二 b，因規模拆兩半（2026-10-07）：**二 b-1**＝編號計數器＋`POST /api/apps` 建草稿（主檔＋6 張子表 `CATG_MAP`／`CATG_OTHER`／`REASON_MAP`／`SCOPE_MAP`／`EQUIP`／`PLAN_STEP` 寫入、B8 長度檢查、套 `FLOW_POLICY`）＋`AppSeqIT`；**二 b-2**＝`PUT /api/apps/{id}`（樂觀鎖、只有申請人、非 DRAFT 409、子表刪除重建，共用 b-1 的寫入與檢查元件）。**二 b-1 已完成，下一步：二 b-2**
+- 二 b-2 做法：`AppDraftController` 加 `@PutMapping("/{id}")`；`AppDraftService.update`：先 `AppDraftValidator.validate`（交易外）→ 交易內 `UPDATE IM_APP ... SET ROW_VER_NO = ROW_VER_NO + 1 WHERE APP_ID = :id AND ROW_VER_NO = :ver AND APP_STATUS_CODE = 'DRAFT' AND APPLY_USER_ID = :me AND STATUS = 1`，0 列時再查一次判斷 404／403／409（不存在／非申請人／非 DRAFT 或版本不符）→ `AppWriteDao.deleteChildren` → `insertChildren`；回 `{appId, rowVerNo}`。`AppWriteDao` 需新增 `updateApp`（CLOB 同樣走 `Types.CLOB`）。409 要新的例外類別＋`ApiExceptionHandler` 對應
+- 二 b-1 偏離施工計畫假設：**優先等級也是存草稿必填**（`PRIO_CODE` DB NOT NULL、流程由它決定），不只標題；`FLOW_ID` 沒設定的 PRIO 選項在 by_priority 下退回 `full`
 - 二 a 已完成：`GET /api/form-options`（`FormOptionController`／`FormOptionService`／`FormOptionDao`）、`SysParamService`（`uploadMaxMb`／`uploadMaxFiles`／`flowPolicy`，二 b 建草稿套流程時直接用 `flowPolicy()`）、檢視 API 補 `rowVerNo`／`formOptionId`、前端型別同步；後端測試 209、前端 35
-- 二 b 已改動：（無）
+- 二 b-1 已改動：取號 `AppSeqDao`／`AppSeqService`（`IMyyyyMMdd-nnn`）；請求 `AppDraftRequest` → 檢查與正規化 `AppDraftValidator` → `AppDraft`；寫入 `AppWriteDao`（`insertApp`／`insertChildren`／`deleteChildren`）；`AppDraftService.create`；`AppDraftController`（`POST /api/apps` → 201 `{appId, rowVerNo:0}`）。測試：`AppDraftValidatorTest` 13、`AppSeqServiceTest` 5、`AppDraftServiceTest` 4、`AppDraftControllerTest` 5（後端 209 → 236）；整合 `AppSeqIT`（2099 年隨機日、兩執行緒同時取第一號得 {1,2}）、`AppWriteDaoIT`（`ITW` 假單號、20000 中文字 CLOB、回滾不留資料），兩者都在測試 DB 實跑通過、測試資料自行刪除
 - 卡住／待確認：上方「未回答的待確認」第 1～7、9 題（目前照假設施工）
