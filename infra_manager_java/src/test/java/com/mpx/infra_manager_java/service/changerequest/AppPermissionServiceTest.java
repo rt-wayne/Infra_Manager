@@ -7,6 +7,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           （候選人優先、無候選人看流程指定人）；canRecall 任一關已決就關閉；canExecute 已有結果就關閉；
 //           admin 刪除模式 ADMIN、申請人只在未決且狀態允許時 APPLICANT_PRE_REVIEW；canAiReview／canSubmit 恆 false
 //           2026-10-07 S7 R1（Claude Fable 5.1）：canSubmit 改為草稿且（申請人或 admin）才開
+//           2026-10-07 S9 結案（Claude Opus 5.5）：補件過（版次大於 1）申請人不能刪、admin 仍可
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -162,6 +163,20 @@ class AppPermissionServiceTest {
 				.isEqualTo(AppPermissionService.DELETE_MODE_APPLICANT);
 		assertThat(service.compute(app("DRAFT", "ME"), null, List.of(), List.of(), null, user("OTHER")).canDelete())
 				.isFalse();
+	}
+
+	@Test
+	void 刪除模式_補件過的單新版還沒人簽_申請人也不能刪_admin仍可() {
+		AppRow v2 = app("IN_REVIEW", "ME");
+		v2.setCurrVerNo(2);
+		List<ApprStepRow> undecided = List.of(step(1L, 1, "PENDING", null), step(2L, 2, "WAITING", null));
+
+		AppPermissions mine = service.compute(v2, appr(), undecided, List.of(), null, user("ME"));
+		assertThat(mine.canDelete()).isFalse();
+		assertThat(mine.deleteMode()).isNull();
+		assertThat(mine.canRecall()).isTrue();
+		assertThat(service.compute(v2, appr(), undecided, List.of(), null, user("A", "admin")).deleteMode())
+				.isEqualTo(AppPermissionService.DELETE_MODE_ADMIN);
 	}
 
 	@Test

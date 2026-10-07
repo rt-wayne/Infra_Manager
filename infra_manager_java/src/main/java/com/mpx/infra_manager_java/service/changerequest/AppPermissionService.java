@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           2026-10-07 S7 R1（Claude Fable 5.1）：canSubmit 開啟＝草稿且（申請人或 admin），對應 AppFlowService.submit 的鎖內判斷；
 //           AI 閘門等第 17 項拍板，這裡不擋
 //           2026-10-07 S9 R2（Claude Opus 5.5）：申請人不可刪的狀態加 REJECTED（施工計畫 ⑧）；AppDeleteService 在鎖內重用本運算
+//           2026-10-07 S9 結案（Claude Opus 5.5）：版次大於 1（補件過）申請人也不能刪，只剩 admin（review ① 裁示 B）
 // ============================================================
 
 import java.util.List;
@@ -47,6 +48,8 @@ public class AppPermissionService {
 		boolean admin = hasRole(me, "admin");
 		boolean anyDecided = steps.stream().anyMatch(s -> "APPROVED".equals(s.getStepStatusCode())
 				|| "REJECTED".equals(s.getStepStatusCode()));
+		// 版次大於 1 只會來自補件（補件只能從退件狀態發起），代表舊版次曾有人簽過；申請人不能藉補件繞過退件禁刪
+		boolean resubmitted = app.getCurrVerNo() != null && app.getCurrVerNo() > 1;
 
 		boolean canDecide = "IN_REVIEW".equals(status) && appr != null && isCurrentApprover(steps, cands, me.userId());
 		boolean canResubmit = "REJECTED".equals(status) && applicant;
@@ -57,7 +60,7 @@ public class AppPermissionService {
 		String deleteMode = null;
 		if (admin) {
 			deleteMode = DELETE_MODE_ADMIN;
-		} else if (applicant && !anyDecided && !NOT_DELETABLE_BY_APPLICANT.contains(status)) {
+		} else if (applicant && !anyDecided && !resubmitted && !NOT_DELETABLE_BY_APPLICANT.contains(status)) {
 			deleteMode = DELETE_MODE_APPLICANT;
 		}
 		boolean canEditDraft = applicant && "DRAFT".equals(status);

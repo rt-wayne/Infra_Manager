@@ -22,7 +22,7 @@
 ## 開發慣例
 - 後端：Java 25（`export JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot"` 後再 `./mvnw`）、Spring Boot 4.1、Jackson 3（`tools.jackson.*`）；SQL 只用 `:name` 參數，表名經 `DbSchema.table()` 加前綴
 - 前端：無 `any`、型別進 `src/types/`、API 一律經 `api/http.ts`、失敗 toast 不寫「查無資料」、每頁 20 列、1024 寬不得橫向捲動、不用 UI 元件庫
-- 真實 `*.properties`、`db/import/` 真實檔不進版控；log 不得含密碼、jdbcUrl、帳號、SQL 參數、cookie
+- 真實 `*.properties`、`db/import/` 真實檔不進版控；log 不得含密碼、jdbcUrl、帳號、SQL 參數、cookie（「帳號」指登入帳號 `LOGIN_ID`；工號 `USER_ID` 可記，供稽核追查操作人——2026-10-07 使用者裁示）
 
 ## 測試 DB 分工（2026-10-07 使用者交代）
 - **DDL（建表、改表、授權）由使用者執行**：Claude 只產出 SQL 檔與步驟，不自己對 DB 跑 DDL
