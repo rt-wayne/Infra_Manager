@@ -6,12 +6,13 @@ package com.mpx.infra_manager_java.dao.changerequest;
 // 變更說明: 新增：執行紀錄寫入 IM_APP_CHECK_LIST 與 IM_APP_EXEC（S10 R1，施工計畫 ⑤⑥⑦）。
 //           全部在 AppExecutionService 以 AppWriteDao.lockForUpdate 取得主檔列鎖之後呼叫，同一張單不會兩個交易同時寫，
 //           所以 IM_APP_EXEC 用「先 UPDATE、0 列再 INSERT」即可，不需 MERGE。CLOB 欄位以 Types.CLOB 綁定（同 AppWriteDao）
+//           2026-10-07 S10 結案 review ①B：findCheckSeqNos 改為 findCheckExecutors，連同已存的執行人工號一起回（供鎖內檢查「只能填自己或保留原值」）
 // ============================================================
 
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.HashMap;
-import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -36,12 +37,14 @@ public class ExecWriteDao {
 		this.itflowDb = itflowDb;
 	}
 
-	/** 該版次已展開的檢核項序號（遞增）；還沒展開回空清單 */
-	public List<Integer> findCheckSeqNos(String appId, int verNo) {
-		String sql = "SELECT SEQ_NO FROM " + schema.table("IM_APP_CHECK_LIST")
+	/** 該版次已展開的檢核項：序號（遞增）→ 已存的執行人工號（沒有存 null）；還沒展開回空 Map */
+	public Map<Integer, String> findCheckExecutors(String appId, int verNo) {
+		String sql = "SELECT SEQ_NO, USER_ID FROM " + schema.table("IM_APP_CHECK_LIST")
 				+ " WHERE APP_ID = :appId AND APP_VER_NO = :verNo AND STATUS = 1 ORDER BY SEQ_NO";
-		return dbClient.query(itflowDb, sql, Map.of("appId", appId, "verNo", verNo), CheckListRow.class).stream()
-				.map(CheckListRow::getSeqNo).toList();
+		Map<Integer, String> result = new LinkedHashMap<>();
+		dbClient.query(itflowDb, sql, Map.of("appId", appId, "verNo", verNo), CheckListRow.class)
+				.forEach(r -> result.put(r.getSeqNo(), r.getUserId()));
+		return result;
 	}
 
 	/** 展開一列檢核項（未完成、無執行人） */

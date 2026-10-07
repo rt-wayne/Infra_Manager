@@ -16,13 +16,15 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           鎖用 transition(PENDING_REVIEW → EXECUTED／REJECTED)，0 列分流 404／409 狀態不對／409 版本過期；
 //           PASS 事件 GOV_PASS、RETURN 事件 GOV_RETURN，退回意見必填、通過選填；審查人是申請人或執行人不擋，使用者裁示）。
 //           補件時 AppFlowService.closeOf 依這兩種事件把舊版記為 EXEC_REJECTED／GOV_RETURNED
+//           2026-10-07 S10 結案 review ①B（使用者裁示）：檢核項執行人工號改為鎖內檢查，只收「登入者本人」或「該列已存的原值」，
+//           其餘 400（關掉「拿工號查同事姓名」的小路，落實 ⑪）；拿掉鎖外逐一查工號是否啟用。save 拆出展開與逐列更新兩段
 // ============================================================
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,7 +33,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.ApprovalWriteDao;
@@ -56,7 +57,7 @@ public class AppExecutionService {
 
 	public static final String MSG_EXEC_FORBIDDEN = "只有機房管理員或申請人可以填寫執行紀錄";
 	public static final String MSG_EXEC_NOT_EXECUTABLE = "申請單不在待執行或執行中，無法填寫執行紀錄，請重新載入頁面";
-	public static final String MSG_BAD_EXECUTOR = "檢核項執行人不是系統中啟用的使用者";
+	public static final String MSG_BAD_EXECUTOR = "檢核項執行人只能填自己，或保留該項原本登記的人";
 	public static final String MSG_REJECT_FORBIDDEN = "只有機房管理員或申請人可以退回";
 	public static final String MSG_REJECT_NOT_EXECUTABLE = "申請單不在待執行或執行中，無法退回，請重新載入頁面";
 	public static final String MSG_REJECT_NEEDS_MEMO = "退回請填寫意見";
@@ -86,16 +87,14 @@ public class AppExecutionService {
 	private final AppWriteDao appWriteDao;
 	private final ExecWriteDao execWriteDao;
 	private final FormOptionDao formOptionDao;
-	private final UserDao userDao;
 	private final ApprovalWriteDao approvalWriteDao;
 
 	public AppExecutionService(AppDao appDao, AppWriteDao appWriteDao, ExecWriteDao execWriteDao,
-			FormOptionDao formOptionDao, UserDao userDao, ApprovalWriteDao approvalWriteDao) {
+			FormOptionDao formOptionDao, ApprovalWriteDao approvalWriteDao) {
 		this.appDao = appDao;
 		this.appWriteDao = appWriteDao;
 		this.execWriteDao = execWriteDao;
 		this.formOptionDao = formOptionDao;
-		this.userDao = userDao;
 		this.approvalWriteDao = approvalWriteDao;
 	}
 
@@ -115,17 +114,6 @@ public class AppExecutionService {
 		Set<String> resultCodes = options.stream().filter(o -> GROUP_EXEC_RESULT.equals(o.getGroupCode()))
 				.map(FormOptionRow::getOptionCode).collect(Collectors.toSet());
 		ExecutionDraft draft = ExecutionValidator.validate(request, resultCodes);
-		Set<String> executors = new LinkedHashSet<>();
-		draft.checklist().forEach(i -> {
-			if (i.userId() != null) {
-				executors.add(i.userId());
-			}
-		});
-		for (String userId : executors) {
-			if (!userDao.isActive(userId)) {
-				throw new ApiBadRequestException(MSG_BAD_EXECUTOR);
-			}
-		}
 
 		if (appWriteDao.lockForUpdate(appId, rowVerNo, me.userId()) == 0) {
 			if (appWriteDao.findLockState(appId) == null) {
@@ -145,30 +133,50 @@ public class AppExecutionService {
 		}
 		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
 
-		Set<Integer> known = new HashSet<>(execWriteDao.findCheckSeqNos(appId, verNo));
-		if (known.isEmpty()) {
-			List<FormOptionRow> items = options.stream().filter(o -> GROUP_CHECK_LIST.equals(o.getGroupCode()))
-					.toList();
-			for (int i = 0; i < items.size(); i++) {
-				execWriteDao.insertCheckItem(appId, verNo, i + 1, items.get(i).getFormOptionId(), me.userId());
-				known.add(i + 1);
-			}
-		}
-		Timestamp now = Timestamp.valueOf(LocalDateTime.now(TaiwanTime.ZONE));
-		for (ExecutionDraft.CheckItem item : draft.checklist()) {
-			if (!known.contains(item.seqNo())) {
-				throw new ApiBadRequestException(ExecutionValidator.MSG_BAD_SEQ);
-			}
-			Timestamp doneAt = !item.done() ? null : item.doneAt() != null ? item.doneAt() : now;
-			execWriteDao.updateCheckItem(appId, verNo, item, doneAt, me.userId());
-		}
-
+		applyChecklist(appId, verNo, draft.checklist(), expandChecklistIfNeeded(appId, verNo, options, me), me);
 		execWriteDao.upsertExec(appId, verNo, draft, draft.submit() ? me.userId() : null, me.userId());
 		String toStatus = draft.submit() ? "PENDING_REVIEW" : "IN_EXECUTION";
 		if (!toStatus.equals(app.getAppStatusCode())) {
 			appWriteDao.updateStatus(appId, toStatus, me.userId());
 		}
 		return new SaveResult(rowVerNo + 1, toStatus);
+	}
+
+	/** 該版次已展開的檢核項（序號 → 已存執行人工號）；還沒展開就依啟用中的 CHECK_LIST 選項（SORT_NO 順序）展開 */
+	private Map<Integer, String> expandChecklistIfNeeded(String appId, int verNo, List<FormOptionRow> options,
+			AuthUser me) {
+		Map<Integer, String> stored = new HashMap<>(execWriteDao.findCheckExecutors(appId, verNo));
+		if (stored.isEmpty()) {
+			List<FormOptionRow> items = options.stream().filter(o -> GROUP_CHECK_LIST.equals(o.getGroupCode()))
+					.toList();
+			for (int i = 0; i < items.size(); i++) {
+				execWriteDao.insertCheckItem(appId, verNo, i + 1, items.get(i).getFormOptionId(), me.userId());
+				stored.put(i + 1, null);
+			}
+		}
+		return stored;
+	}
+
+	/**
+	 * 先檢查全部本文檢核項（未知序號 400；執行人工號只能是登入者本人或該列已存的原值，否則 400），再逐列更新
+	 * （完成沒填時間補伺服器現在時間）
+	 */
+	private void applyChecklist(String appId, int verNo, List<ExecutionDraft.CheckItem> items,
+			Map<Integer, String> stored, AuthUser me) {
+		for (ExecutionDraft.CheckItem item : items) {
+			if (!stored.containsKey(item.seqNo())) {
+				throw new ApiBadRequestException(ExecutionValidator.MSG_BAD_SEQ);
+			}
+			String userId = item.userId();
+			if (userId != null && !userId.equals(me.userId()) && !userId.equals(stored.get(item.seqNo()))) {
+				throw new ApiBadRequestException(MSG_BAD_EXECUTOR);
+			}
+		}
+		Timestamp now = Timestamp.valueOf(LocalDateTime.now(TaiwanTime.ZONE));
+		for (ExecutionDraft.CheckItem item : items) {
+			Timestamp doneAt = !item.done() ? null : item.doneAt() != null ? item.doneAt() : now;
+			execWriteDao.updateCheckItem(appId, verNo, item, doneAt, me.userId());
+		}
 	}
 
 	/**

@@ -16,6 +16,8 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           執行端退回 → REJECTED 不清 v1 執行資料 → 補件後 v1 為 EXEC_REJECTED（補件兩條要 full 流程有啟用關卡，否則略過）；
 //           清理加簽核實例三表與 IM_APP_VER
 //           2026-10-07 S10 R3：第一條加檢視 API 檢核項帶原始 userId／executorDesc 的斷言
+//           2026-10-07 S10 結案 review ①B：第二條加「idc_admin 填申請人工號 400 且不加版本、申請人填自己後 idc_admin 保留原值可存、
+//           勾完成帶時間原樣存」；執行端退回那條改由 idc_admin 填自己工號
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -239,6 +241,22 @@ class AppExecutionIT {
 				draft(1L, List.of(new ExecutionRequest.CheckItem(999, true, null, null, null))), APPLICANT))
 				.isInstanceOf(ApiBadRequestException.class).hasMessage(ExecutionValidator.MSG_BAD_SEQ);
 		assertThat(appIs("IN_EXECUTION", 1L)).as("未知序號 400 時 rollback").isTrue();
+
+		// 執行人只收本人或該列原值（review ①B）
+		assertThatThrownBy(() -> appExecutionService.save(appId,
+				draft(1L, List.of(new ExecutionRequest.CheckItem(1, true, null, APPLICANT_ID, null))), IDC))
+				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_BAD_EXECUTOR);
+		assertThat(appIs("IN_EXECUTION", 1L)).as("填別人工號 400 時 rollback").isTrue();
+		saved = appExecutionService.save(appId,
+				draft(1L, List.of(new ExecutionRequest.CheckItem(1, true, "2026-10-07 09:15", APPLICANT_ID, null))),
+				APPLICANT);
+		saved = appExecutionService.save(appId,
+				draft(saved.rowVerNo(), List.of(new ExecutionRequest.CheckItem(1, true, "2026-10-07 09:15", APPLICANT_ID,
+						null))), IDC);
+		assertThat(saved.rowVerNo()).as("保留該列原值可以存").isEqualTo(3L);
+		assertThat(exists("SELECT COUNT(*) AS OK FROM " + schema.table("IM_APP_CHECK_LIST") + " WHERE APP_ID = :id"
+				+ " AND SEQ_NO = 1 AND USER_ID = :u AND DONE_DATE = TIMESTAMP '2026-10-07 09:15:00'",
+				Map.of("id", appId, "u", APPLICANT_ID))).as("勾完成帶時間原樣存").isTrue();
 	}
 
 	@Test
@@ -368,7 +386,7 @@ class AppExecutionIT {
 		assumeFullFlow();
 		createApproved();
 		long ver = appExecutionService.save(appId,
-				draft(0L, List.of(new ExecutionRequest.CheckItem(1, true, null, APPLICANT_ID, null))), IDC).rowVerNo();
+				draft(0L, List.of(new ExecutionRequest.CheckItem(1, true, null, IDC.userId(), null))), IDC).rowVerNo();
 
 		assertThatThrownBy(() -> appExecutionService.reject(appId, new ExecRejectRequest(ver, null), IDC))
 				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_REJECT_NEEDS_MEMO);

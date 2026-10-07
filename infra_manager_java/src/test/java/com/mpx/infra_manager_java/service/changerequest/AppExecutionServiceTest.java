@@ -12,6 +12,8 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           2026-10-07 S10 R2：加執行端退回（鎖外 403／意見必填與超長不取鎖、0 列分流、鎖內狀態不對 409、
 //           成功改 REJECTED 寫 EXEC_REJECT 且不動執行資料）與治理審查（非 governance 403、決定值／意見檢核不取鎖、
 //           0 列分流 404／409 狀態／409 版本、PASS → EXECUTED 空白意見存 null、RETURN → REJECTED、申請人兼治理不擋）
+//           2026-10-07 S10 結案 review ①B：拿掉「執行人工號未啟用 400」（不再查 UserDao）；改鎖「執行人只收本人或該列原值，
+//           別人工號 400 且一列都不更新、不寫執行結果」
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,7 +34,9 @@ import static org.mockito.Mockito.when;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +45,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.security.access.AccessDeniedException;
 
-import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.ApprovalWriteDao;
@@ -71,7 +74,6 @@ class AppExecutionServiceTest {
 	private AppWriteDao appWriteDao;
 	private ExecWriteDao execWriteDao;
 	private FormOptionDao formOptionDao;
-	private UserDao userDao;
 	private ApprovalWriteDao approvalWriteDao;
 	private AppExecutionService service;
 
@@ -81,9 +83,8 @@ class AppExecutionServiceTest {
 		appWriteDao = mock(AppWriteDao.class);
 		execWriteDao = mock(ExecWriteDao.class);
 		formOptionDao = mock(FormOptionDao.class);
-		userDao = mock(UserDao.class);
 		approvalWriteDao = mock(ApprovalWriteDao.class);
-		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, userDao, approvalWriteDao);
+		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, approvalWriteDao);
 		List<FormOptionRow> options = new ArrayList<>();
 		options.add(option(31, "CHECK_LIST", "check_in"));
 		options.add(option(32, "CHECK_LIST", "pre_state"));
@@ -119,11 +120,18 @@ class AppExecutionServiceTest {
 		return a;
 	}
 
-	/** 取鎖成功、鎖內主檔現況 status、該版次已展開的序號 */
+	/** 取鎖成功、鎖內主檔現況 status、該版次已展開的序號（都還沒存執行人） */
 	private void locked(String status, List<Integer> seqNos) {
+		Map<Integer, String> stored = new LinkedHashMap<>();
+		seqNos.forEach(s -> stored.put(s, null));
+		locked(status, stored);
+	}
+
+	/** 取鎖成功、鎖內主檔現況 status、該版次已展開的檢核項（序號 → 已存執行人工號） */
+	private void locked(String status, Map<Integer, String> stored) {
 		when(appWriteDao.lockForUpdate(eq(APP), eq(3L), anyString())).thenReturn(1);
 		when(appDao.findById(APP)).thenReturn(Optional.of(app(status, APPLICANT.userId())));
-		when(execWriteDao.findCheckSeqNos(APP, 2)).thenReturn(seqNos);
+		when(execWriteDao.findCheckExecutors(APP, 2)).thenReturn(stored);
 	}
 
 	private static ExecutionRequest draft(List<ExecutionRequest.CheckItem> items) {
@@ -149,10 +157,6 @@ class AppExecutionServiceTest {
 		assertThatThrownBy(() -> service.save(APP, submitMissingEnd(), APPLICANT))
 				.isInstanceOf(ApiBadRequestException.class)
 				.hasMessage(ExecutionValidator.MSG_SUBMIT_PREFIX + "實際結束時間");
-		when(userDao.isActive("X9999")).thenReturn(false);
-		assertThatThrownBy(() -> service.save(APP,
-				draft(List.of(new ExecutionRequest.CheckItem(1, true, null, "X9999", null))), APPLICANT))
-				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppExecutionService.MSG_BAD_EXECUTOR);
 		when(appWriteDao.findLockState("IM20261007-404")).thenReturn(null);
 		assertThatThrownBy(() -> service.save("IM20261007-404", draft(List.of()), IDC))
 				.isInstanceOf(ApiNotFoundException.class);
@@ -193,7 +197,6 @@ class AppExecutionServiceTest {
 	@Test
 	void 第一次暫存展開檢核表_補現在時間_改IN_EXECUTION_不寫結案人() {
 		locked("APPROVED", List.of());
-		when(userDao.isActive("E0001")).thenReturn(true);
 		Timestamp before = new Timestamp(System.currentTimeMillis() - 60_000);
 		AppExecutionService.SaveResult r = service.save(APP,
 				draft(List.of(new ExecutionRequest.CheckItem(1, true, null, "E0001", null),
@@ -229,6 +232,29 @@ class AppExecutionServiceTest {
 				null))), APPLICANT)).isInstanceOf(ApiBadRequestException.class)
 				.hasMessage(ExecutionValidator.MSG_BAD_SEQ);
 		verify(execWriteDao, never()).insertCheckItem(anyString(), anyInt(), anyInt(), anyLong(), anyString());
+	}
+
+	@Test
+	void 執行人只收本人或該列原值_別人工號400且不寫入() {
+		Map<Integer, String> stored = new LinkedHashMap<>();
+		stored.put(1, "E0002");
+		stored.put(2, null);
+		stored.put(3, null);
+		locked("IN_EXECUTION", stored);
+		assertThatThrownBy(() -> service.save(APP,
+				draft(List.of(new ExecutionRequest.CheckItem(1, true, null, "E0002", null),
+						new ExecutionRequest.CheckItem(2, true, null, "E0002", null))),
+				IDC)).as("第 2 列沒存過 E0002，不能填別人").isInstanceOf(ApiBadRequestException.class)
+				.hasMessage(AppExecutionService.MSG_BAD_EXECUTOR);
+		verify(execWriteDao, never()).updateCheckItem(anyString(), anyInt(), any(), any(), anyString());
+		verify(execWriteDao, never()).upsertExec(anyString(), anyInt(), any(), any(), anyString());
+
+		AppExecutionService.SaveResult r = service.save(APP,
+				draft(List.of(new ExecutionRequest.CheckItem(1, true, null, "E0002", null),
+						new ExecutionRequest.CheckItem(2, true, null, IDC.userId(), null))),
+				IDC);
+		assertThat(r.statusCode()).as("保留原值＋填自己可以存").isEqualTo("IN_EXECUTION");
+		verify(execWriteDao, times(2)).updateCheckItem(eq(APP), eq(2), any(), any(), eq(IDC.userId()));
 	}
 
 	@Test

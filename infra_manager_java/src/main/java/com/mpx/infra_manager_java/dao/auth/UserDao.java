@@ -11,6 +11,7 @@ package com.mpx.infra_manager_java.dao.auth;
 //           2026-10-06 code review：updatePassword 多帶剛比對過的舊雜湊當 WHERE 條件（樂觀鎖），兩個請求同時改密碼
 //           只有先到的那個會成功，後到的 0 列
 //           2026-10-07 S10 R1（Claude Opus 5.5）：加 isActive（執行紀錄檢核項的執行人工號必須是啟用中的使用者）
+//           2026-10-07 S10 結案 review ①B（Claude Opus 5.5）：移除 isActive（執行人改為只收本人或原值，不再查別人工號）
 // ============================================================
 
 import java.util.List;
@@ -44,12 +45,6 @@ public class UserDao {
 				+ " FROM " + schema.table("IM_USER") + " WHERE LOGIN_ID = :loginId";
 		List<UserRow> rows = dbClient.query(itflowDb, sql, Map.of("loginId", loginId), UserRow.class);
 		return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
-	}
-
-	/** 該工號是否為啟用中的使用者 */
-	public boolean isActive(String userId) {
-		String sql = "SELECT USER_ID FROM " + schema.table("IM_USER") + " WHERE USER_ID = :userId AND STATUS = 1";
-		return !dbClient.query(itflowDb, sql, Map.of("userId", userId), UserRow.class).isEmpty();
 	}
 
 	/** 使用者目前啟用中的角色（對照與角色主檔都要啟用），依角色排序 */
