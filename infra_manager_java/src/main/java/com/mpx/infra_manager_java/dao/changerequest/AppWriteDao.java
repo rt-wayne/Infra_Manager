@@ -13,6 +13,7 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //           2026-10-07 S7 R2：加 updateStatus（簽核鎖內改主檔狀態 APPROVED／REJECTED）
 //           2026-10-07 S9 R1（Claude Fable 5.1）：加 updateForResubmit（補件：改內容欄、CURR_VER_NO + 1、RESUB_MEMO、FLOW_ID；
 //           在 transition 取得鎖之後呼叫，不再加 ROW_VER_NO、不帶狀態條件——updateApp 的 WHERE 寫死 DRAFT 不能重用）
+//           2026-10-07 S9 R2（Claude Opus 5.5）：加 lockForUpdate（刪除用，只比版本取鎖）與 deleteApp（軟刪除寫 DELETE_* 四欄）
 // ============================================================
 
 import java.sql.Timestamp;
@@ -165,6 +166,27 @@ public class AppWriteDao {
 		p.put("by", by);
 		p.put("applicantOnly", applicantOnly ? 1 : 0);
 		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/**
+	 * 只取鎖：版本相符且未刪除才把 ROW_VER_NO +1，不看狀態與申請人（刪除時權限要在鎖內依現況重算，條件寫不進 WHERE）。
+	 * 回影響筆數（0 表示單不存在、已刪除或版本不符，由呼叫端用 findLockState 判斷）
+	 */
+	public int lockForUpdate(String appId, long rowVerNo, String by) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET ROW_VER_NO = ROW_VER_NO + 1, UPDATE_DATE = SYSDATE,"
+				+ " UPDATE_BY = :by WHERE APP_ID = :appId AND ROW_VER_NO = :rowVerNo AND STATUS = 1";
+		return dbClient.update(itflowDb, sql, Map.of("appId", appId, "rowVerNo", rowVerNo, "by", by));
+	}
+
+	/**
+	 * 軟刪除：STATUS 0 並寫入刪除時間、刪除人、原因與刪除方式（CK_IM_APP_DELETE 要求三欄必填）。
+	 * 在 lockForUpdate 取得鎖之後呼叫，不另檢查版本
+	 */
+	public int deleteApp(String appId, String by, String reason, String mode) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET STATUS = 0, DELETE_DATE = SYSDATE,"
+				+ " DELETE_USER_ID = :by, DELETE_REASON = :reason, DELETE_MODE_CODE = :mode, UPDATE_BY = :by"
+				+ " WHERE APP_ID = :appId AND STATUS = 1";
+		return dbClient.update(itflowDb, sql, Map.of("appId", appId, "by", by, "reason", reason, "mode", mode));
 	}
 
 	/** 末關同意／退件時改主檔狀態（在 transition 取得鎖之後呼叫，不另檢查版本；版本已由 transition 加過） */

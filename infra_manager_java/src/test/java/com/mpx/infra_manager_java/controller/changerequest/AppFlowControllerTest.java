@@ -7,14 +7,19 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           走真的登入流程。鎖定：未登入 401；缺 CSRF 403；成功回 200 {appId, rowVerNo(新)} 且服務收到本文與登入者；
 //           服務丟出的 403／404／409／400 原樣對應狀態碼與訊息；本文不是 JSON 回 400
 //           2026-10-07 S9 R1：加 /resubmit——401／403 迴圈納入；200 時巢狀 form 整份轉成 AppDraftRequest 傳給服務；403／409 對應
+//           2026-10-07 S9 R2（Claude Opus 5.5）：加 DELETE /api/apps/{id}——401、缺 CSRF 403、JSON 本文三欄解析傳給服務、
+//           400／403／404／409 對應、沒帶本文 400
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -44,9 +49,11 @@ import com.mpx.infra_manager_java.dao.auth.UserDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.auth.UserRow;
 import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
+import com.mpx.infra_manager_java.model.changerequest.DeleteRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
 import com.mpx.infra_manager_java.service.auth.AuthService;
+import com.mpx.infra_manager_java.service.changerequest.AppDeleteService;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 import com.mpx.infra_manager_java.service.changerequest.DecisionPolicy;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
@@ -66,7 +73,8 @@ class AppFlowControllerTest {
 	private static final String RESUBMIT_BODY = "{\"rowVerNo\":9,\"resubMemo\":\"已補\",\"form\":{\"title\":\"T\",\"prioCode\":\"P3\","
 			+ "\"applicant\":{\"deptName\":\"資訊處\",\"tel\":\"1234\",\"email\":\"it@example.com\"},"
 			+ "\"equipments\":[{\"name\":\"核心交換器\",\"assetNo\":\"A-1\"}],\"planSteps\":[\"關機\",\"換板\"],\"rowVerNo\":999}}";
-	private static final List<String> ACTIONS = List.of("submit", "recall", "resubmit", "decisions");
+	private static final String DELETE_BODY = "{\"rowVerNo\":11,\"confirmId\":\"" + APP + "\",\"reason\":\"重複建單\"}";
+	private static final List<String> ACTIONS =List.of("submit", "recall", "resubmit", "decisions");
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -79,6 +87,9 @@ class AppFlowControllerTest {
 
 	@MockitoBean
 	private AppFlowService appFlowService;
+
+	@MockitoBean
+	private AppDeleteService appDeleteService;
 
 	private record Session(MockHttpSession session, Cookie xsrf) {
 	}
@@ -239,6 +250,65 @@ class AppFlowControllerTest {
 				.andExpect(jsonPath("$.message").value(AppFlowService.MSG_DECIDE_STALE));
 		postJson(s, "/api/apps/G/decisions", DECIDE_BODY).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value(DecisionPolicy.MSG_REJECT_NEEDS_MEMO));
+	}
+
+	/** 已登入、帶 CSRF 的 DELETE（帶 JSON 本文） */
+	private ResultActions deleteJson(Session s, String path, String body) throws Exception {
+		return mockMvc.perform(delete(path).session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue()).contentType(MediaType.APPLICATION_JSON)
+				.content(body));
+	}
+
+	@Test
+	void 刪除_未登入401_缺CSRF403() throws Exception {
+		MvcResult me = mockMvc.perform(get("/api/auth/me")).andReturn();
+		Cookie xsrf = me.getResponse().getCookie(SecurityConfig.XSRF_COOKIE);
+		mockMvc.perform(delete("/api/apps/" + APP).cookie(xsrf).header(SecurityConfig.XSRF_HEADER, xsrf.getValue())
+				.contentType(MediaType.APPLICATION_JSON).content(DELETE_BODY)).andExpect(status().isUnauthorized());
+
+		Session s = login();
+		mockMvc.perform(delete("/api/apps/" + APP).session(s.session()).contentType(MediaType.APPLICATION_JSON)
+				.content(DELETE_BODY)).andExpect(status().isForbidden());
+		verifyNoInteractions(appDeleteService);
+	}
+
+	@Test
+	void 刪除回200且本文三欄原樣傳給服務() throws Exception {
+		Session s = login();
+		deleteJson(s, "/api/apps/" + APP, DELETE_BODY).andExpect(status().isOk())
+				.andExpect(content().json("{\"appId\":\"" + APP + "\"}"));
+		ArgumentCaptor<DeleteRequest> req = ArgumentCaptor.forClass(DeleteRequest.class);
+		ArgumentCaptor<AuthUser> user = ArgumentCaptor.forClass(AuthUser.class);
+		verify(appDeleteService).delete(eq(APP), req.capture(), user.capture());
+		assertThat(req.getValue().rowVerNo()).isEqualTo(11L);
+		assertThat(req.getValue().confirmId()).isEqualTo(APP);
+		assertThat(req.getValue().reason()).isEqualTo("重複建單");
+		assertThat(user.getValue().userId()).isEqualTo("E0001");
+	}
+
+	@Test
+	void 刪除服務例外對應狀態碼_缺本文400() throws Exception {
+		Session s = login();
+		doThrow(new ApiBadRequestException(AppDeleteService.MSG_CONFIRM_MISMATCH)).when(appDeleteService)
+				.delete(eq("K"), any(), any());
+		doThrow(new AccessDeniedException(AppDeleteService.MSG_DELETE_FORBIDDEN)).when(appDeleteService)
+				.delete(eq("L"), any(), any());
+		doThrow(new ApiNotFoundException("找不到申請單")).when(appDeleteService).delete(eq("M"), any(), any());
+		doThrow(new ApiConflictException(AppFlowService.MSG_STALE)).when(appDeleteService).delete(eq("N"), any(), any());
+
+		deleteJson(s, "/api/apps/K", DELETE_BODY).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(AppDeleteService.MSG_CONFIRM_MISMATCH));
+		deleteJson(s, "/api/apps/L", DELETE_BODY).andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_FORBIDDEN));
+		deleteJson(s, "/api/apps/M", DELETE_BODY).andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.message").value("找不到申請單"));
+		deleteJson(s, "/api/apps/N", DELETE_BODY).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AppFlowService.MSG_STALE));
+
+		// 沒帶本文（@RequestBody 必填）→ 400，不進服務
+		mockMvc.perform(delete("/api/apps/Z").session(s.session()).cookie(s.xsrf())
+				.header(SecurityConfig.XSRF_HEADER, s.xsrf().getValue())).andExpect(status().isBadRequest());
+		verify(appDeleteService, never()).delete(eq("Z"), any(), any());
 	}
 
 	@Test

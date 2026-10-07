@@ -8,6 +8,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           等 S9／S5 接上功能再開。角色用 AuthUser.roles 的角色代碼（admin、idc_admin、governance⋯）
 //           2026-10-07 S7 R1（Claude Fable 5.1）：canSubmit 開啟＝草稿且（申請人或 admin），對應 AppFlowService.submit 的鎖內判斷；
 //           AI 閘門等第 17 項拍板，這裡不擋
+//           2026-10-07 S9 R2（Claude Opus 5.5）：申請人不可刪的狀態加 REJECTED（施工計畫 ⑧）；AppDeleteService 在鎖內重用本運算
 // ============================================================
 
 import java.util.List;
@@ -29,8 +30,9 @@ public class AppPermissionService {
 	public static final String DELETE_MODE_ADMIN = "ADMIN";
 	public static final String DELETE_MODE_APPLICANT = "APPLICANT_PRE_REVIEW";
 
+	/** 申請人不能刪的狀態；REJECTED 同舊系統不開放（S9 ⑧），明列避免日後出現「沒有關卡簽過的退件」時漏網 */
 	private static final Set<String> NOT_DELETABLE_BY_APPLICANT = Set.of("APPROVED", "IN_EXECUTION", "PENDING_REVIEW",
-			"EXECUTED");
+			"EXECUTED", "REJECTED");
 
 	/**
 	 * @param appr  目前版次的簽核實例；沒有時為 null

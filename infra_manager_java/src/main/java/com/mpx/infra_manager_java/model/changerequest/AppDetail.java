@@ -8,6 +8,7 @@ package com.mpx.infra_manager_java.model.changerequest;
 //           代碼欄位回代碼、前端對應中文；選項名稱（優先等級、類別、原因、範圍、檢核項、執行結果）由伺服器帶出。
 //           日期時間一律 yyyy-MM-dd HH:mm 字串、日期 yyyy-MM-dd；附件不帶檔案路徑，下載走專用端點
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：加 rowVerNo（樂觀鎖，編輯草稿時帶回）與 Option.formOptionId
+//           S9 R2（Claude Opus 5.5，2026-10-07）：approval 後面加 approvalHistory（目前實例以外的歷次簽核，依實例建立先後）
 // ============================================================
 
 import java.math.BigDecimal;
@@ -20,7 +21,8 @@ public record AppDetail(String appId, String title, String prioCode, String prio
 		Supplier supplier, String workSubject, String impactDesc, String workDetail, String riskDesc,
 		String rollbackPlan, List<Option> categories, List<Option> reasons, String otherReason, List<Option> scopes,
 		List<Equipment> equipments, List<PlanStep> planSteps, Schedule schedule, Location location, String resubmitMemo,
-		List<CheckItem> checklist, Execution execution, Approval approval, List<Attachment> attachments,
+		List<CheckItem> checklist, Execution execution, Approval approval, List<PastApproval> approvalHistory,
+		List<Attachment> attachments,
 		List<Version> versions, List<Event> events, AppPermissions permissions, String createdAt, String updatedAt) {
 
 	public record Applicant(String userId, String name, String deptName, String tel, String email) {
@@ -59,6 +61,14 @@ public record AppDetail(String appId, String title, String prioCode, String prio
 
 	/** apprId 為 null 表示沒有簽核實例（草稿、已收回），steps 是流程定義展開、狀態一律 WAITING */
 	public record Approval(Long apprId, String statusCode, String startedAt, String closedAt, List<Step> steps) {
+	}
+
+	/**
+	 * 歷次簽核的一個實例（目前那筆以外：已退件、已撤回、已取消）；verNo 是該實例所屬的申請單版次。
+	 * 關卡的 candidateNames 一律空清單（實例已結束，候選人名單不再有意義）
+	 */
+	public record PastApproval(Long apprId, Integer verNo, String statusCode, String startedAt, String closedAt,
+			List<Step> steps) {
 	}
 
 	public record Step(Integer seqNo, String stepCode, String stepName, String stepMode, boolean notifyOnly,

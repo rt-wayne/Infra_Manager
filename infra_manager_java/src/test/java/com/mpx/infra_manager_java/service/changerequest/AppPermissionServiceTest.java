@@ -154,7 +154,7 @@ class AppPermissionServiceTest {
 		assertThat(admin.canDelete()).isTrue();
 		assertThat(admin.deleteMode()).isEqualTo(AppPermissionService.DELETE_MODE_ADMIN);
 
-		for (String status : List.of("APPROVED", "IN_EXECUTION", "PENDING_REVIEW", "EXECUTED")) {
+		for (String status : List.of("APPROVED", "IN_EXECUTION", "PENDING_REVIEW", "EXECUTED", "REJECTED")) {
 			assertThat(service.compute(app(status, "ME"), null, List.of(), List.of(), null, user("ME")).canDelete())
 					.as(status).isFalse();
 		}

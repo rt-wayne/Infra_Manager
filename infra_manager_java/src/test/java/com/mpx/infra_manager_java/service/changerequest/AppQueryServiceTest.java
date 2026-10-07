@@ -7,6 +7,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           鎖定：篩選值正規化（預設 90 天只在 from／to 都沒給時、無效代碼 400 帶訊息、q 去空白與 100 字上限、
 //           from>to 400、page<1 視為 1）、列表項目對應（單一候選人顯示姓名、多人顯示「N 人待簽」、無關卡為 null）、
 //           檢視 404（格式不符不打 DB、查無）、沒有簽核實例時用流程定義展開、候選人姓名掛到對應關卡
+//           S9 R2（Claude Opus 5.5，2026-10-07）：歷次簽核排除目前實例、依實例分組保留順序
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +38,7 @@ import com.mpx.infra_manager_java.model.changerequest.AppListItem;
 import com.mpx.infra_manager_java.model.changerequest.AppListQuery;
 import com.mpx.infra_manager_java.model.changerequest.AppListResponse;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprHistoryRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
 import com.mpx.infra_manager_java.model.changerequest.CandRow;
@@ -293,5 +295,49 @@ class AppQueryServiceTest {
 		// 我是第 2 關候選人 → 可簽核；不是申請人 → 不能撤回
 		assertThat(d.permissions().canDecide()).isTrue();
 		assertThat(d.permissions().canRecall()).isFalse();
+		// 歷次簽核排除目前實例
+		verify(approvalDao).findHistory("IM20261006-902", 77L);
+		assertThat(d.approvalHistory()).isEmpty();
+	}
+
+	private static ApprHistoryRow hist(long apprId, int verNo, String apprStatus, int seq, String stepStatus,
+			String userName, String memo) {
+		ApprHistoryRow r = new ApprHistoryRow();
+		r.setApprId(apprId);
+		r.setDocVerNo(verNo);
+		r.setApprStatusCode(apprStatus);
+		r.setApprStartDate(Timestamp.valueOf("2026-10-01 09:00:00"));
+		r.setApprCloseDate(Timestamp.valueOf("2026-10-02 15:30:00"));
+		r.setApprStepId(apprId * 10 + seq);
+		r.setSeqNo(seq);
+		r.setStepName("第" + seq + "關");
+		r.setStepStatusCode(stepStatus);
+		r.setIsNotifyOnly(0);
+		r.setUserName(userName);
+		r.setMemo(memo);
+		return r;
+	}
+
+	@Test
+	void 歷次簽核依實例分組_保留順序_候選人一律空() {
+		List<AppDetail.PastApproval> h = AppQueryService.pastApprovals(List.of(
+				hist(5L, 1, "RECALLED", 1, "CANCELLED", null, null),
+				hist(5L, 1, "RECALLED", 2, "CANCELLED", null, null),
+				hist(8L, 1, "REJECTED", 1, "APPROVED", "王一", null),
+				hist(8L, 1, "REJECTED", 2, "REJECTED", "李二", "資料不全"),
+				hist(8L, 1, "REJECTED", 3, "SKIPPED", null, null)));
+
+		assertThat(h).extracting(AppDetail.PastApproval::apprId).containsExactly(5L, 8L);
+		assertThat(h.get(0).statusCode()).isEqualTo("RECALLED");
+		assertThat(h.get(0).verNo()).isEqualTo(1);
+		assertThat(h.get(0).startedAt()).isEqualTo("2026-10-01 09:00");
+		assertThat(h.get(0).closedAt()).isEqualTo("2026-10-02 15:30");
+		assertThat(h.get(0).steps()).hasSize(2);
+		AppDetail.PastApproval rejected = h.get(1);
+		assertThat(rejected.steps()).extracting(AppDetail.Step::statusCode).containsExactly("APPROVED", "REJECTED", "SKIPPED");
+		assertThat(rejected.steps().get(1).deciderName()).isEqualTo("李二");
+		assertThat(rejected.steps().get(1).memo()).isEqualTo("資料不全");
+		assertThat(rejected.steps()).allSatisfy(s -> assertThat(s.candidateNames()).isEmpty());
+		assertThat(AppQueryService.pastApprovals(List.of())).isEmpty();
 	}
 }

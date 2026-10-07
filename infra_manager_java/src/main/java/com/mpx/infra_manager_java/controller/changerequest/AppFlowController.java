@@ -10,12 +10,15 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           非目前關卡簽核人 403、被搶簽或版本過期 409、退件沒意見 400
 //           2026-10-07 S9 R1：加 POST /api/apps/{id}/resubmit 補件並重送（body：rowVerNo、resubMemo、form＝整份 AppDraftRequest），
 //           非申請人 403、不是 REJECTED 或版本過期 409、表單格式或必填缺漏 400
+//           2026-10-07 S9 R2（Claude Opus 5.5）：加 DELETE /api/apps/{id} 刪除（JSON 本文：rowVerNo、confirmId、reason），
+//           成功回 200 {appId}；確認編號不符或原因空白 400、沒有刪除權限 403、已刪或不存在 404、版本過期 409
 // ============================================================
 
 import java.util.Map;
 
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,8 +27,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
+import com.mpx.infra_manager_java.model.changerequest.DeleteRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
+import com.mpx.infra_manager_java.service.changerequest.AppDeleteService;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 
 @RestController
@@ -33,9 +38,11 @@ import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 public class AppFlowController {
 
 	private final AppFlowService appFlowService;
+	private final AppDeleteService appDeleteService;
 
-	public AppFlowController(AppFlowService appFlowService) {
+	public AppFlowController(AppFlowService appFlowService, AppDeleteService appDeleteService) {
 		this.appFlowService = appFlowService;
+		this.appDeleteService = appDeleteService;
 	}
 
 	@PostMapping("/{id}/submit")
@@ -57,6 +64,13 @@ public class AppFlowController {
 			Authentication authentication) {
 		long rowVerNo = appFlowService.resubmit(id, request, principal(authentication));
 		return Map.of("appId", id, "rowVerNo", rowVerNo);
+	}
+
+	@DeleteMapping("/{id}")
+	public Map<String, Object> delete(@PathVariable("id") String id, @RequestBody DeleteRequest request,
+			Authentication authentication) {
+		appDeleteService.delete(id, request, principal(authentication));
+		return Map.of("appId", id);
 	}
 
 	@PostMapping("/{id}/decisions")

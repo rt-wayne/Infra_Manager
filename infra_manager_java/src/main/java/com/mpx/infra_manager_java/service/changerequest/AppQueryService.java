@@ -10,9 +10,12 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           detail：單號格式不符或查不到 → 404「找不到申請單」；簽核欄沒有實例時用流程定義展開（狀態 WAITING）；
 //                 附件只給中繼資料，下載走 AttachmentService
 //           S6 回合二 a（Claude Opus 5.5，2026-10-06）：detail 帶 rowVerNo 與選項的 formOptionId
+//           S9 R2（Claude Opus 5.5，2026-10-07）：detail 帶 approvalHistory（目前實例以外的歷次簽核，含撤回那一輪）
 // ============================================================
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,6 +35,7 @@ import com.mpx.infra_manager_java.model.changerequest.AppListQuery;
 import com.mpx.infra_manager_java.model.changerequest.AppListResponse;
 import com.mpx.infra_manager_java.model.changerequest.AppPermissions;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprHistoryRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
 import com.mpx.infra_manager_java.model.changerequest.CandRow;
@@ -189,6 +193,7 @@ public class AppQueryService {
 								TaiwanTime.formatDateTime(s.getDecideDate()), s.getMemo(),
 								s.getApprStepId() == null ? List.of() : candNames.getOrDefault(s.getApprStepId(), List.of())))
 								.toList()),
+				pastApprovals(approvalDao.findHistory(appId, appr == null ? null : appr.getApprId())),
 				attachDao.findByApp(appId).stream()
 						.map(a -> new AppDetail.Attachment(a.getAttachId(), a.getOwnerType(), a.getOwnerId(),
 								a.getOrigFileName(), a.getFileByteQty(), a.getMimeType(),
@@ -204,6 +209,24 @@ public class AppQueryService {
 								TaiwanTime.formatDateTime(e.getEventDate()), e.getMemo()))
 						.toList(),
 				permissions, TaiwanTime.formatDateTime(app.getCreateDate()), TaiwanTime.formatDateTime(app.getUpdateDate()));
+	}
+
+	/** 歷次簽核的扁平列（一列一關）依實例分組，保留 SQL 的排序（實例建立先後、關卡序） */
+	static List<AppDetail.PastApproval> pastApprovals(List<ApprHistoryRow> rows) {
+		Map<Long, List<ApprHistoryRow>> byAppr = new LinkedHashMap<>();
+		for (ApprHistoryRow r : rows) {
+			byAppr.computeIfAbsent(r.getApprId(), k -> new ArrayList<>()).add(r);
+		}
+		List<AppDetail.PastApproval> result = new ArrayList<>();
+		for (List<ApprHistoryRow> group : byAppr.values()) {
+			ApprHistoryRow head = group.get(0);
+			result.add(new AppDetail.PastApproval(head.getApprId(), head.getDocVerNo(), head.getApprStatusCode(),
+					TaiwanTime.formatDateTime(head.getApprStartDate()), TaiwanTime.formatDateTime(head.getApprCloseDate()),
+					group.stream().map(s -> new AppDetail.Step(s.getSeqNo(), s.getStepCode(), s.getStepName(),
+							s.getStepModeCode(), flag(s.getIsNotifyOnly()), s.getStepStatusCode(), s.getUserName(),
+							TaiwanTime.formatDateTime(s.getDecideDate()), s.getMemo(), List.<String>of())).toList()));
+		}
+		return result;
 	}
 
 	/** 單號格式不符直接當不存在，不打 DB */

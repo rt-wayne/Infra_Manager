@@ -9,7 +9,8 @@ package com.mpx.infra_manager_web.controller;
 //           20 MB 下載串流回來 sha256 一致、Content-Disposition／Content-Length／Cache-Control 透傳；
 //           宣告長度超過 1 MB 回 413 且不打後端；chunked 本文邊轉邊計數超過 1 MB 回 413；
 //           B6 逾時涵蓋範圍（read timeout 縮成 2 秒量測）：後端回應本文整段計入 read timeout（超過即中斷）、
-//           用戶端上傳本文的時間不計入（慢慢傳完後端仍完整收到）
+//           用戶端上傳本文的時間不計入（慢慢傳完後端仍完整收到）。
+//           S9 回合二補：DELETE 帶 JSON 本文原樣到後端（方法、路徑、Content-Type、Content-Length、sha256）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -262,6 +263,26 @@ class ApiProxyStreamingTest {
 
 		assertThat(resp.statusCode()).isEqualTo(200);
 		assertThat(received.get(0).sha256()).isEqualTo(sha256Hex(body));
+	}
+
+	/** S9 刪除走 DELETE 帶 JSON 本文（計畫 ⑨）：JDK 用戶端對 DELETE 也要送出本文與 Content-Length，不得被丟掉 */
+	@Test
+	void deleteWithJsonBody_reachesBackendIntact() throws Exception {
+		byte[] body = "{\"rowVerNo\":3,\"confirmId\":\"IM20261007-001\",\"reason\":\"重複建單\"}"
+				.getBytes(StandardCharsets.UTF_8);
+		HttpResponse<String> resp = client.send(HttpRequest.newBuilder(shell("/apps/IM20261007-001"))
+				.header("Content-Type", "application/json")
+				.method("DELETE", HttpRequest.BodyPublishers.ofByteArray(body)).build(),
+				HttpResponse.BodyHandlers.ofString());
+
+		assertThat(resp.statusCode()).isEqualTo(200);
+		assertThat(received).hasSize(1);
+		Received r = received.get(0);
+		assertThat(r.method()).isEqualTo("DELETE");
+		assertThat(r.path()).isEqualTo("/api/apps/IM20261007-001");
+		assertThat(r.contentType()).isEqualTo("application/json");
+		assertThat(r.contentLength()).isEqualTo(String.valueOf(body.length));
+		assertThat(r.sha256()).isEqualTo(sha256Hex(body));
 	}
 
 	/**
