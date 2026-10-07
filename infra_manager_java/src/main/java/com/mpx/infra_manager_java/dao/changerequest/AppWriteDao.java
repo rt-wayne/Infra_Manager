@@ -8,6 +8,8 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //           避免長字串被當 VARCHAR／LONG 綁定而撞 ORA-01461／ORA-24816。
 //           deleteChildren 給回合二 b-2 編輯草稿「子表整批刪除重建」用。
 //           2026-10-07 回合二 b-2：加 updateApp（條件含版本、DRAFT、申請人，任一不符回 0 列）與 findLockState
+//           2026-10-07 S7 R1（Claude Fable 5.1）：加 transition（狀態轉換的條件式 UPDATE，同時當整張單的列鎖）
+//           與 updateFlowId（送審時依當下流程政策重算 FLOW_ID，施工計畫 ⑦A）
 // ============================================================
 
 import java.sql.Timestamp;
@@ -114,6 +116,34 @@ public class AppWriteDao {
 		p.put("flowId", flowId);
 		p.put("by", by);
 		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/**
+	 * 狀態轉換：fromStatus → toStatus 並把 ROW_VER_NO +1，只有「版本相符、目前狀態是 fromStatus、未刪除、
+	 * （applicantOnly 時）申請人是 by」才會更新。這一句同時取得該列的鎖，兩個交易同時送出時後到者會等前者 commit
+	 * 後以新值重判，版本已變所以回 0 列。回影響筆數（0 表示任一條件不符，由呼叫端用 findLockState 判斷原因）
+	 */
+	public int transition(String appId, long rowVerNo, String fromStatus, String toStatus, String by,
+			boolean applicantOnly) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET APP_STATUS_CODE = :toStatus,"
+				+ " ROW_VER_NO = ROW_VER_NO + 1, UPDATE_DATE = SYSDATE, UPDATE_BY = :by"
+				+ " WHERE APP_ID = :appId AND ROW_VER_NO = :rowVerNo AND APP_STATUS_CODE = :fromStatus AND STATUS = 1"
+				+ " AND (:applicantOnly = 0 OR APPLY_USER_ID = :by)";
+		Map<String, Object> p = new HashMap<>();
+		p.put("appId", appId);
+		p.put("rowVerNo", rowVerNo);
+		p.put("fromStatus", fromStatus);
+		p.put("toStatus", toStatus);
+		p.put("by", by);
+		p.put("applicantOnly", applicantOnly ? 1 : 0);
+		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 送審時寫回依當下流程政策重算的 FLOW_ID（在 transition 取得鎖之後呼叫，不另檢查版本） */
+	public int updateFlowId(String appId, String flowId, String by) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET FLOW_ID = :flowId, UPDATE_BY = :by"
+				+ " WHERE APP_ID = :appId AND STATUS = 1";
+		return dbClient.update(itflowDb, sql, Map.of("appId", appId, "flowId", flowId, "by", by));
 	}
 
 	/** 編輯失敗時判斷原因；單不存在或已刪除回 null */

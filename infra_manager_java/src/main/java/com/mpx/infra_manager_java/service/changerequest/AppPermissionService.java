@@ -6,6 +6,8 @@ package com.mpx.infra_manager_java.service.changerequest;
 // 變更說明: 新增：檢視頁動作權限旗標的純運算（S4）。對應舊系統 lib/permissions.js，差異：
 //           canDecide 多了「狀態須為 IN_REVIEW」（舊系統漏掉，第 30 項方向 A）；canAiReview、canSubmit 在 S4 一律 false，
 //           等 S9／S5 接上功能再開。角色用 AuthUser.roles 的角色代碼（admin、idc_admin、governance⋯）
+//           2026-10-07 S7 R1（Claude Fable 5.1）：canSubmit 開啟＝草稿且（申請人或 admin），對應 AppFlowService.submit 的鎖內判斷；
+//           AI 閘門等第 17 項拍板，這裡不擋
 // ============================================================
 
 import java.util.List;
@@ -57,9 +59,10 @@ public class AppPermissionService {
 			deleteMode = DELETE_MODE_APPLICANT;
 		}
 		boolean canEditDraft = applicant && "DRAFT".equals(status);
+		boolean canSubmit = "DRAFT".equals(status) && (applicant || admin);
 
 		return new AppPermissions(canDecide, canResubmit, canRecall, canExecute, canReview, deleteMode != null, false,
-				false, canEditDraft, deleteMode);
+				canSubmit, canEditDraft, deleteMode);
 	}
 
 	/** 目前關卡＝序號最小的 PENDING 關卡；有候選人就看候選人，沒有候選人才看流程定義的指定簽核人 */

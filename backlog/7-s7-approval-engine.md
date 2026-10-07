@@ -66,6 +66,13 @@
 - R-d 送審後某關候選人全部停用會卡死，無改派功能（舊系統亦然）
 
 ## 交接欄
-- 目前回合：R1
-- 已完成：—
-- 下一步：R1 施工
+- 目前回合：R2
+- 已完成：R1（2026-10-07）——`ApprovalWriteDao`（insertAppr／findPendingAppr／insertSteps／insertCandidates／countOpenSteps／
+  findOpenStepsWithoutCandidate／countDecidedSteps／closeOpenSteps／closeAppr／insertEvent）、`AppFlowService.submit`／`recall`、
+  `AppSubmitValidator`、`AppFlowController`（`POST /{id}/submit`、`/{id}/recall`）、`AppWriteDao.transition`／`updateFlowId`、
+  `canSubmit` 開啟。單元測試 `AppSubmitValidatorTest`／`AppFlowServiceTest`／`AppPermissionServiceTest` 全綠；
+  IT `AppFlowSubmitIT` 已寫、尚未對真實 DB 跑（R2 一起 verify）。`AppFlowControllerTest` 未寫（R1 預算用完，R2 補或收尾一起）
+- R1 自行決定（衝刺規則，使用者可推翻）：admin 代送審時 403 訊息為「只有申請人或管理員可以送審」；撤回原因全空白存 null；
+  `transition` 的申請人條件用 boolean 參數轉 0／1 綁定（避免 Oracle null 綁定型別問題）；送審時 `IM_APP.CURR_VER_NO` 為 null 視為 1
+- 下一步：R2 施工（`DecisionPolicy`、`AppFlowService.decide`、`POST /decisions`、`ApprovalWriteDao` 加 decideStep／activateNext／skipWaiting、
+  `AppFlowDecisionIT`），完成後向使用者要測試 DB 密碼跑 `./mvnw verify`

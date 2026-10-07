@@ -1,0 +1,56 @@
+package com.mpx.infra_manager_java.controller.changerequest;
+
+// ============================================================
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-07
+// 變更說明: 新增：申請單流程動作端點（S7 R1）。POST /api/apps/{id}/submit 送審、POST /api/apps/{id}/recall 撤回，
+//           body 帶 rowVerNo（撤回可帶 reason），成功回 200 {appId, rowVerNo(新)}；
+//           找不到 404、非申請人 403、狀態不符或版本過期 409、必填缺漏 400（訊息列出缺哪些欄）。
+//           R2 再加 POST /api/apps/{id}/decisions
+// ============================================================
+
+import java.util.Map;
+
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.mpx.infra_manager_java.model.auth.AuthUser;
+import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
+import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
+
+@RestController
+@RequestMapping("/api/apps")
+public class AppFlowController {
+
+	private final AppFlowService appFlowService;
+
+	public AppFlowController(AppFlowService appFlowService) {
+		this.appFlowService = appFlowService;
+	}
+
+	@PostMapping("/{id}/submit")
+	public Map<String, Object> submit(@PathVariable("id") String id, @RequestBody FlowActionRequest request,
+			Authentication authentication) {
+		long rowVerNo = appFlowService.submit(id, request, principal(authentication));
+		return Map.of("appId", id, "rowVerNo", rowVerNo);
+	}
+
+	@PostMapping("/{id}/recall")
+	public Map<String, Object> recall(@PathVariable("id") String id, @RequestBody FlowActionRequest request,
+			Authentication authentication) {
+		long rowVerNo = appFlowService.recall(id, request, principal(authentication));
+		return Map.of("appId", id, "rowVerNo", rowVerNo);
+	}
+
+	private static AuthUser principal(Authentication authentication) {
+		if (authentication == null || !(authentication.getPrincipal() instanceof AuthUser user)) {
+			throw new AuthenticationCredentialsNotFoundException("尚未登入");
+		}
+		return user;
+	}
+}

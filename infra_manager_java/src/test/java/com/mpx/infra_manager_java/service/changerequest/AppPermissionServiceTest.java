@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 // 變更說明: 新增：檢視頁動作權限旗標的純單元測試（S4）。鎖定：canDecide 須狀態 IN_REVIEW 且為目前關卡簽核人
 //           （候選人優先、無候選人看流程指定人）；canRecall 任一關已決就關閉；canExecute 已有結果就關閉；
 //           admin 刪除模式 ADMIN、申請人只在未決且狀態允許時 APPLICANT_PRE_REVIEW；canAiReview／canSubmit 恆 false
+//           2026-10-07 S7 R1（Claude Fable 5.1）：canSubmit 改為草稿且（申請人或 admin）才開
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -164,12 +165,17 @@ class AppPermissionServiceTest {
 	}
 
 	@Test
-	void 草稿編輯只有申請人_AI審查與送出在S4恆關閉() {
+	void 草稿編輯只有申請人_AI審查恆關閉_送出開給申請人與admin() {
 		AppPermissions p = service.compute(app("DRAFT", "ME"), null, List.of(), List.of(), null, user("ME", "admin"));
 		assertThat(p.canEditDraft()).isTrue();
 		assertThat(p.canAiReview()).isFalse();
-		assertThat(p.canSubmit()).isFalse();
-		assertThat(service.compute(app("DRAFT", "ME"), null, List.of(), List.of(), null, user("OTHER")).canEditDraft())
+		assertThat(p.canSubmit()).isTrue();
+		AppPermissions other = service.compute(app("DRAFT", "ME"), null, List.of(), List.of(), null, user("OTHER"));
+		assertThat(other.canEditDraft()).isFalse();
+		assertThat(other.canSubmit()).isFalse();
+		assertThat(service.compute(app("DRAFT", "ME"), null, List.of(), List.of(), null, user("ADM", "admin"))
+				.canSubmit()).isTrue();
+		assertThat(service.compute(app("IN_REVIEW", "ME"), null, List.of(), List.of(), null, user("ME")).canSubmit())
 				.isFalse();
 	}
 }
