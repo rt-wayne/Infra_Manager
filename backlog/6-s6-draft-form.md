@@ -72,7 +72,8 @@
 - 第 73 項附件根目錄未定，正式部署前一定要定
 
 ## 交接
-- 目前回合：二 b（下一步：`POST /api/apps` 建草稿與編號計數器）
+- 目前回合：二 b，因規模拆兩半（2026-10-07）：**二 b-1**＝編號計數器＋`POST /api/apps` 建草稿（主檔＋6 張子表 `CATG_MAP`／`CATG_OTHER`／`REASON_MAP`／`SCOPE_MAP`／`EQUIP`／`PLAN_STEP` 寫入、B8 長度檢查、套 `FLOW_POLICY`）＋`AppSeqIT`；**二 b-2**＝`PUT /api/apps/{id}`（樂觀鎖、只有申請人、非 DRAFT 409、子表刪除重建，共用 b-1 的寫入與檢查元件）。下一步：二 b-1
+- 二 b-1 開工前要讀：`DbClient` 寫入 API（`update`／批次）、`util/TextLength`、`web/ApiExceptionHandler`（400 `{message, field, max, actual}` 已有？）、`AuthUser`、`TaiwanTime`、`AppController`、`AppDao`（欄位對應）、V1 的 `IM_FLOW`／`IM_FORM_OPTION.FLOW_ID`（by_priority 取流程）。表欄位已查：V1 第 397～711 行
 - 二 a 已完成：`GET /api/form-options`（`FormOptionController`／`FormOptionService`／`FormOptionDao`）、`SysParamService`（`uploadMaxMb`／`uploadMaxFiles`／`flowPolicy`，二 b 建草稿套流程時直接用 `flowPolicy()`）、檢視 API 補 `rowVerNo`／`formOptionId`、前端型別同步；後端測試 209、前端 35
 - 二 b 已改動：（無）
 - 卡住／待確認：上方「未回答的待確認」第 1～7、9 題（目前照假設施工）
