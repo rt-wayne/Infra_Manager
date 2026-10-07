@@ -20,10 +20,10 @@
 | 10 | S10 執行與治理審查：Execute、execute-reject、Review。完成條件：APPROVED→IN_EXECUTION→PENDING_REVIEW→EXECUTED；GOV_RETURN→REJECTED | `backlog/10-s10-execution-review.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S10（第 10 項）開工分析與施工計畫已寫好（16 項決策，⑨ 治理審查人與申請人／執行人是否互斥、⑪ 要不要開使用者查詢 API 兩項屬資安取捨待使用者裁示，施工先照建議：不擋、不開）。下一回合做 R1 後端執行（`PUT /api/apps/{id}/execution`，決策 ①～⑦、⑫）
-- 已改動：新增施工計畫 `backlog/10-s10-execution-review.md`
+- 下一步：S10（第 10 項）R1 後端執行（`PUT /api/apps/{id}/execution`）已完成、單元測試全綠；⑨ ⑪ 已裁示（不擋、不開）。下一回合做 R2 後端退回＋治理審查（決策 ⑧～⑩），見施工計畫回合切分
+- 已改動：R1 新增 `ExecutionRequest`、`ExecutionDraft`、`ExecutionValidator`、`ExecWriteDao`、`AppExecutionService`、`AppExecutionController`，改 `UserDao`（加 `isActive`）；測試 `ExecutionValidatorTest`、`AppExecutionServiceTest`、`AppExecutionControllerTest`，`AppExecutionIT` 已寫未跑（階段結束 `mvnw verify` 一次跑）
 - 要記得的事：**S9 經 3201 的手動驗證使用者裁示略過**（2026-10-07「我不做手動驗證」），「退件 → 補件 → v2 簽核」、刪除面板、DELETE 帶本文經殼 jar 都還沒從畫面走過，基本功能完成後整體驗收時一併走（DELETE 不通才退回 `POST /delete`）。第 102 項（前端改版成示意頁）使用者說「晚點改」，排程由使用者決定。**測試 DB 的 `IM_ROLE` 曾經是空的**（2026-10-07 S7 verify 時發現，V1 §8.1 預載 6 筆不在），由 Claude 以「不存在才插入」補回 6 筆、未動既有列；原因不明，使用者若知道是誰清的請告知。**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
-- 卡住／待確認：S10 施工計畫 ⑨（治理審查人能否是申請人或執行人本人）、⑪（執行人選系統使用者要不要開使用者查詢 API）等使用者裁示，⑨ 影響 R2、⑪ 影響 R3，R1 不受影響；第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認；第 102 項（前端改版成示意頁）開工前要使用者裁示 (a)(b)(c) 三項
+- 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認；第 102 項（前端改版成示意頁）開工前要使用者裁示 (a)(b)(c) 三項
 
 ## 下一階段（細節調整）
 
