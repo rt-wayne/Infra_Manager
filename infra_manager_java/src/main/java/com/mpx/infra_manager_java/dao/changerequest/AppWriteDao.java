@@ -10,6 +10,7 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //           2026-10-07 回合二 b-2：加 updateApp（條件含版本、DRAFT、申請人，任一不符回 0 列）與 findLockState
 //           2026-10-07 S7 R1（Claude Fable 5.1）：加 transition（狀態轉換的條件式 UPDATE，同時當整張單的列鎖）
 //           與 updateFlowId（送審時依當下流程政策重算 FLOW_ID，施工計畫 ⑦A）
+//           2026-10-07 S7 R2：加 updateStatus（簽核鎖內改主檔狀態 APPROVED／REJECTED）
 // ============================================================
 
 import java.sql.Timestamp;
@@ -137,6 +138,13 @@ public class AppWriteDao {
 		p.put("by", by);
 		p.put("applicantOnly", applicantOnly ? 1 : 0);
 		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 末關同意／退件時改主檔狀態（在 transition 取得鎖之後呼叫，不另檢查版本；版本已由 transition 加過） */
+	public int updateStatus(String appId, String toStatus, String by) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET APP_STATUS_CODE = :toStatus, UPDATE_BY = :by"
+				+ " WHERE APP_ID = :appId AND STATUS = 1";
+		return dbClient.update(itflowDb, sql, Map.of("appId", appId, "toStatus", toStatus, "by", by));
 	}
 
 	/** 送審時寫回依當下流程政策重算的 FLOW_ID（在 transition 取得鎖之後呼叫，不另檢查版本） */

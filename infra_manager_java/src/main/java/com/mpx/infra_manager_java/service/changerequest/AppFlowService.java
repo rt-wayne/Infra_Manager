@@ -10,6 +10,10 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           展開關卡（只通知 SKIPPED ⑥A）→ 展開候選人並排除申請人（使用者裁示 ①B）→ 任一待簽關卡 0 人就 400 擋下 → 事件 SUBMIT。
 //           撤回：鎖（只限申請人）→ 已有關卡簽過 409 → 未結束關卡 CANCELLED、IM_APPR RECALLED → 事件 RECALL（原因進 MEMO）。
 //           任何一步丟例外整筆 rollback，不會留下半套的簽核實例。
+//           2026-10-07 S7 R2：加 decide（同意／退件）。鎖同樣是主檔條件式 UPDATE（IN_REVIEW → IN_REVIEW、版本 +1），
+//           兩人同時簽後到者 409；鎖內重判是否為目前關卡簽核人（候選人優先、無候選人看流程指定人）；
+//           關卡 WHERE PENDING 條件式 UPDATE 當第二道防線。同意→下一關 PENDING 或結案 APPROVED；退件→剩餘 SKIPPED、結案 REJECTED。
+//           同意／退件不寫 IM_APP_EVENT（DDL 事件碼沒有），紀錄只在 IM_APPR_STEP
 // ============================================================
 
 import java.util.List;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.AppWriteDao;
+import com.mpx.infra_manager_java.dao.changerequest.ApprovalDao;
 import com.mpx.infra_manager_java.dao.changerequest.ApprovalWriteDao;
 import com.mpx.infra_manager_java.dao.changerequest.FormOptionDao;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
@@ -28,6 +33,8 @@ import com.mpx.infra_manager_java.model.changerequest.AppLockRow;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
+import com.mpx.infra_manager_java.model.changerequest.CandRow;
+import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
 import com.mpx.infra_manager_java.util.TextLength;
@@ -50,19 +57,26 @@ public class AppFlowService {
 	public static final String MSG_RECALL_NOT_IN_REVIEW = "申請單不在審核中，無法撤回，請重新載入頁面";
 	public static final String MSG_RECALL_FORBIDDEN = "只有申請人可以撤回";
 	public static final String MSG_RECALL_DECIDED = "已有關卡簽核完成，無法撤回";
+	public static final String STATUS_APPROVED = "APPROVED";
+	public static final String STATUS_REJECTED = "REJECTED";
+	public static final String MSG_DECIDE_NOT_IN_REVIEW = "申請單不在審核中，無法簽核，請重新載入頁面";
+	public static final String MSG_DECIDE_STALE = "此關卡已被其他人簽核或申請單已變更，請重新載入頁面";
+	public static final String MSG_DECIDE_FORBIDDEN = "您不是目前關卡的簽核人";
 
 	private static final Pattern APP_ID = Pattern.compile("^[A-Z0-9-]{1,20}$");
 
 	private final AppDao appDao;
 	private final AppWriteDao appWriteDao;
+	private final ApprovalDao approvalDao;
 	private final ApprovalWriteDao approvalWriteDao;
 	private final FormOptionDao formOptionDao;
 	private final SysParamService sysParamService;
 
-	public AppFlowService(AppDao appDao, AppWriteDao appWriteDao, ApprovalWriteDao approvalWriteDao,
-			FormOptionDao formOptionDao, SysParamService sysParamService) {
+	public AppFlowService(AppDao appDao, AppWriteDao appWriteDao, ApprovalDao approvalDao,
+			ApprovalWriteDao approvalWriteDao, FormOptionDao formOptionDao, SysParamService sysParamService) {
 		this.appDao = appDao;
 		this.appWriteDao = appWriteDao;
+		this.approvalDao = approvalDao;
 		this.approvalWriteDao = approvalWriteDao;
 		this.formOptionDao = formOptionDao;
 		this.sysParamService = sysParamService;
@@ -159,14 +173,78 @@ public class AppFlowService {
 		return rowVerNo + 1;
 	}
 
-	/** 單號格式不對視為找不到（404）；缺版本號 400 */
+	/**
+	 * 簽核目前關卡（同意／退件）；回新的 rowVerNo。
+	 * 鎖：主檔 IN_REVIEW → IN_REVIEW 的條件式 UPDATE（版本 +1），兩人同時簽時後到者版本不符 → 409；
+	 * 第二道：關卡 WHERE PENDING 的條件式 UPDATE 0 列也 409。
+	 * 同意：下一關 WAITING → PENDING，沒有下一關就結案 APPROVED（實例與主檔）；
+	 * 退件：剩餘 WAITING → SKIPPED，實例與主檔 REJECTED
+	 */
+	@Transactional
+	public long decide(String appId, DecisionRequest request, AuthUser me) {
+		long rowVerNo = requireVersion(appId, request == null ? null : request.rowVerNo());
+		String decision = DecisionPolicy.requireDecision(request.decision());
+		String memo = DecisionPolicy.normalizeMemo(decision, request.memo());
+
+		int rows = appWriteDao.transition(appId, rowVerNo, STATUS_IN_REVIEW, STATUS_IN_REVIEW, me.userId(), false);
+		if (rows == 0) {
+			AppLockRow state = appWriteDao.findLockState(appId);
+			if (state == null) {
+				throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
+			}
+			if (!STATUS_IN_REVIEW.equals(state.getAppStatusCode())) {
+				throw new ApiConflictException(MSG_DECIDE_NOT_IN_REVIEW);
+			}
+			throw new ApiConflictException(MSG_DECIDE_STALE);
+		}
+
+		AppRow app = appDao.findById(appId)
+				.orElseThrow(() -> new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND));
+		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
+		ApprRow appr = approvalWriteDao.findPendingAppr(appId, verNo);
+		if (appr == null) {
+			throw new IllegalStateException("審核中的申請單沒有進行中的簽核實例");
+		}
+		long apprId = appr.getApprId();
+		List<ApprStepRow> steps = approvalDao.findSteps(apprId);
+		List<CandRow> cands = approvalDao.findCandidates(apprId);
+		ApprStepRow current = DecisionPolicy.currentStep(steps);
+		if (current == null) {
+			throw new IllegalStateException("審核中的申請單沒有待簽關卡");
+		}
+		if (!DecisionPolicy.isApprover(steps, cands, me.userId())) {
+			throw new AccessDeniedException(MSG_DECIDE_FORBIDDEN);
+		}
+		if (approvalWriteDao.decideStep(current.getApprStepId(), DecisionPolicy.stepStatus(decision), me.userId(),
+				memo) == 0) {
+			throw new ApiConflictException(MSG_DECIDE_STALE);
+		}
+
+		if (DecisionPolicy.APPROVE.equals(decision)) {
+			if (approvalWriteDao.activateNext(apprId, me.userId()) == 0) {
+				approvalWriteDao.closeAppr(apprId, "APPROVED", me.userId());
+				appWriteDao.updateStatus(appId, STATUS_APPROVED, me.userId());
+			}
+		} else {
+			approvalWriteDao.closeOpenSteps(apprId, "SKIPPED", me.userId());
+			approvalWriteDao.closeAppr(apprId, "REJECTED", me.userId());
+			appWriteDao.updateStatus(appId, STATUS_REJECTED, me.userId());
+		}
+		return rowVerNo + 1;
+	}
+
 	private static long requireVersion(String appId, FlowActionRequest request) {
+		return requireVersion(appId, request == null ? null : request.rowVerNo());
+	}
+
+	/** 單號格式不對視為找不到（404）；缺版本號 400 */
+	private static long requireVersion(String appId, Long rowVerNo) {
 		if (appId == null || !APP_ID.matcher(appId).matches()) {
 			throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
 		}
-		if (request == null || request.rowVerNo() == null) {
+		if (rowVerNo == null) {
 			throw new ApiBadRequestException(AppDraftService.MSG_NO_VERSION);
 		}
-		return request.rowVerNo();
+		return rowVerNo;
 	}
 }

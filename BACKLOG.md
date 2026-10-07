@@ -20,8 +20,8 @@
 | 7 | S7 簽核引擎：送審、同意、退件、撤回；樂觀鎖；待辦數。完成條件：full 5 關走完；兩人同時簽其中一人 409 | `backlog/7-s7-approval-engine.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S7 R2（後端簽核 decide ＋ 兩個完成條件的 IT `AppFlowDecisionIT`），計畫見 `backlog/7-s7-approval-engine.md`「R2」；R1 已完成（送審＋撤回後端，單元測試全綠）。R1 的 IT `AppFlowSubmitIT` 尚未對真實 DB 跑過，R2 一起用 `./mvnw verify` 跑（需使用者提供測試 DB 密碼）
-- 已改動：R1 新增 `ApprovalWriteDao`、`AppFlowService`、`AppSubmitValidator`、`AppFlowController`、`FlowActionRequest`；`AppWriteDao` 加 `transition`／`updateFlowId`；`AppPermissionService.canSubmit` 開啟（草稿且申請人或 admin）
+- 下一步：S7 R2 程式已完成（後端簽核 decide、單元測試 294 全綠），**等使用者提供測試 DB 密碼跑 `./mvnw verify`**（`AppFlowSubmitIT`＋`AppFlowDecisionIT`，兩個完成條件都在 IT 裡）；IT 綠了進 R3 前端。計畫與交接欄見 `backlog/7-s7-approval-engine.md`
+- 已改動：R1 新增 `ApprovalWriteDao`、`AppFlowService`、`AppSubmitValidator`、`AppFlowController`、`FlowActionRequest`；`AppWriteDao` 加 `transition`／`updateFlowId`；`AppPermissionService.canSubmit` 開啟（草稿且申請人或 admin）。R2 新增 `DecisionRequest`、`DecisionPolicy`、`AppFlowService.decide`、`POST /api/apps/{id}/decisions`、`ApprovalWriteDao.decideStep`／`activateNext`、`AppWriteDao.updateStatus`、測試 `DecisionPolicyTest`／`AppFlowDecisionIT`
 - 要記得的事：**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
 - 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
 

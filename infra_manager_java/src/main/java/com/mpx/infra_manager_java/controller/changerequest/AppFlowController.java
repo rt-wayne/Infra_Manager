@@ -6,7 +6,8 @@ package com.mpx.infra_manager_java.controller.changerequest;
 // 變更說明: 新增：申請單流程動作端點（S7 R1）。POST /api/apps/{id}/submit 送審、POST /api/apps/{id}/recall 撤回，
 //           body 帶 rowVerNo（撤回可帶 reason），成功回 200 {appId, rowVerNo(新)}；
 //           找不到 404、非申請人 403、狀態不符或版本過期 409、必填缺漏 400（訊息列出缺哪些欄）。
-//           R2 再加 POST /api/apps/{id}/decisions
+//           2026-10-07 S7 R2：加 POST /api/apps/{id}/decisions 簽核（body：rowVerNo、decision APPROVE／REJECT、memo），
+//           非目前關卡簽核人 403、被搶簽或版本過期 409、退件沒意見 400
 // ============================================================
 
 import java.util.Map;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mpx.infra_manager_java.model.auth.AuthUser;
+import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 
@@ -44,6 +46,13 @@ public class AppFlowController {
 	public Map<String, Object> recall(@PathVariable("id") String id, @RequestBody FlowActionRequest request,
 			Authentication authentication) {
 		long rowVerNo = appFlowService.recall(id, request, principal(authentication));
+		return Map.of("appId", id, "rowVerNo", rowVerNo);
+	}
+
+	@PostMapping("/{id}/decisions")
+	public Map<String, Object> decide(@PathVariable("id") String id, @RequestBody DecisionRequest request,
+			Authentication authentication) {
+		long rowVerNo = appFlowService.decide(id, request, principal(authentication));
 		return Map.of("appId", id, "rowVerNo", rowVerNo);
 	}
 

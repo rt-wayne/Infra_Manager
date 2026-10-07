@@ -66,7 +66,16 @@
 - R-d 送審後某關候選人全部停用會卡死，無改派功能（舊系統亦然）
 
 ## 交接欄
-- 目前回合：R2
+- 目前回合：R2 程式完成、待 `verify`（需測試 DB 密碼）
+- 已完成：R2（2026-10-07）——`DecisionRequest`、`DecisionPolicy`（放 `service/changerequest`，不是計畫寫的 `service/approval`）、
+  `AppFlowService.decide`、`AppFlowController` `POST /{id}/decisions`、`ApprovalWriteDao.decideStep`／`activateNext`（skipWaiting 直接重用
+  `closeOpenSteps(…, "SKIPPED", …)`）、`AppWriteDao.updateStatus`。單元測試 `DecisionPolicyTest`（3）＋`AppFlowServiceTest` 加 5 個簽核測試，
+  全部 294 個全綠。IT `AppFlowDecisionIT` 已寫（完成條件一、二＋退件／403），與 `AppFlowSubmitIT` 一起尚未對真實 DB 跑。
+  `AppFlowControllerTest` 仍未寫（收尾補）
+- R2 自行決定（衝刺規則，使用者可推翻）：`DecisionPolicy` 放 `service/changerequest` 以重用 package-private `isCurrentApprover`；
+  簽核鎖用 `transition(IN_REVIEW→IN_REVIEW)` 讓主檔版本加一兼當列鎖（第二人等鎖後 WHERE 不成立 → 0 列 → 409）；
+  同意意見空白存「同意」、退件意見必填 400；簽核不寫 `IM_APP_EVENT`（EVENT_CODE 沒有同意／退件代碼，關卡列本身即紀錄）；
+  409 訊息分兩種：主檔不在審核中「申請單不在審核中，無法簽核，請重新載入頁面」／版本或關卡被搶「此關卡已被其他人簽核或申請單已變更，請重新載入頁面」
 - 已完成：R1（2026-10-07）——`ApprovalWriteDao`（insertAppr／findPendingAppr／insertSteps／insertCandidates／countOpenSteps／
   findOpenStepsWithoutCandidate／countDecidedSteps／closeOpenSteps／closeAppr／insertEvent）、`AppFlowService.submit`／`recall`、
   `AppSubmitValidator`、`AppFlowController`（`POST /{id}/submit`、`/{id}/recall`）、`AppWriteDao.transition`／`updateFlowId`、
@@ -74,5 +83,5 @@
   IT `AppFlowSubmitIT` 已寫、尚未對真實 DB 跑（R2 一起 verify）。`AppFlowControllerTest` 未寫（R1 預算用完，R2 補或收尾一起）
 - R1 自行決定（衝刺規則，使用者可推翻）：admin 代送審時 403 訊息為「只有申請人或管理員可以送審」；撤回原因全空白存 null；
   `transition` 的申請人條件用 boolean 參數轉 0／1 綁定（避免 Oracle null 綁定型別問題）；送審時 `IM_APP.CURR_VER_NO` 為 null 視為 1
-- 下一步：R2 施工（`DecisionPolicy`、`AppFlowService.decide`、`POST /decisions`、`ApprovalWriteDao` 加 decideStep／activateNext／skipWaiting、
-  `AppFlowDecisionIT`），完成後向使用者要測試 DB 密碼跑 `./mvnw verify`
+- 下一步：向使用者要測試 DB 密碼，跑 `./mvnw verify`（`AppFlowSubmitIT`＋`AppFlowDecisionIT`，含兩個完成條件），IT 紅的當場修；
+  綠了再進 R3 前端

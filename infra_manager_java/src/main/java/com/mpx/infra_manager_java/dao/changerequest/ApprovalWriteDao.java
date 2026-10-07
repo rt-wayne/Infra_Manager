@@ -9,6 +9,7 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //           關卡與候選人各用一句 INSERT…SELECT 從流程定義展開：序號最小且非只通知的關卡 PENDING、只通知 SKIPPED（⑥A）、
 //           其餘 WAITING；候選人 ROLE 型要求使用者、角色、使用者角色對照三者都啟用，USER 型取啟用中的指定人，
 //           一律排除申請人（使用者裁示 ①B）。角色一律看 ROLE_ID，不看 STEP_CODE（第 54 項 key 錯位）
+//           2026-10-07 S7 R2：加 decideStep（WHERE PENDING 的條件式 UPDATE，0 列＝被搶簽）與 activateNext（序號最小 WAITING → PENDING）
 // ============================================================
 
 import java.sql.Types;
@@ -133,6 +134,32 @@ public class ApprovalWriteDao {
 				+ " UPDATE_DATE = SYSDATE, UPDATE_BY = :by"
 				+ " WHERE APPR_ID = :apprId AND APPR_STATUS_CODE = 'PENDING' AND STATUS = 1";
 		return dbClient.update(itflowDb, sql, Map.of("apprId", apprId, "toStatus", toStatus, "by", by));
+	}
+
+	/**
+	 * 簽核目前關卡：只在該關仍是 PENDING 時寫入決定、簽核人、時間與意見（CHECK 約束要求 APPROVED／REJECTED 必帶人與時間）。
+	 * 回 0 表示該關已被別人簽走（第二道防線，第一道是主檔的版本鎖）
+	 */
+	public int decideStep(long apprStepId, String toStatus, String userId, String memo) {
+		String sql = "UPDATE " + schema.table("IM_APPR_STEP") + " SET STEP_STATUS_CODE = :toStatus, USER_ID = :userId,"
+				+ " DECIDE_DATE = SYSDATE, MEMO = :memo, UPDATE_DATE = SYSDATE, UPDATE_BY = :userId"
+				+ " WHERE APPR_STEP_ID = :apprStepId AND STATUS = 1 AND STEP_STATUS_CODE = 'PENDING'";
+		Map<String, Object> p = new HashMap<>();
+		p.put("apprStepId", apprStepId);
+		p.put("toStatus", toStatus);
+		p.put("userId", userId);
+		p.put("memo", new SqlParameterValue(Types.CLOB, memo));
+		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/** 把序號最小的 WAITING 關卡改成 PENDING（進下一關）；回 0 表示沒有下一關、整條流程簽完 */
+	public int activateNext(long apprId, String by) {
+		String step = schema.table("IM_APPR_STEP");
+		String sql = "UPDATE " + step + " SET STEP_STATUS_CODE = 'PENDING', UPDATE_DATE = SYSDATE, UPDATE_BY = :by"
+				+ " WHERE APPR_ID = :apprId AND STATUS = 1 AND STEP_STATUS_CODE = 'WAITING'"
+				+ " AND SEQ_NO = (SELECT MIN(S2.SEQ_NO) FROM " + step + " S2"
+				+ "   WHERE S2.APPR_ID = :apprId AND S2.STATUS = 1 AND S2.STEP_STATUS_CODE = 'WAITING')";
+		return dbClient.update(itflowDb, sql, Map.of("apprId", apprId, "by", by));
 	}
 
 	/** 寫申請單事件（SUBMIT／RECALL⋯）；memo 可為 null */
