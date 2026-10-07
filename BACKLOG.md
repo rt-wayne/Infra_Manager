@@ -17,9 +17,10 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 7 | S7 簽核引擎：送審、同意、退件、撤回；樂觀鎖；待辦數。完成條件：full 5 關走完；兩人同時簽其中一人 409 | `backlog/7-s7-approval-engine.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S7 簽核引擎（第 7 項）開工——先做開工分析（送審、同意、退件、撤回、樂觀鎖、待辦數），列待確認項後施工。S6 已於 2026-10-07 結案
+- 下一步：S7 R1（後端送審＋撤回）施工中，計畫與裁示見 `backlog/7-s7-approval-engine.md`（使用者裁示 ①B：候選人排除申請人）
 - 已改動：—
 - 要記得的事：**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
 - 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認
@@ -39,6 +40,7 @@
 | 98 | S6 回合四草稿表單延後的細節 3 項（2026-10-07）：① 新增時預填申請單位／聯絡電話／Email（舊系統帶登入者資料；`/auth/me` 目前只回姓名，要後端補欄位或另開端點）；② 附件拖放與貼上截圖（施工計畫原列為超出規模時延後）；③ 附件清單的大小用 `kb()` 顯示，小於 0.1 KB 的檔顯示「0.0 KB」——改成 bytes 或至少 0.1 KB | 2026-10-07 | — |
 | 99 | S6 回合四 Claude 自行決定的 6 項做法，基本功能完成後逐項請使用者確認（2026-10-07 使用者交代先記錄、放下一階段；目前程式照這 6 項運作）：① 勾「不適用」沒寫原因時存「不適用」三字（否則存檔後勾選消失）；② 編輯舊草稿時自動拿掉已停用的選項（留著後端回「選項不正確」永遠存不了），使用者不會被告知有選項被拿掉；③ 附件按「儲存草稿」後才上傳、全部成功才回檢視頁，失敗的留在清單可移除或再按儲存重試（只重傳失敗的）；④ 開始＋結束時間都填時自動算預計耗時，仍可手改；⑤ 前端只檢查標題必填，其餘檢查交給後端 400；⑥ 新增時不預填申請單位／電話／Email（`/auth/me` 只回姓名；要預填的做法見第 98 項 ①） | 2026-10-07 | — |
 | 100 | S6 階段末 code review 非阻擋項＋2 項功能取捨（2026-10-07；使用者裁示 ①B N1 不升阻擋、②B 不做刪除附件、③ 配額放下一階段；N9 已於 S6 補 PRD 時對齊）：**N1** 服務層丟的 403（非申請人編輯草稿 `AppDraftService.java:93`、非申請人上傳 `AttachmentUploadService.java:145`）落到 `ApiExceptionHandler.accessDenied`（約 103-106 行），沒寫 log、自訂訊息被換成「無權限執行此操作」——違反 `security.md` A09；修法：handler 加 `log.warn`（method、uri、工號），或改丟專案自己的 403 例外並帶出自訂訊息；**N2** `@RequestPart("file")` 預設必填，缺 part 時 Spring 先丟 `MissingServletRequestPartException` 回「請求無法處理」，`MSG_NO_FILE`（`AttachmentUploadService.java:86-88`）永遠走不到——handler 對該例外回「請選擇要上傳的檔案」或改 `required=false`；**N3** `AppFormView.vue` `save()`（約 550-587 行）上傳期間「取消」「回申請單」仍可點、沒有離頁攔截與卸載防護，上傳完 `router.push` 會把已離開的使用者拉回檢視頁，上傳中改的欄位會丟——上傳期間鎖表單與連結或加離頁確認、卸載後不跳頁；**N4** `AppDraftValidator.java:139-149` 用 `yyyy` 加預設 `ResolverStyle.SMART`，2/31 會被調成 2/28 存入、年份不限範圍（超大年份可能讓 Oracle 拋錯變 500）——改 `uuuu`＋`STRICT`＋年份範圍（例如今年 ±5 年）；**N5** 選項檢核缺口：`PRIO_CODES` 寫死 P1～P4（第 56 行，後台停用 P4 後 API 照收）、CATG_ITEM 沒檢查所屬 CATG 是否啟用、`categoryItemIds`／`reasonIds`／`scopeIds` 沒長度上限也沒去重（重複 ID 是否撞子表主鍵回 500 未實測）——先去重再限在該群組選項數以內；**N6** 殼 jar `ApiProxyController` 的 `Forward`（約 164-253 行）`count`／`tooLarge` 跨執行緒讀寫沒宣告 `volatile`（目前靠 `send()` 的 happens-before 正確，改非同步就會壞）——加 `volatile` 或註解說明；**N7** 暫存上傳檔 `.tmp/*.part` 在 JVM 被強制結束時會殘留、沒有排程清理；**N8** `AttachDao.lockApp` 的 `FOR UPDATE` 沒設等待，遇長交易時後端執行緒與連線被無限占住（殼 jar 120 秒先逾時）——加 `WAIT 10`、逾時轉 409；**N10** `POST /api/apps` 不具冪等性，後端已 commit 但前端逾時後重按會多一張草稿與一個流水號（前端已在存檔中鎖按鈕，影響小）；**N11** B5（CSRF 只讀 header）只在 handler 層測，缺「完整 filter chain 下 multipart 不被提早解析」的端到端測試；另權限檢查在 controller 內，已登入帶正確 CSRF 的非申請人呼叫上傳時 Tomcat 會先寫最多 50 MB 暫存檔才回 403；**N12** 50～51 MB 之間的本文殼 jar 放行、後端中途拒收斷線，殼 jar 可能回 502 而非 413（前端預檢擋住，一般使用者碰不到）；**N13** 小項：設備列 `v-for` 用 `:key="i"`（刪中間列時焦點錯位）、`HomeView` 寫死 `'/apps/new'` 沒用命名路由、廠商人數接受小數（後端是否拒收未實測）；**Q2** 草稿附件刪除功能（傳錯檔或傳滿 30 個後無法自行更正；舊系統也沒有，已查舊 `routes/apps.js` 附件只會 `concat`）——要做時需刪除端點、權限、`FOR UPDATE` 鎖與實體檔清理；**Q3** 每人草稿數或附件總量配額（目前任一帳號可無限建草稿 × 30 檔 × 50 MB 占滿附件磁碟；候選：每人未送出草稿上限如 20 張，需新增系統參數＝動設定，要使用者同意） | 2026-10-07 | — |
+| 101 | S7 開工分析範圍外 6 項（2026-10-07 architect，衝刺規則登記不做）：① 簽核時附檔（`IM_ATTACH.OWNER_TYPE=STEP`）與檢視頁簽核欄顯示關卡附件（與第 95 項 G6 同一件事；S7 ④A 只收 JSON 意見）；② 代簽（`IS_ALLOW_DELEG`，p2_high 流程有設；第 46 項後半），需 UI 與規則；③ 事後補核關卡（`STEP_MODE_CODE=POST_HOC`，p1_emergency 流程）——`FLOW_POLICY=full_only` 時用不到，S7 一律當依序簽核處理；④ 管理員改派候選人或關卡（送審後某關候選人全部停用、或排除申請人後只剩 0 人時單子卡死，舊系統亦無）；⑤ 撤回後檢視頁看不到被撤回那一輪的簽核紀錄（`ApprovalDao.findCurrent` 排除 RECALLED）；⑥ 申請人能否簽自己的單已裁示 B（S7 排除申請人），日後若某角色只有申請人本人持有、送不出去，候選做法是 admin 代送或改派（同 ④）。另：第 100 項 N8（`AttachDao.lockApp` 的 `FOR UPDATE` 沒設等待）多一個情境——大檔上傳中按送審，送審會等到上傳結束（50 MB 走 VPN 可達 10 分鐘），前端 120 秒逾時但後端稍後仍送審成功 | 2026-10-07 | — |
 | 91 | 真實帳號匯入（22 人）：等第 60 項對照表到位後，照 `SETUP.md`「匯入使用者」匯入並核對筆數；S2 完成條件中的「真對照表到位後匯入 22 人筆數一致」移到此項驗收 | 2026-10-06 | — |
 
 ## 已拍板待實作
@@ -49,7 +51,6 @@
 |----|------|------|------|
 | 3 | S3 申請單匯入：申請單與簽核表已在 V1；申請單匯入器（時間轉換、撞號處理、舊版次 `FORM_JSON` 填法依第 69 項）；對帳報告。完成條件：依狀態分組筆數與來源一致；報告進 repo。開工前先量測第 34、35、36 項，並先裁示第 60 項（Eric、dept_manager 對應方式）、第 69 項（舊版次 `FORM_JSON` 填法）、第 73 項（附件根目錄）與第 75 項（已刪除單改號規則）。**S4 的「抽 5 張新舊畫面一致」驗收（2026-10-06 裁示 ②A）併入本項，匯入完成後對列表頁與檢視頁執行**。匯入時設備位置「不適用」原因要把舊代碼轉中文（`not_idc`、`rack_not_ready`，對照舊 `view.ejs:127`；S4 code review G8），否則檢視頁顯示英文代碼。匯入後要把 `IM_APP_SEQ.LAST_NO` 回填到各日期的最大號（S6 編號計數器只增不減，不回填則當天新單撞舊單；S6 開工分析範圍外發現） | 3 | — |
 | 5 | S5 表單設定與範本：`IM_FORM_OPTION`（V1 已建）；範本 CRUD（修改／刪除權限**開工前先裁示第 30 項**，涉及漏洞第 43 項）。完成條件：3 份範本可見；權限規則依第 30 項裁示結果驗證 | 5 | — |
-| 7 | S7 簽核引擎：送審、同意、退件、撤回；樂觀鎖；待辦數。完成條件：full 5 關走完；兩人同時簽其中一人 409 | 7 | — |
 | 8 | S8 信件 outbox：`IM_MAIL_OUTBOX`、worker、樣板、admin 信件頁、測試信；定 `IM_SMTP_*` 細項。完成條件：三種信寄到測試信箱；SMTP 中斷 failed 可重寄 | 8 | — |
 | 9 | S9 補件、版次、刪除：resubmit 寫 `IM_APP_VER` 快照；軟刪除。完成條件：補件後 v2，v1 簽核紀錄查得到 | 9 | — |
 | 10 | S10 執行與治理審查：Execute、execute-reject、Review。完成條件：APPROVED→IN_EXECUTION→PENDING_REVIEW→EXECUTED；GOV_RETURN→REJECTED | 10 | — |
