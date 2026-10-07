@@ -5,6 +5,7 @@
 //           S6 回合四（2026-10-07）：加新增／編輯草稿表單 APP_NEW_ROUTE、APP_EDIT_ROUTE
 //           S9 R3（2026-10-07）：加補件重送 APP_RESUBMIT_ROUTE
 //           S10 R3（2026-10-07）：加填寫執行紀錄 APP_EXECUTE_ROUTE
+//           S5 R2（2026-10-07）：加範本列表／新增／編輯 TEMPLATE_LIST_ROUTE、TEMPLATE_NEW_ROUTE、TEMPLATE_EDIT_ROUTE
 // ============================================================
 
 export const APP_LIST_ROUTE = 'app-list'
@@ -15,3 +16,8 @@ export const APP_EDIT_ROUTE = 'app-edit'
 export const APP_RESUBMIT_ROUTE = 'app-resubmit'
 /** S10 R3：填寫執行紀錄（ExecuteView） */
 export const APP_EXECUTE_ROUTE = 'app-execute'
+/** S5 R2：範本列表（TemplateListView） */
+export const TEMPLATE_LIST_ROUTE = 'template-list'
+/** S5 R2：新增與編輯範本共用 TemplateEditView，依有沒有 :id 判斷 */
+export const TEMPLATE_NEW_ROUTE = 'template-new'
+export const TEMPLATE_EDIT_ROUTE = 'template-edit'

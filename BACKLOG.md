@@ -20,8 +20,8 @@
 | 5 | S5 範本：範本 CRUD（第 43 項裁示 A：修改／刪除限建立者或 admin）、套用範本建單、3 份測試種子。完成條件：3 份範本可見；他人改刪 403、建立者與 admin 可改刪 | [backlog/5-templates.md](backlog/5-templates.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S5 R2（前端範本列表與編輯頁，見施工計畫回合表）
-- 已改動：S5 R1 後端 `/api/templates` CRUD 已 commit（model／`TemplateDao`／`TemplateService`／`TemplateController`、`AppDraftValidator.validate(…, requireTitle)`）；單元測試全綠；`TemplateServiceIT` 已寫、未跑（階段末 `verify`）
+- 下一步：S5 R3（套用範本建單＋`USE_CNT` 累計＋3 份測試種子，見施工計畫回合表），之後階段末
+- 已改動：S5 R1 後端 `/api/templates` CRUD 已 commit；`TemplateServiceIT` 已寫、未跑（階段末 `verify`）。S5 R2 前端已 commit：`/templates` 列表（前端每頁 20 列、`canEdit` 才有修改／刪除）、`/templates/new` 與 `/templates/:id/edit`（`TemplateEditView`）、首頁「範本管理」入口；申請單表單一～四區塊抽成 `components/DraftFields.vue`（`kind` 切申請單／範本，範本不顯示申請人聯絡資料與開始／結束時間），`AppFormView` 改用它、既有 spec 全綠；轉換函式在 `utils/templateForm.ts`，`keepActive`／`MAX_ROWS` 移到 `utils/draftForm.ts`；前端 spec 98 個全綠、型別檢查與 build 通過
 - 要記得的事：**S9 經 3201 的手動驗證使用者裁示略過**（2026-10-07「我不做手動驗證」），「退件 → 補件 → v2 簽核」、刪除面板、DELETE 帶本文經殼 jar 都還沒從畫面走過，基本功能完成後整體驗收時一併走（DELETE 不通才退回 `POST /delete`）。**S10 經 3201 的手動驗證同樣裁示略過**（2026-10-07），「待執行 → 暫存 → 送治理審查 → 通過／退回 → 補件」與執行頁 1024 寬時間欄（第 107 項 e）併入同一次整體驗收。第 102 項（前端改版成示意頁）使用者說「晚點改」，排程由使用者決定。**測試 DB 的 `IM_ROLE` 曾經是空的**（2026-10-07 S7 verify 時發現，V1 §8.1 預載 6 筆不在），由 Claude 以「不存在才插入」補回 6 筆、未動既有列；原因不明，使用者若知道是誰清的請告知。**使用者的真實後端 `application.properties` 要自己補 `im.attach.root`**（不補時下載端點回 500）。S4 種子 `db/oracle/sample/S4_sample_apps.sql` 已於 2026-10-07 由 Claude 以 JDBC 匯入測試 DB（待我簽核掛 wayne＝T0001，依 `CLAUDE.md`「測試 DB 分工」）；它只建附件索引列、沒有實體檔，對它們打下載端點回 404「附件檔案不存在」是預期；檔尾有註解掉的清理 DELETE 區塊。`AppDaoIT` 只由 `mvnw verify` 執行（連真實測試 DB）。IDE 的 Java 擴充套件會跟 `mvnw clean package` 搶寫 `target/classes`，偶發 `NoClassDefFoundError`，重跑一次即可。殼 jar 若要含最新前端，`npm run build` 後還要重打殼 jar；打包前要先停掉正在跑的 3201／3202（jar 被鎖住會 clean 失敗；`start-new.bat` 會自動停自己的 jar）；`npm run build` 會清掉殼 jar `src/frontend/` 內的 `.gitkeep`，commit 前 `git restore` 它。測試 DB 的 wayne 密碼已被使用者在瀏覽器改過（不再是預設值），要重設回預設就重跑 sample 匯入
 - 卡住／待確認：第 93 項（登出失敗時是否仍導回登入頁）等使用者回 ①A／①B；第 94 項（正式主機是否還有其他 web 服務）等使用者確認；第 102 項（前端改版成示意頁）開工前要使用者裁示 (a)(b)(c) 三項
 

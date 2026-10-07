@@ -7,17 +7,37 @@
 //           - toDraftRequest：設備、步驟、類別其他說明依畫面順序全部送（空列後端略過），400 的 field 索引才對得回畫面；
 //             沒勾委外廠商不送廠商欄、不是遠端不送連線方式；勾「不適用」但沒寫原因時送「不適用」（否則存檔後勾選會消失）
 //           - precheckFile：只做預檢（副檔名、空檔、大小），實際檢核以後端為準；本文送一半被 413 擋下時瀏覽器只會顯示連線錯誤，所以預檢必做
+//           S5 R2（2026-10-07）：MAX_ROWS 與 keepActive 自 AppFormView 移來（DraftFields 元件與範本編輯頁共用）
 // ============================================================
 import {
   ATTACH_EXTS,
   type AppDetail,
   type AppDraftEquipment,
   type AppDraftForm,
-  type AppDraftRequest
+  type AppDraftRequest,
+  type FormOption
 } from '../types/app'
 
 export const DEFAULT_PLAN_ROWS = 4
 export const OMIT_DEFAULT = '不適用'
+/** 與後端 AppDraftValidator.MAX_ROWS 相同（設備列、步驟列上限） */
+export const MAX_ROWS = 100
+
+/** 舊草稿或範本裡已停用的選項不在 options 裡：留著會讓後端回「選項不正確」而永遠存不了 */
+export function keepActive(f: AppDraftForm, opts: FormOption[]): AppDraftForm {
+  const active = new Set(opts.map(o => o.formOptionId))
+  const others: Record<number, string> = {}
+  for (const [k, v] of Object.entries(f.categoryOthers)) {
+    if (active.has(Number(k))) others[Number(k)] = v
+  }
+  return {
+    ...f,
+    categoryItemIds: f.categoryItemIds.filter(id => active.has(id)),
+    categoryOthers: others,
+    reasonIds: f.reasonIds.filter(id => active.has(id)),
+    scopeIds: f.scopeIds.filter(id => active.has(id))
+  }
+}
 
 export function emptyEquipment(): AppDraftEquipment {
   return { name: '', assetNo: '', modelNo: '', serialNo: '', purpose: '', mgmtIp: '' }

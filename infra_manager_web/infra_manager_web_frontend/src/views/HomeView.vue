@@ -7,6 +7,7 @@
             沿用 main.css 色票與 19px 基礎字級，不用元件庫
             S4 回合二（Claude Opus 5.5，2026-10-06）：加「功能」卡片，連到 /apps 申請單列表
             S6 回合四（Claude Opus 5.5，2026-10-07）：「功能」卡片加「新增申請單」連到 /apps/new
+            S5 R2（Claude Opus 5.5，2026-10-07）：「功能」卡片加「範本管理」連到 /templates
 -->
 <template>
   <main>
@@ -27,6 +28,7 @@
       <div class="menu-links">
         <router-link class="go" to="/apps">申請單列表</router-link>
         <router-link class="go" to="/apps/new">新增申請單</router-link>
+        <router-link class="go" to="/templates">範本管理</router-link>
       </div>
     </section>
 
