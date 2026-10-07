@@ -10,6 +10,8 @@
 //           S6 回合四（Claude Opus 5.5，2026-10-07）：新增草稿表單型別——送出本文 AppDraftRequest（對應後端
 //           AppDraftRequest）、存檔回應 AppDraftSaved、400 欄位錯誤 ApiFieldErrorBody、畫面狀態 AppDraftForm；
 //           附件副檔名白名單 ATTACH_EXTS（與後端 AttachmentTypes 一致，前端只做預檢）
+//           S7 R3（Claude Fable 5.1，2026-10-07）：新增簽核流程型別——送審／撤回本文 FlowActionRequest、簽核本文
+//           DecisionRequest（對應後端同名 record）、三者共用的回應 FlowActionResponse（{appId, rowVerNo}）
 // ============================================================
 
 export type AppStatus =
@@ -403,6 +405,27 @@ export interface AppDraftRequest {
 
 /** POST /apps（201）、PUT /apps/{id}（200）回應 */
 export interface AppDraftSaved {
+  appId: string
+  rowVerNo: number
+}
+
+/** POST /apps/{id}/submit、/recall 本文；rowVerNo 是檢視頁拿到的樂觀鎖版號，reason 只有撤回用（選填） */
+export interface FlowActionRequest {
+  rowVerNo: number
+  reason?: string
+}
+
+export type Decision = 'APPROVE' | 'REJECT'
+
+/** POST /apps/{id}/decisions 本文；memo 退件必填、同意可空（後端自動填「同意」） */
+export interface DecisionRequest {
+  rowVerNo: number
+  decision: Decision
+  memo: string
+}
+
+/** 送審／撤回／簽核成功的回應；rowVerNo 是新版號（頁面會重新載入，不直接用它） */
+export interface FlowActionResponse {
   appId: string
   rowVerNo: number
 }

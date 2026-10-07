@@ -7,6 +7,8 @@
 //           S6 回合一-2（2026-10-07）：加 attachmentUrl／checkAttachment（附件下載：HEAD 確認後交給瀏覽器下載）
 //           S6 回合四（2026-10-07）：加 getFormOptions／createApp／updateApp／uploadAttachment（草稿表單）；
 //           上傳單次 timeout 600000 ms（施工計畫假設 #2：VPN／外點傳 50 MB），其餘呼叫維持 120000
+//           S7 R3（Claude Fable 5.1，2026-10-07）：加 submitApp／recallApp／decideApp（送審、撤回、簽核；
+//           body 都帶 rowVerNo，版本不符或狀態已變 409、非當事人 403、必填缺漏 400，訊息都由後端帶）
 // ============================================================
 import http from './http'
 import type {
@@ -16,6 +18,9 @@ import type {
   AppDraftSaved,
   AppListFilter,
   AppListResponse,
+  DecisionRequest,
+  FlowActionRequest,
+  FlowActionResponse,
   FormOptionsResponse
 } from '../types/app'
 
@@ -72,6 +77,25 @@ export function createApp(body: AppDraftRequest): Promise<AppDraftSaved> {
 /* PUT /apps/{id} 編輯草稿（body.rowVerNo 必帶）→ 200 { appId, rowVerNo }；版本不符 409 */
 export function updateApp(appId: string, body: AppDraftRequest): Promise<AppDraftSaved> {
   return http.put<AppDraftSaved>('/apps/' + encodeURIComponent(appId), body).then(r => r.data)
+}
+
+function flowPath(appId: string, action: string): string {
+  return '/apps/' + encodeURIComponent(appId) + '/' + action
+}
+
+/* POST /apps/{id}/submit 送審（申請人或 admin；草稿 → 審核中）→ 200 { appId, rowVerNo } */
+export function submitApp(appId: string, body: FlowActionRequest): Promise<FlowActionResponse> {
+  return http.post<FlowActionResponse>(flowPath(appId, 'submit'), body).then(r => r.data)
+}
+
+/* POST /apps/{id}/recall 撤回到草稿（只限申請人、尚無關卡簽過）→ 200 { appId, rowVerNo } */
+export function recallApp(appId: string, body: FlowActionRequest): Promise<FlowActionResponse> {
+  return http.post<FlowActionResponse>(flowPath(appId, 'recall'), body).then(r => r.data)
+}
+
+/* POST /apps/{id}/decisions 目前關卡同意或退件（只限該關候選人）→ 200 { appId, rowVerNo } */
+export function decideApp(appId: string, body: DecisionRequest): Promise<FlowActionResponse> {
+  return http.post<FlowActionResponse>(flowPath(appId, 'decisions'), body).then(r => r.data)
 }
 
 /* POST /apps/{id}/attachments 一次一檔（part 名 file）→ 201 附件資訊；onProgress 收 0～100 */

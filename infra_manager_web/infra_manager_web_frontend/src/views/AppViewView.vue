@@ -12,6 +12,10 @@
             S6 回合一-2（2026-10-07）：附件下載鈕啟用——先 HEAD 確認（404 toast「找不到附件檔案」），再用 <a download>
             交給瀏覽器下載（殼 jar 已串流透傳，大檔不進頁面記憶體）
             S6 回合四（2026-10-07）：「編輯草稿」改導到 /apps/:id/edit，其餘動作仍是「此功能尚未開放」
+            S7 R3（Claude Fable 5.1，2026-10-07）：送審／撤回／簽核接真 API——送審先 confirm；撤回展開面板（原因選填）再 confirm；
+            簽核展開面板（意見欄＋同意／退件，退件前端先擋空白再 confirm）。成功 toast 後重新載入（不清空畫面）；
+            409 一律 toast 後端訊息並重新載入讓使用者看到最新狀態；400／403 只 toast；401 交給登入處理器。
+            其餘動作（補件、執行、治理審核、刪除、AI）仍是「此功能尚未開放」
 -->
 <template>
   <main>
@@ -35,7 +39,32 @@
 
     <template v-else>
       <section v-if="actions.length" class="card actions" aria-label="可執行動作">
-        <button v-for="a in actions" :key="a.key" class="quiet" type="button" @click="act(a.key)">{{ a.label }}</button>
+        <button v-for="a in actions" :key="a.key" class="quiet" :class="{ on: panelOf(a.key) === panel }" type="button"
+          :disabled="busy" @click="act(a.key)">{{ a.label }}</button>
+      </section>
+
+      <section v-if="panel === 'decide'" class="card flow" aria-label="簽核">
+        <h2>簽核<span v-if="currentStepName" class="sub">：{{ currentStepName }}</span></h2>
+        <p class="sub">同意時意見可留空，系統會自動填「同意」；退件必須填寫原因，讓申請人知道要補什麼</p>
+        <label for="memo">簽核意見</label>
+        <textarea id="memo" v-model="memo" rows="3" maxlength="2000" :disabled="busy"
+          placeholder="同意可留空；退件請說明原因與要補件的項目"></textarea>
+        <div class="actions">
+          <button class="go" type="button" :disabled="busy" @click="decide('APPROVE')">✓ 同意</button>
+          <button class="danger" type="button" :disabled="busy" @click="decide('REJECT')">✗ 退件</button>
+          <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
+        </div>
+      </section>
+
+      <section v-else-if="panel === 'recall'" class="card flow" aria-label="撤回到草稿">
+        <h2>撤回到草稿</h2>
+        <p class="sub">此申請單已送審但尚無任何關卡簽核，可撤回到草稿繼續修改，改完要重新送審；若已有人簽核完成，撤回會被拒絕，只能等退件後補件重送</p>
+        <label for="reason">撤回原因（選填）</label>
+        <textarea id="reason" v-model="reason" rows="2" maxlength="2000" :disabled="busy"></textarea>
+        <div class="actions">
+          <button class="go" type="button" :disabled="busy" @click="recall">↩ 撤回到草稿</button>
+          <button class="quiet" type="button" :disabled="busy" @click="panel = null">取消</button>
+        </div>
       </section>
 
       <article class="card paper">
@@ -312,7 +341,7 @@ import { useRoute, useRouter } from 'vue-router'
 import StatusPill from '../components/StatusPill.vue'
 import ToastHost from '../components/ToastHost.vue'
 import { AxiosError } from 'axios'
-import { attachmentUrl, checkAttachment, getApp } from '../api/apps'
+import { attachmentUrl, checkAttachment, decideApp, getApp, recallApp, submitApp } from '../api/apps'
 import { errorMessage, isUnauthorized } from '../api/http'
 import { useToast } from '../composables/useToast'
 import { APP_EDIT_ROUTE, APP_LIST_ROUTE } from '../router/names'
@@ -327,7 +356,9 @@ import {
   type AppDetail,
   type AppEvent,
   type AppExecution,
-  type AppPermissions
+  type AppPermissions,
+  type Decision,
+  type FlowActionResponse
 } from '../types/app'
 import { kb, prioStyle } from '../utils/format'
 
@@ -360,13 +391,94 @@ const ACTIONS: { key: PermKey; label: string }[] = [
 
 const actions = computed(() => (app.value ? ACTIONS.filter(a => app.value?.permissions[a.key] === true) : []))
 
-/** 已開放的動作導到對應頁；其餘還沒做的出 toast */
+type Panel = 'decide' | 'recall' | null
+
+/** 展開中的操作面板（簽核意見／撤回原因）；送審不需要面板，confirm 後直接送 */
+const panel = ref<Panel>(null)
+const memo = ref('')
+const reason = ref('')
+/** 送審／撤回／簽核進行中：鎖住全部動作鈕，避免連點或同時送兩個動作 */
+const busy = ref(false)
+
+function panelOf(key: PermKey): Panel {
+  if (key === 'canDecide') return 'decide'
+  if (key === 'canRecall') return 'recall'
+  return null
+}
+
+/** 目前輪到的關卡名稱（序號最小的 PENDING），給簽核面板標題用 */
+const currentStepName = computed(() => {
+  const steps = app.value?.approval.steps ?? []
+  return steps.find(s => s.statusCode === 'PENDING')?.stepName ?? ''
+})
+
+/** 已開放的動作導到對應頁或展開面板；其餘還沒做的出 toast */
 function act(key: PermKey): void {
   if (key === 'canEditDraft') {
     void router.push({ name: APP_EDIT_ROUTE, params: { id: appId.value } })
     return
   }
+  if (key === 'canSubmit') {
+    void submit()
+    return
+  }
+  const p = panelOf(key)
+  if (p) {
+    panel.value = panel.value === p ? null : p
+    return
+  }
   toast('此功能尚未開放', 'amber')
+}
+
+function statusOf(e: unknown): number | undefined {
+  return e instanceof AxiosError ? e.response?.status : undefined
+}
+
+/**
+ * 三個流程動作共用：帶目前的 rowVerNo 呼叫 API，成功就收面板、toast、重新載入；
+ * 失敗 toast 後端訊息；409（版本過期、狀態已變、關卡被搶簽）另外重新載入，讓使用者直接看到最新狀態
+ */
+async function runFlow(okMsg: string, call: (rowVerNo: number) => Promise<FlowActionResponse>): Promise<void> {
+  const a = app.value
+  if (!a || busy.value) return
+  busy.value = true
+  try {
+    await call(a.rowVerNo)
+    panel.value = null
+    memo.value = ''
+    reason.value = ''
+    toast(okMsg, 'teal')
+    await load(appId.value, true)
+  } catch (e: unknown) {
+    if (isUnauthorized(e)) return
+    toast(errorMessage(e), 'red')
+    if (statusOf(e) === 409) await load(appId.value, true)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function submit(): Promise<void> {
+  if (!window.confirm('確定要正式送審？送審後申請單將進入第一關簽核流程。')) return
+  await runFlow('已送審，申請單進入簽核流程', v => submitApp(appId.value, { rowVerNo: v }))
+}
+
+async function recall(): Promise<void> {
+  if (!window.confirm('確定撤回到草稿？撤回後要重新送審才會再進入簽核流程。')) return
+  const r = reason.value.trim()
+  await runFlow('已撤回到草稿', v => recallApp(appId.value, r ? { rowVerNo: v, reason: r } : { rowVerNo: v }))
+}
+
+async function decide(d: Decision): Promise<void> {
+  const m = memo.value.trim()
+  if (d === 'REJECT') {
+    if (!m) {
+      toast('退件時必須填寫原因，讓申請人知道要補什麼', 'red')
+      return
+    }
+    if (!window.confirm('確定要退件給申請人？退件後申請單結束這一輪簽核，申請人需補件重送。')) return
+  }
+  await runFlow(d === 'APPROVE' ? '已同意' : '已退件', v => decideApp(appId.value, { rowVerNo: v, decision: d, memo: m }))
 }
 
 const downloading = ref<number | null>(null)
@@ -468,9 +580,15 @@ const govRow = computed<SignRow>(() => {
 /** 每次載入遞增；回應回來時編號不是最新就丟掉，避免慢回來的舊單蓋掉新單 */
 let seq = 0
 
-async function load(id: string): Promise<void> {
+/** keep：動作成功或 409 後重新載入，保留畫面不閃「載入中」；換單號時不保留並收起面板 */
+async function load(id: string, keep = false): Promise<void> {
   const mine = ++seq
-  app.value = null
+  if (!keep) {
+    app.value = null
+    panel.value = null
+    memo.value = ''
+    reason.value = ''
+  }
   error.value = ''
   try {
     const data = await getApp(id)
@@ -508,6 +626,15 @@ main { width: 100%; max-width: 1180px; margin: 0 auto; padding: 24px 20px; }
 .quiet { background: #fff; border: 1px solid var(--line); color: var(--dark); border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; }
 .quiet:disabled { opacity: .55; cursor: default; }
 .quiet.small { min-height: 36px; padding: 2px 12px; font-size: 15px; }
+.quiet.on { border-color: var(--teal); color: var(--teal-dark); background: var(--teal-bg); }
+
+.flow label { display: block; font-weight: 700; margin: 10px 0 4px; }
+.flow textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; font-size: 17px; resize: vertical; }
+.flow textarea:disabled { background: var(--bg); }
+.flow .actions { margin-top: 12px; }
+.go { background: var(--teal); border: 1px solid var(--teal); color: #fff; border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; }
+.danger { background: #fff; border: 1px solid var(--red); color: var(--red); border-radius: 7px; padding: 8px 18px; font-size: 17px; cursor: pointer; }
+.go:disabled, .danger:disabled { opacity: .55; cursor: default; }
 
 .muted { color: var(--gray); margin: 4px 0; }
 .error { color: var(--red); font-weight: 700; }

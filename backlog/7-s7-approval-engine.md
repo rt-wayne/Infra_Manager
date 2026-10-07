@@ -66,7 +66,22 @@
 - R-d 送審後某關候選人全部停用會卡死，無改派功能（舊系統亦然）
 
 ## 交接欄
-- 目前回合：R2 完成（`verify` 全綠：IT 18／0 失敗／0 略過，兩個完成條件都過）→ 下一回合 R3 前端
+- 目前回合：R3 前端程式完成（2026-10-07），**等使用者手動驗收**（步驟見本欄「R3 驗收」）；驗收過 → 收尾回合
+- R3 已完成：`api/apps.ts` 加 `submitApp`／`recallApp`／`decideApp`；`types/app.ts` 加 `FlowActionRequest`／`DecisionRequest`／
+  `Decision`／`FlowActionResponse`；`AppViewView.vue` 的 `act()` 接真動作——送審 confirm 後直接送；「簽核」「撤回到草稿」各展開一個
+  面板（簽核：意見欄＋✓ 同意／✗ 退件，退件前端先擋空白再 confirm；撤回：原因選填＋confirm）；共用 `runFlow()` 帶目前 `rowVerNo`，
+  成功 toast 後重新載入（`load(id, keep=true)` 不閃「載入中」），409 toast 後端訊息並重新載入，400／403 只 toast，401 交登入處理器；
+  `busy` 鎖全部動作鈕。沒另抽 `DecisionPanel.vue`（面板只有十幾行，抽出去反而要傳一堆 props）。`vue-tsc` 型別檢查過、`npm run build` 過
+- R3 自行決定（衝刺規則，使用者可推翻）：確認框用瀏覽器原生 `window.confirm`（專案不用 UI 元件庫、舊系統也是 confirm）；
+  意見與原因欄加 `maxlength=2000`（後端 `TextLength.LIMIT_SHORT` 是硬上限，不同於 CLOB 欄位的 ④B 不擋字數）；
+  退件原因空白由前端先擋（toast「退件時必須填寫原因…」）不打 API；簽核面板標題帶目前 PENDING 關卡名
+- R3 驗收（使用者在瀏覽器做；先 `start-new.bat` 讓殼 jar 含新前端、3202 含 R2 後端）：
+  ① 用申請人帳號開一張草稿 → 「送審」→ confirm → toast「已送審」、狀態變審核中、簽核欄第一關 PENDING 且有候選人；
+  ② 用第一關候選人登入 → 列表「只看待我簽核」數加一 → 進該單 → 「簽核」→ 留空意見 → ✓ 同意 → 意見顯示「同意」、下一關 PENDING、待我簽核數減一；
+  ③ 申請人另建一張送審後 → 「撤回到草稿」→ 填原因 → confirm → 狀態回草稿、事件紀錄多一筆撤回；
+  ④ 同一候選人開兩個分頁同一張單，分頁 A 同意後、分頁 B 再同意 → B 看到 toast「此關卡已被其他人簽核或申請單已變更，請重新載入頁面」且畫面自動更新；
+  ⑤ 退件不填原因 → toast 擋下；填原因退件 → 狀態已退件、該關 REJECTED、後面關卡 SKIPPED
+- 上一回合：R2 完成（`verify` 全綠：IT 18／0 失敗／0 略過，兩個完成條件都過）
 - 2026-10-07 verify 時發現測試 DB 的 `IM_ROLE` 是空的（V1 §8.1 預載 6 筆不在），導致所有 ROLE 關卡零候選人、登入也拿不到角色；
   已由 Claude 以「不存在才插入」補回 6 筆（admin／it_manager／dept_manager／idc_admin／governance／infra，CREATE_BY SYSTEM），
   未刪未改任何既有列。原因不明（repo 內沒有任何會刪 `IM_ROLE` 的程式或腳本），使用者若知道是誰清的請告知
@@ -87,6 +102,6 @@
   IT `AppFlowSubmitIT` 已寫、尚未對真實 DB 跑（R2 一起 verify）。`AppFlowControllerTest` 未寫（R1 預算用完，R2 補或收尾一起）
 - R1 自行決定（衝刺規則，使用者可推翻）：admin 代送審時 403 訊息為「只有申請人或管理員可以送審」；撤回原因全空白存 null；
   `transition` 的申請人條件用 boolean 參數轉 0／1 綁定（避免 Oracle null 綁定型別問題）；送審時 `IM_APP.CURR_VER_NO` 為 null 視為 1
-- 下一步：R3 前端（`api/apps.ts` submitApp／recallApp／decideApp、`types/app.ts`、`AppViewView.vue` act() 接真動作），
-  做完手動驗收；`AppFlowControllerTest` 收尾回合補。跑 IT 不需要密碼：`./mvnw verify -Dspring-boot.repackage.skip=true`
+- 下一步：等 R3 手動驗收結果 → 收尾回合（`AppFlowControllerTest`、`code-reviewer`、阻擋項當場修、非阻擋登記、PRD／CHANGELOG、刪本檔）。
+  跑 IT 不需要密碼：`./mvnw verify -Dspring-boot.repackage.skip=true`
   （連線走公司連線資訊 API；skip 是因為 3201／3202 跑著時 jar 被鎖、repackage 會失敗）
