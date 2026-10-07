@@ -214,7 +214,8 @@ public class AppQueryService {
 		return appDao.findById(appId).orElseThrow(() -> new ApiNotFoundException(MSG_APP_NOT_FOUND));
 	}
 
-	private static List<AppDetail.Option> optionsOf(List<OptionRow> rows, Set<String> groups) {
+	/** 選項列依群組投影成檢視用 Option（AppFlowService 組版次快照時共用） */
+	static List<AppDetail.Option> optionsOf(List<OptionRow> rows, Set<String> groups) {
 		Function<OptionRow, AppDetail.Option> map = o -> new AppDetail.Option(o.getFormOptionId(), o.getGroupCode(),
 				o.getOptionCode(), o.getOptionName(), o.getUpOptionCode(), o.getOtherText());
 		return rows.stream().filter(o -> groups.contains(o.getGroupCode())).map(map).toList();

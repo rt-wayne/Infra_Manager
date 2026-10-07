@@ -8,6 +8,8 @@ package com.mpx.infra_manager_java.controller.changerequest;
 //           找不到 404、非申請人 403、狀態不符或版本過期 409、必填缺漏 400（訊息列出缺哪些欄）。
 //           2026-10-07 S7 R2：加 POST /api/apps/{id}/decisions 簽核（body：rowVerNo、decision APPROVE／REJECT、memo），
 //           非目前關卡簽核人 403、被搶簽或版本過期 409、退件沒意見 400
+//           2026-10-07 S9 R1：加 POST /api/apps/{id}/resubmit 補件並重送（body：rowVerNo、resubMemo、form＝整份 AppDraftRequest），
+//           非申請人 403、不是 REJECTED 或版本過期 409、表單格式或必填缺漏 400
 // ============================================================
 
 import java.util.Map;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
+import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 
 @RestController
@@ -46,6 +49,13 @@ public class AppFlowController {
 	public Map<String, Object> recall(@PathVariable("id") String id, @RequestBody FlowActionRequest request,
 			Authentication authentication) {
 		long rowVerNo = appFlowService.recall(id, request, principal(authentication));
+		return Map.of("appId", id, "rowVerNo", rowVerNo);
+	}
+
+	@PostMapping("/{id}/resubmit")
+	public Map<String, Object> resubmit(@PathVariable("id") String id, @RequestBody ResubmitRequest request,
+			Authentication authentication) {
+		long rowVerNo = appFlowService.resubmit(id, request, principal(authentication));
 		return Map.of("appId", id, "rowVerNo", rowVerNo);
 	}
 

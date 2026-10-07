@@ -6,6 +6,7 @@ package com.mpx.infra_manager_java.controller.changerequest;
 // 變更說明: 新增：POST /api/apps/{id}/submit、/recall、/decisions 的 MockMvc 測試（S7 收尾回合）。比照 AppDraftControllerTest
 //           走真的登入流程。鎖定：未登入 401；缺 CSRF 403；成功回 200 {appId, rowVerNo(新)} 且服務收到本文與登入者；
 //           服務丟出的 403／404／409／400 原樣對應狀態碼與訊息；本文不是 JSON 回 400
+//           2026-10-07 S9 R1：加 /resubmit——401／403 迴圈納入；200 時巢狀 form 整份轉成 AppDraftRequest 傳給服務；403／409 對應
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,6 +45,7 @@ import com.mpx.infra_manager_java.model.auth.AuthUser;
 import com.mpx.infra_manager_java.model.auth.UserRow;
 import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
+import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
 import com.mpx.infra_manager_java.service.auth.AuthService;
 import com.mpx.infra_manager_java.service.changerequest.AppFlowService;
 import com.mpx.infra_manager_java.service.changerequest.DecisionPolicy;
@@ -61,6 +63,10 @@ class AppFlowControllerTest {
 	private static final String SUBMIT_BODY = "{\"rowVerNo\":3}";
 	private static final String RECALL_BODY = "{\"rowVerNo\":5,\"reason\":\"資料要補\"}";
 	private static final String DECIDE_BODY = "{\"rowVerNo\":7,\"decision\":\"APPROVE\",\"memo\":\"\"}";
+	private static final String RESUBMIT_BODY = "{\"rowVerNo\":9,\"resubMemo\":\"已補\",\"form\":{\"title\":\"T\",\"prioCode\":\"P3\","
+			+ "\"applicant\":{\"deptName\":\"資訊處\",\"tel\":\"1234\",\"email\":\"it@example.com\"},"
+			+ "\"equipments\":[{\"name\":\"核心交換器\",\"assetNo\":\"A-1\"}],\"planSteps\":[\"關機\",\"換板\"],\"rowVerNo\":999}}";
+	private static final List<String> ACTIONS = List.of("submit", "recall", "resubmit", "decisions");
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -109,7 +115,7 @@ class AppFlowControllerTest {
 	void 未登入401() throws Exception {
 		MvcResult me = mockMvc.perform(get("/api/auth/me")).andReturn();
 		Cookie xsrf = me.getResponse().getCookie(SecurityConfig.XSRF_COOKIE);
-		for (String action : List.of("submit", "recall", "decisions")) {
+		for (String action : ACTIONS) {
 			mockMvc.perform(post("/api/apps/" + APP + "/" + action).cookie(xsrf)
 					.header(SecurityConfig.XSRF_HEADER, xsrf.getValue()).contentType(MediaType.APPLICATION_JSON)
 					.content(SUBMIT_BODY)).andExpect(status().isUnauthorized());
@@ -120,7 +126,7 @@ class AppFlowControllerTest {
 	@Test
 	void 缺CSRF回403() throws Exception {
 		Session s = login();
-		for (String action : List.of("submit", "recall", "decisions")) {
+		for (String action : ACTIONS) {
 			mockMvc.perform(post("/api/apps/" + APP + "/" + action).session(s.session())
 					.contentType(MediaType.APPLICATION_JSON).content(SUBMIT_BODY)).andExpect(status().isForbidden());
 		}
@@ -167,6 +173,43 @@ class AppFlowControllerTest {
 		assertThat(req.getValue().decision()).isEqualTo("APPROVE");
 		assertThat(req.getValue().memo()).isEmpty();
 		assertThat(user.getValue().userId()).isEqualTo("E0001");
+	}
+
+	@Test
+	void 補件回200且巢狀表單整份傳給服務() throws Exception {
+		Session s = login();
+		when(appFlowService.resubmit(eq(APP), any(), any())).thenReturn(10L);
+		postJson(s, "/api/apps/" + APP + "/resubmit", RESUBMIT_BODY).andExpect(status().isOk())
+				.andExpect(content().json("{\"appId\":\"" + APP + "\",\"rowVerNo\":10}"));
+		ArgumentCaptor<ResubmitRequest> req = ArgumentCaptor.forClass(ResubmitRequest.class);
+		ArgumentCaptor<AuthUser> user = ArgumentCaptor.forClass(AuthUser.class);
+		verify(appFlowService).resubmit(eq(APP), req.capture(), user.capture());
+		assertThat(req.getValue().rowVerNo()).isEqualTo(9L);
+		assertThat(req.getValue().resubMemo()).isEqualTo("已補");
+		assertThat(req.getValue().form().title()).isEqualTo("T");
+		assertThat(req.getValue().form().prioCode()).isEqualTo("P3");
+		assertThat(req.getValue().form().applicant().tel()).isEqualTo("1234");
+		assertThat(req.getValue().form().equipments()).hasSize(1);
+		assertThat(req.getValue().form().equipments().get(0).name()).isEqualTo("核心交換器");
+		assertThat(req.getValue().form().planSteps()).containsExactly("關機", "換板");
+		assertThat(user.getValue().userId()).isEqualTo("E0001");
+	}
+
+	@Test
+	void 補件服務例外對應狀態碼() throws Exception {
+		Session s = login();
+		when(appFlowService.resubmit(eq("H"), any(), any()))
+				.thenThrow(new AccessDeniedException(AppFlowService.MSG_RESUBMIT_FORBIDDEN));
+		when(appFlowService.resubmit(eq("I"), any(), any()))
+				.thenThrow(new ApiConflictException(AppFlowService.MSG_RESUBMIT_NOT_REJECTED));
+		when(appFlowService.resubmit(eq("J"), any(), any())).thenThrow(new ApiBadRequestException("請填寫標題"));
+
+		postJson(s, "/api/apps/H/resubmit", RESUBMIT_BODY).andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.message").value(SecurityConfig.MSG_FORBIDDEN));
+		postJson(s, "/api/apps/I/resubmit", RESUBMIT_BODY).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(AppFlowService.MSG_RESUBMIT_NOT_REJECTED));
+		postJson(s, "/api/apps/J/resubmit", RESUBMIT_BODY).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("請填寫標題"));
 	}
 
 	@Test

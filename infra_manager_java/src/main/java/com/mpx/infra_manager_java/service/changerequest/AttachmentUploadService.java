@@ -11,6 +11,8 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           原始檔名：去掉路徑、控制字元與格式字元（含 RTL 覆寫等看不見的字元）、頭尾空白，超過 255 字時保留副檔名截斷。
 //           MIME 由副檔名決定（AttachmentTypes），不信任瀏覽器給的 Content-Type。
 //           log 只記單號、ATTACH_ID、例外類別，不記檔名與路徑
+//           2026-10-07 S9 R1（Claude Fable 5.1）：狀態條件放寬為 DRAFT 或 REJECTED（使用者裁示 ⑤A：退件後申請人先補附件
+//           再補件；只開上傳、刪除仍限 DRAFT）
 // ============================================================
 
 import java.io.IOException;
@@ -54,7 +56,7 @@ public class AttachmentUploadService {
 	public static final String MSG_NO_FILE = "請選擇要上傳的檔案";
 	public static final String MSG_EMPTY_FILE = "檔案是空的，請確認後再上傳";
 	public static final String MSG_TYPE_NOT_ALLOWED = "不支援的檔案類型";
-	public static final String MSG_NOT_DRAFT = "申請單已不是草稿，無法上傳附件，請重新載入頁面";
+	public static final String MSG_NOT_DRAFT = "申請單不是草稿或退件狀態，無法上傳附件，請重新載入頁面";
 	public static final String MSG_NOT_APPLICANT = "只有申請人可以上傳附件";
 
 	/** 暫存子目錄（與正式檔同一個根目錄，搬移才會是同一磁碟內的改名） */
@@ -136,7 +138,10 @@ public class AttachmentUploadService {
 		}
 	}
 
-	/** DRAFT、申請人、檔數；state 為 null 表示單不存在或已刪除 */
+	/**
+	 * 申請人、狀態（DRAFT，或 REJECTED 讓申請人補件前先補附件——S9 使用者裁示 ⑤A，只開上傳不開刪除）、檔數；
+	 * state 為 null 表示單不存在或已刪除
+	 */
 	private void check(String appId, AppLockRow state, AuthUser user, int maxFiles) {
 		if (state == null) {
 			throw new ApiNotFoundException(AppQueryService.MSG_APP_NOT_FOUND);
@@ -144,7 +149,7 @@ public class AttachmentUploadService {
 		if (!user.userId().equals(state.getApplyUserId())) {
 			throw new AccessDeniedException(MSG_NOT_APPLICANT);
 		}
-		if (!"DRAFT".equals(state.getAppStatusCode())) {
+		if (!"DRAFT".equals(state.getAppStatusCode()) && !"REJECTED".equals(state.getAppStatusCode())) {
 			throw new ApiConflictException(MSG_NOT_DRAFT);
 		}
 		if (attachDao.countAppFiles(appId) >= maxFiles) {

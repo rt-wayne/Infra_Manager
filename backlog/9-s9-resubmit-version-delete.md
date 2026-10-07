@@ -41,7 +41,7 @@
 
 | 回合 | 範圍 | 狀態 |
 |------|------|------|
-| R1 後端補件 | ①～⑤、⑦。新增 `ResubmitRequest`、`AppVersionSnapshot`、`AppVerDao`；改 `AppFlowService`（resubmit、startApproval、closeStatus）、`AppWriteDao`（updateForResubmit）、`AppFlowController`、`AttachmentUploadService`。測試：service 補件分支、controller 補件、完成條件 IT、400 不留殘 IT、併發 IT | 未開始 |
+| R1 後端補件 | ①～⑤、⑦。新增 `ResubmitRequest`、`AppVersionSnapshot`、`AppVerDao`；改 `AppFlowService`（resubmit、startApproval、closeStatus）、`AppWriteDao`（updateForResubmit）、`AppFlowController`、`AttachmentUploadService`。測試：service 補件分支、controller 補件、完成條件 IT、400 不留殘 IT、併發 IT | 完成（2026-10-07）。與計畫的差異：`ResubmitRequest` 採巢狀 `{rowVerNo, resubMemo, form}` 而非攤平（Jackson 3 record 的 `@JsonUnwrapped` 反序列化不完整）；快照由 `AppRow`＋DAO 直接組、不經 `appQueryService.detail()`（避免權限欄混入）；注入 Spring 的 `ObjectMapper` bean；快照附件只含舊版實例結束前上傳的檔 |
 | R2 後端刪除＋歷次簽核 | ⑥、⑧～⑫。新增 `DeleteRequest`（delete 可拆 `AppDeleteService`）；改 `AppWriteDao`（lockForUpdate／deleteApp）、`AppPermissionService`（開放 deleteMode）、`AppFlowController`（@DeleteMapping）、`ApprovalDao`（findHistory）、`AppDetail`、`AppQueryService`。測試：刪除各分支單元＋IT、刪除 × 簽核併發、controller DELETE 帶本文；手動經 3201 打一次 DELETE | 未開始 |
 | R3 前端 | ⑭、⑮。改 `router/index.ts`、`AppFormView.vue`、`AppViewView.vue`、`api/apps.ts`、`types/app.ts`。手動走退件 → 補件 → v2 簽核、刪除對話框 | 未開始 |
 

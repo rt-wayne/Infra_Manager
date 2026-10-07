@@ -185,10 +185,28 @@ class AttachmentUploadServiceTest {
 	}
 
 	@Test
-	void 非DRAFT回409() {
-		when(attachDao.findAppState(APP)).thenReturn(state("PENDING", "T0001"));
+	void 非DRAFT也非REJECTED回409() {
+		for (String status : List.of("IN_REVIEW", "APPROVED", "PENDING", "EXECUTED")) {
+			when(attachDao.findAppState(APP)).thenReturn(state(status, "T0001"));
+			assertThatThrownBy(() -> service().upload(APP, file("a.pdf", CONTENT), USER))
+					.isInstanceOf(ApiConflictException.class).hasMessage(AttachmentUploadService.MSG_NOT_DRAFT);
+		}
+	}
+
+	@Test
+	void REJECTED單申請人可上傳_非申請人403() throws Exception {
+		AppLockRow rejected = state("REJECTED", "T0001");
+		when(attachDao.findAppState(APP)).thenReturn(rejected);
+		when(attachDao.lockApp(APP)).thenReturn(rejected);
+
+		AppDetail.Attachment result = service().upload(APP, file("補件.pdf", CONTENT), USER);
+
+		assertThat(result.attachId()).isEqualTo(101L);
+		assertThat(filesUnderRoot()).hasSize(1);
+
+		when(attachDao.findAppState(APP)).thenReturn(state("REJECTED", "T0002"));
 		assertThatThrownBy(() -> service().upload(APP, file("a.pdf", CONTENT), USER))
-				.isInstanceOf(ApiConflictException.class).hasMessage(AttachmentUploadService.MSG_NOT_DRAFT);
+				.isInstanceOf(AccessDeniedException.class);
 	}
 
 	@Test

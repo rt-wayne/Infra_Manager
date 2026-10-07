@@ -11,6 +11,8 @@ package com.mpx.infra_manager_java.dao.changerequest;
 //           2026-10-07 S7 R1（Claude Fable 5.1）：加 transition（狀態轉換的條件式 UPDATE，同時當整張單的列鎖）
 //           與 updateFlowId（送審時依當下流程政策重算 FLOW_ID，施工計畫 ⑦A）
 //           2026-10-07 S7 R2：加 updateStatus（簽核鎖內改主檔狀態 APPROVED／REJECTED）
+//           2026-10-07 S9 R1（Claude Fable 5.1）：加 updateForResubmit（補件：改內容欄、CURR_VER_NO + 1、RESUB_MEMO、FLOW_ID；
+//           在 transition 取得鎖之後呼叫，不再加 ROW_VER_NO、不帶狀態條件——updateApp 的 WHERE 寫死 DRAFT 不能重用）
 // ============================================================
 
 import java.sql.Timestamp;
@@ -115,6 +117,31 @@ public class AppWriteDao {
 		p.put("appId", appId);
 		p.put("rowVerNo", rowVerNo);
 		p.put("flowId", flowId);
+		p.put("by", by);
+		return dbClient.update(itflowDb, sql, p);
+	}
+
+	/**
+	 * 補件：以新表單內容覆寫主檔、CURR_VER_NO +1、寫入補件說明與重算的 FLOW_ID。
+	 * 必須在 transition（REJECTED → IN_REVIEW）取得鎖之後呼叫：版本已由 transition 加過，這裡不再加 ROW_VER_NO、
+	 * 也不帶狀態與申請人條件。回影響筆數（正常為 1）
+	 */
+	public int updateForResubmit(String appId, String flowId, String resubMemo, String by, AppDraft d) {
+		String sql = "UPDATE " + schema.table("IM_APP") + " SET APP_TITLE = :title, PRIO_CODE = :prioCode,"
+				+ " FLOW_ID = :flowId, APPLY_DEPT_NAME = :deptName, APPLY_TEL = :tel, APPLY_EMAIL = :email,"
+				+ " IS_SELF_EXEC = :selfExec, IS_SUP_EXEC = :supExec, WORK_MODE_CODE = :workMode,"
+				+ " REMOTE_METHOD = :remoteMethod, SUP_NAME = :supName, SUP_CNTCT = :supContact, SUP_TEL = :supTel,"
+				+ " SUP_HEAD_CNT = :headCount, WORK_SUBJ = :workSubject, OTHER_REASON = :otherReason,"
+				+ " SCHED_START_DATE = :schedStart, SCHED_END_DATE = :schedEnd, EST_HOUR_QTY = :estHours,"
+				+ " OMIT_REASON = :omitReason, CURR_VER_NO = CURR_VER_NO + 1, RESUB_MEMO = :resubMemo,"
+				+ " UPDATE_DATE = SYSDATE, UPDATE_BY = :by,"
+				+ " IMPACT_DESC = :impactDesc, WORK_DETAIL = :workDetail, RISK_DESC = :riskDesc,"
+				+ " ROLL_BACK_PLAN = :rollbackPlan"
+				+ " WHERE APP_ID = :appId AND STATUS = 1";
+		Map<String, Object> p = fields(d);
+		p.put("appId", appId);
+		p.put("flowId", flowId);
+		p.put("resubMemo", clob(resubMemo));
 		p.put("by", by);
 		return dbClient.update(itflowDb, sql, p);
 	}
