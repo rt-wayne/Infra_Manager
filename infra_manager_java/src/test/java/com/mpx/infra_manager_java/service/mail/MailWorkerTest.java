@@ -7,6 +7,9 @@ package com.mpx.infra_manager_java.service.mail;
 //           SMTP 未設定時不查 DB、回 0；候選每封各開一個交易；鎖不到跳過；寄成功 markSent 帶 Message-ID 與備註；
 //           寄失敗 markFailedTry 帶「例外類別: 訊息」且不中斷下一封；markSent 丟 DB 例外時交易 rollback 並停止本輪；
 //           findDueIds 丟 DB 例外時回 0；errorText 截 1000 字、換行變空白、附一層 cause
+//           2026-10-08 S8a 階段末 review 第 2、3 項（Claude Opus 5.5）：SMTP 連不上不計重試、交易 rollback、本輪停止，
+//           恢復後同幾封照常寄出；連線失敗判斷認得 ConnectException／UnknownHost／NoRouteToHost（含 failedMessages 內），
+//           讀寫逾時與 550 拒收不算；errorText 把 email 遮成 ***
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +25,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +45,8 @@ import com.mpx.infra_manager_java.config.MailProperties;
 import com.mpx.infra_manager_java.dao.mail.MailOutboxDao;
 import com.mpx.infra_manager_java.model.mail.MailOutboxRow;
 import com.mpx.infra_manager_java.service.mail.MailDispatcher.SendResult;
+
+import jakarta.mail.MessagingException;
 
 class MailWorkerTest {
 
@@ -139,6 +149,49 @@ class MailWorkerTest {
 		assertThat(worker.pollOnce()).isZero();
 		assertThat(worker.pollOnce()).isZero();
 		verify(dao, times(2)).findDueIds(anyInt(), anyInt(), anyInt());
+	}
+
+	@Test
+	void SMTP連不上時不計重試並結束本輪_恢復後照常寄() {
+		when(dao.findDueIds(anyInt(), anyInt(), anyInt())).thenReturn(List.of(8L, 9L));
+		when(dao.lockPending(8L)).thenReturn(pending(8L, 0));
+		when(dao.lockPending(9L)).thenReturn(pending(9L, 0));
+		// JavaMailSenderImpl 連線失敗的形狀：MailSendException 包 MessagingException、再包 ConnectException
+		MailSendException refused = new MailSendException("Mail server connection failed",
+				new MessagingException("Couldn't connect to host", new ConnectException("Connection refused")));
+		when(dispatcher.send(any())).thenThrow(refused).thenThrow(refused)
+				.thenReturn(new SendResult("<id-8@px>", null), new SendResult("<id-9@px>", null));
+
+		assertThat(worker.pollOnce()).isZero();
+		assertThat(worker.pollOnce()).isZero();
+
+		verify(dao, never()).markFailedTry(anyLong(), anyString(), anyInt());
+		verify(dao, never()).lockPending(9L);
+		verify(txManager, times(2)).rollback(any(TransactionStatus.class));
+
+		assertThat(worker.pollOnce()).as("恢復後同兩封照常寄出").isEqualTo(2);
+		verify(dao).markSent(8L, "<id-8@px>", null);
+		verify(dao).markSent(9L, "<id-9@px>", null);
+	}
+
+	@Test
+	void 連線失敗判斷認得各種形狀_讀寫逾時與拒收不算() {
+		assertThat(MailWorker.isConnectFailure(new MailSendException("x", new UnknownHostException("mail.invalid"))))
+				.isTrue();
+		assertThat(MailWorker.isConnectFailure(new MailSendException(
+				Map.of(new Object(), new MessagingException("y", new NoRouteToHostException("no route")))))).isTrue();
+		assertThat(MailWorker.isConnectFailure(new MailSendException("z", new SocketTimeoutException("Read timed out"))))
+				.isFalse();
+		assertThat(MailWorker.isConnectFailure(new MailSendException("550 5.1.1 User unknown"))).isFalse();
+	}
+
+	@Test
+	void errorText把email遮掉() {
+		RuntimeException e = new MailSendException("Invalid Addresses",
+				new MessagingException("550 5.1.1 <someone@pxmart.com.tw>: Recipient address rejected; a.b@x.y"));
+		String text = MailWorker.errorText(e);
+		assertThat(text).doesNotContain("someone").doesNotContain("pxmart.com.tw").doesNotContain("a.b@x.y")
+				.contains("550 5.1.1 <***>: Recipient address rejected; ***");
 	}
 
 	@Test

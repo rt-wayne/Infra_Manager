@@ -18,6 +18,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           2026-10-07 S10 R3：第一條加檢視 API 檢核項帶原始 userId／executorDesc 的斷言
 //           2026-10-07 S10 結案 review ①B：第二條加「idc_admin 填申請人工號 400 且不加版本、申請人填自己後 idc_admin 保留原值可存、
 //           勾完成帶時間原樣存」；執行端退回那條改由 idc_admin 填自己工號
+//           2026-10-08 S8a 階段末 review（Claude Opus 5.5）：清除時一併刪 S10E 單號寫進 IM_MAIL_OUTBOX 的信
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -134,6 +135,9 @@ class AppExecutionIT {
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_VER") + " WHERE APP_ID = :id", p);
 		appWriteDao.deleteChildren(appId);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
+		// 流程事件寫進 outbox 的信（S8）；用本測試的單號前綴刪，連先前跑留下的也一併清掉
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_MAIL_OUTBOX")
+				+ " WHERE JSON_VALUE(META_JSON, '$.appId') LIKE :prefix", Map.of("prefix", "S10E%"));
 	}
 
 	private boolean exists(String sql, Map<String, Object> params) {

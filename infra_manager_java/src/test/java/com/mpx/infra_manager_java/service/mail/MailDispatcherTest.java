@@ -8,6 +8,8 @@ package com.mpx.infra_manager_java.service.mail;
 //           正常：From／To／CC／BCC／主旨／HTML 內容正確組進 MimeMessage，回傳 Message-ID；
 //           收件人 JSON 壞掉 → MailPreparationException、不呼叫 send；
 //           SMTP 整封失敗 → MailSendException 原樣拋；部分寄達（SendFailedException 有 validSent）→ 視為成功並附備註
+//           2026-10-08 S8a 階段末 review 第 1 項（Claude Opus 5.5）：有設 override-to 時寄送當下收件人換成改寄地址、
+//           CC／BCC 清空
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,6 +104,20 @@ class MailDispatcherTest {
 		assertThat(result.note()).isNull();
 		// saveChanges 後 Message-ID 才產生；dispatcher 用 getMessageID 取，mock sender 不會 saveChanges，故可能為 null
 		assertThat(result.messageId()).isEqualTo(mime.getMessageID());
+	}
+
+	@Test
+	void 有設改寄時寄送當下收件人一律換成改寄地址且清掉副本() throws Exception {
+		properties.setOverrideTo("tester@pxmart.com.tw");
+
+		dispatcher.send(row("[\"a@pxmart.com.tw\",\"b@pxmart.com.tw\"]", "[\"c@pxmart.com.tw\"]", "[\"d@pxmart.com.tw\"]"));
+
+		ArgumentCaptor<MimeMessage> sent = ArgumentCaptor.forClass(MimeMessage.class);
+		verify(sender).send(sent.capture());
+		MimeMessage mime = sent.getValue();
+		assertThat(addresses(mime.getRecipients(RecipientType.TO))).containsExactly("tester@pxmart.com.tw");
+		assertThat(mime.getRecipients(RecipientType.CC)).isNull();
+		assertThat(mime.getRecipients(RecipientType.BCC)).isNull();
 	}
 
 	@Test

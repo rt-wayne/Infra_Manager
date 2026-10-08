@@ -10,6 +10,8 @@ package com.mpx.infra_manager_java.service.mail;
 //           SendFailedException 包成 MailSendException 丟出，本類別檢查 getValidSentAddresses 判斷「其實已寄出」，
 //           回傳附備註的成功結果，避免一個錯字地址讓其他人每次重試都再收一封。
 //           不記 log（成功／失敗由 worker 統一記，且不記地址）
+//           2026-10-08 S8a 階段末 review 第 1 項（Claude Opus 5.5）：im.mail.override-to 有值時，寄送當下也把收件人
+//           一律換成改寄地址、清掉 cc／bcc——寫入時沒設改寄的舊信（例如整合測試留下的）在驗收期間也不會寄給原收件人
 // ============================================================
 
 import java.util.List;
@@ -74,6 +76,12 @@ public class MailDispatcher {
 			List<String> to = addresses(row.getToJson());
 			List<String> cc = addresses(row.getCcJson());
 			List<String> bcc = addresses(row.getBccJson());
+			if (properties.hasOverrideTo()) {
+				// 寄送當下再改寄一次：不管這封信寫入時有沒有設改寄，驗收期間都只寄到改寄地址
+				to = List.of(properties.getOverrideTo());
+				cc = List.of();
+				bcc = List.of();
+			}
 			if (to.isEmpty() && cc.isEmpty() && bcc.isEmpty()) {
 				throw new MailPreparationException("沒有收件人");
 			}

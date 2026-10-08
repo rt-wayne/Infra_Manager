@@ -10,6 +10,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           CLOSE REJECTED、VER_REASON 是退件意見、FORM_JSON 含舊標題）；子表依新表單重建；有 RESUBMIT 事件。
 //           另驗：必填缺漏 400 整筆不留殘；非申請人與 admin 403、非 REJECTED 409；兩個補件同 rowVerNo 同時出發恰一成功。
 //           測試結束刪除本測試建的所有列（含 IM_APP_VER 與六張子表）
+//           2026-10-08 S8a 階段末 review（Claude Opus 5.5）：清除時一併刪 S9IT 單號寫進 IM_MAIL_OUTBOX 的信
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -134,6 +135,9 @@ class AppFlowResubmitIT {
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_VER") + " WHERE APP_ID = :id", p);
 		appWriteDao.deleteChildren(appId);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
+		// 流程事件寫進 outbox 的信（S8）；用本測試的單號前綴刪，連先前跑留下的也一併清掉
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_MAIL_OUTBOX")
+				+ " WHERE JSON_VALUE(META_JSON, '$.appId') LIKE :prefix", Map.of("prefix", "S9IT%"));
 	}
 
 	private boolean exists(String sql, Map<String, Object> params) {

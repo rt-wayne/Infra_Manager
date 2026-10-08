@@ -12,6 +12,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           關卡 USER_ID 是成功者、主檔版本只加一。測試類不加 @Transactional（兩個執行緒要各自 commit 才看得到鎖）。
 //           另驗退件：第一關退件後主檔 REJECTED、剩餘關卡 SKIPPED、實例 REJECTED；非候選人簽 403。
 //           測試結束刪除本測試建的所有列
+//           2026-10-08 S8a 階段末 review（Claude Opus 5.5）：清除時一併刪 S7IT 單號寫進 IM_MAIL_OUTBOX 的信
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -116,6 +117,9 @@ class AppFlowDecisionIT {
 		dbClient.update(itflowDb, "DELETE FROM " + appr + " WHERE DOC_TYPE = 'CR' AND DOC_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_EVENT") + " WHERE APP_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
+		// 流程事件寫進 outbox 的信（S8）；用本測試的單號前綴刪，連先前跑留下的也一併清掉
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_MAIL_OUTBOX")
+				+ " WHERE JSON_VALUE(META_JSON, '$.appId') LIKE :prefix", Map.of("prefix", "S7IT%"));
 		if (extraUserId != null) {
 			Map<String, Object> u = Map.of("u", extraUserId);
 			dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_USER_ROLE_MAP") + " WHERE USER_ID = :u", u);

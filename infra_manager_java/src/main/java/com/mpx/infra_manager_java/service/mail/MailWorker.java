@@ -11,14 +11,27 @@ package com.mpx.infra_manager_java.service.mail;
 //           DB 連不上或 SMTP 未設定時每輪都會碰到，只在第一次失敗與恢復時各記一次 log（避免每 30 秒洗版）；
 //           單封信的成敗各記一行，含 outbox ID、第幾次、例外類別，不含收件人地址。
 //           ERROR_TEXT 存例外類別＋訊息（SMTP 回應）截 1000 字
+//           2026-10-08 S8a 階段末 review 第 2、3 項（Claude Opus 5.5）：
+//           ② ERROR_TEXT 存進去前把 email 形狀的字串遮成 ***（SMTP 拒收回應常帶收件人地址，設計要求錯誤欄不含地址）；
+//           ③ SMTP 連不上（連線階段失敗：MailConnectException／ConnectException／UnknownHostException／NoRouteToHostException）
+//           不算一次重試、不寫 ERROR_TEXT，只在第一次與恢復時各記一次 log，並結束本輪不再試其餘信——斷線多久信都不會被
+//           耗光重試變 FAILED，恢復後自動補寄（待確認 ① 採 A；S8b 重寄頁上線後可再評估改回算重試）
 // ============================================================
 
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.UnknownHostException;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.mail.MailSendException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -37,6 +50,21 @@ public class MailWorker {
 
 	private static final Logger log = LoggerFactory.getLogger(MailWorker.class);
 
+	/** email 形狀的字串（寬鬆比對，寧可多遮）；ERROR_TEXT 存進去前遮掉 */
+	private static final Pattern EMAIL_LIKE = Pattern.compile("[^\\s<>\"',;:()\\[\\]]+@[^\\s<>\"',;:()\\[\\]]+");
+
+	/** Angus Mail 連線失敗例外的類別名（org.eclipse.angus.mail.util.MailConnectException） */
+	private static final String MAIL_CONNECT_EXCEPTION = "MailConnectException";
+
+	/** SMTP 連線階段失敗：processOne 丟出讓本輪結束、不記 TRY_CNT */
+	private static final class SmtpUnavailableException extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		SmtpUnavailableException(Throwable cause) {
+			super(cause);
+		}
+	}
+
 	private final MailOutboxDao outboxDao;
 	private final MailDispatcher dispatcher;
 	private final MailProperties properties;
@@ -46,6 +74,8 @@ public class MailWorker {
 	private final AtomicBoolean dbUnavailable = new AtomicBoolean(false);
 	/** 目前是否處於「SMTP 未設定」狀態；同上 */
 	private final AtomicBoolean smtpUnconfigured = new AtomicBoolean(false);
+	/** 目前是否處於「SMTP 連不上」狀態；同上 */
+	private final AtomicBoolean smtpUnreachable = new AtomicBoolean(false);
 
 	public MailWorker(MailOutboxDao outboxDao, MailDispatcher dispatcher, MailProperties properties,
 			PlatformTransactionManager transactionManager) {
@@ -97,6 +127,12 @@ public class MailWorker {
 			} catch (DataAccessException e) {
 				markDbUnavailable(e);
 				return sent;
+			} catch (SmtpUnavailableException e) {
+				if (smtpUnreachable.compareAndSet(false, true)) {
+					log.warn("信件 worker：SMTP 連不上（{}），本輪停止、不計重試，恢復後自動補寄",
+							e.getCause().getClass().getSimpleName());
+				}
+				return sent;
 			} catch (RuntimeException e) {
 				// 不該走到這裡（processOne 已把寄送例外轉成 markFailedTry）；記下來但不中斷其他信
 				log.warn("信件 worker：outbox {} 處理時發生未預期錯誤 {}", id, e.getClass().getSimpleName());
@@ -114,6 +150,9 @@ public class MailWorker {
 		int tryNo = (row.getTryCnt() == null ? 0 : row.getTryCnt()) + 1;
 		try {
 			SendResult result = dispatcher.send(row);
+			if (smtpUnreachable.compareAndSet(true, false)) {
+				log.info("信件 worker：SMTP 已恢復連線");
+			}
 			outboxDao.markSent(id, result.messageId(), result.note());
 			if (result.note() == null) {
 				log.info("信件 worker：outbox {} 已寄出（第 {} 次）", id, tryNo);
@@ -125,6 +164,10 @@ public class MailWorker {
 			// markSent 失敗屬 DB 問題，往外拋讓交易 rollback、本輪停止
 			throw e;
 		} catch (RuntimeException e) {
+			if (isConnectFailure(e)) {
+				// 連線階段就失敗＝信根本沒送出；不記 TRY_CNT，交易只有鎖、rollback 即釋放
+				throw new SmtpUnavailableException(e);
+			}
 			boolean reachedLimit = tryNo >= properties.getMaxTry();
 			outboxDao.markFailedTry(id, errorText(e), properties.getMaxTry());
 			log.warn("信件 worker：outbox {} 寄送失敗（第 {} 次，{}）：{}", id, tryNo,
@@ -133,7 +176,37 @@ public class MailWorker {
 		}
 	}
 
-	/** 例外類別＋訊息（含 SMTP 回應），有 cause 時再附一層；截到欄位長度 */
+	/**
+	 * 是否為 SMTP 連線階段失敗（信沒有送出）。沿 cause 鏈找，MailSendException 另看各封的失敗原因；
+	 * 讀寫逾時不算（可能已寄達，照一般失敗計重試，避免無限重寄）
+	 */
+	static boolean isConnectFailure(Throwable e) {
+		Set<Throwable> seen = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+		java.util.Deque<Throwable> todo = new java.util.ArrayDeque<>();
+		todo.add(e);
+		while (!todo.isEmpty()) {
+			Throwable t = todo.poll();
+			if (t == null || !seen.add(t)) {
+				continue;
+			}
+			// MailConnectException 屬 Angus Mail 實作（執行期才有），用類別名比對、不在編譯期依賴實作套件
+			if (MAIL_CONNECT_EXCEPTION.equals(t.getClass().getSimpleName()) || t instanceof ConnectException
+					|| t instanceof UnknownHostException || t instanceof NoRouteToHostException) {
+				return true;
+			}
+			if (t instanceof MailSendException mse) {
+				for (Map.Entry<Object, Exception> entry : mse.getFailedMessages().entrySet()) {
+					todo.add(entry.getValue());
+				}
+			}
+			if (t.getCause() != null) {
+				todo.add(t.getCause());
+			}
+		}
+		return false;
+	}
+
+	/** 例外類別＋訊息（含 SMTP 回應），有 cause 時再附一層；email 形狀的字串遮成 ***；截到欄位長度 */
 	static String errorText(Throwable e) {
 		StringBuilder sb = new StringBuilder(e.getClass().getSimpleName());
 		if (e.getMessage() != null && !e.getMessage().isBlank()) {
@@ -146,7 +219,7 @@ public class MailWorker {
 				sb.append(": ").append(cause.getMessage().trim());
 			}
 		}
-		String text = sb.toString().replaceAll("[\\r\\n]+", " ");
+		String text = EMAIL_LIKE.matcher(sb.toString().replaceAll("[\\r\\n]+", " ")).replaceAll("***");
 		return text.length() <= ERROR_MAX ? text : text.substring(0, ERROR_MAX);
 	}
 
