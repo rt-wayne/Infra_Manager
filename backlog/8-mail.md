@@ -33,7 +33,7 @@
   - 刪除單不寄信（舊系統也不寄）；不 CC `ADMIN_EMAIL`；末關同意不加寄 idc_admin
   - 收件人來源：候選人 `IM_APPR_CAND_MAP` JOIN `IM_USER`；簽核人 `IM_APPR_STEP.USER_ID`；執行人 `IM_APP_EXEC.USER_ID`；governance 比照 `ApprovalWriteDao` 角色 JOIN（帳號與角色都 `STATUS=1`）；一律只取 `IM_USER.STATUS=1` 的 email（已停用不寄；撤權策略第 104 項 N6 不碰）
   - 沒 email 的人略過；整封 0 個收件人就不寫 outbox，只記 info（單號＋事件類型）
-  - 只通知關卡（`IS_NOTIFY_ONLY`）：R2 開工先讀舊 `lib/workflow.js`、`routes/apps.js` notifyStep 段落；舊系統有寄就加一份「知會」樣板，沒寄就不寄
+  - 只通知關卡（`IS_NOTIFY_ONLY`）：R2 查證結果——舊系統 `notifyOnly` 旗標沒有任何寄信效果、新系統在 `insertSteps` 就標 SKIPPED，**不寄、不做知會樣板**（BACKLOG 第 110 項 ④）
 - **交易邊界＝方案 B**：enqueue（寫 outbox）在業務 `@Transactional` 內同 commit；收件人查詢與樣板渲染的例外在 enqueue 內 catch、記 warn（事件類型＋單號＋例外類別）後跳過；INSERT 失敗照樣往外拋跟業務一起 rollback。**enqueue 方法不掛 `@Transactional`**（例外穿過交易代理會標成 rollback-only）
 - **worker**：`config/MailSchedulingConfig`（`@EnableScheduling`＋`@ConditionalOnProperty(im.mail.enabled=true)`，預設關、verify 與開發機不啟動）；`@Scheduled(fixedDelay=30s)` 每輪最多 20 封；兩步鎖——先不鎖查候選 ID（PENDING、`TRY_CNT<上限`、已過退避 `UPDATE_DATE + TRY_CNT×1 分鐘`），再逐封開交易 `SELECT … FOR UPDATE SKIP LOCKED`，寄完同交易更新 SENT 或 TRY_CNT+1（Oracle 不能 `FOR UPDATE`＋限筆數同句，ORA-02014）；重試上限 5 次後 FAILED；`mail.smtp.sendpartial=true`（部分無效收件人仍記 SENT、`ERROR_TEXT` 註明無效人數）；connection／read／write timeout 15 秒；DB 或 SMTP 連不上只在第一次失敗與恢復時各記一次 log；`ERROR_TEXT` 只存例外類別＋SMTP 回應、截 1000 字、不含地址；`CREATE_BY` 操作人工號、worker 更新 `UPDATE_BY='SYSTEM'`；語意「至少寄一次」（不改 DDL 的已知取捨）
 - **設定鍵**：`spring.mail.host`／`port`／`properties.mail.smtp.*`（Boot 內建 JavaMailSender）；`im.mail.enabled`（預設 false）、`from`、`site-url`（信內連結 `{site-url}/#/apps/{單號}`，取代舊系統用 Host header 組網址）、`override-to`、`batch-size`、`max-try`。R1 加完套件先確認 Boot 4 的屬性前綴仍是 `spring.mail.*`
@@ -48,7 +48,7 @@
 | 回合 | 內容 | 狀態 |
 |------|------|------|
 | R1 | 基礎設施：`pom.xml` 加兩套件；`config/MailProperties`、`MailSchedulingConfig`；`dao/mail/MailOutboxDao`（寫入、查候選、逐列鎖、標 SENT／重試／FAILED）；`model/mail/*`；`service/mail/MailOutboxService`（enqueue）、`MailDispatcher`（寄送包裝）、`MailWorker`；`application.properties.example` 加鍵；單元測試（worker 狀態轉移，SMTP mock）；`MailOutboxDaoIT`（寫好不跑）。若做到 DAO＋enqueue 已過半，worker 拆 R1b | 完成（2026-10-08；worker 未拆、一回合做完；另加 `findById` 供 S8b 用、`im.mail.retry-backoff-minutes`／`initial-delay-ms` 兩鍵） |
-| R2 | 6 份樣板＋明細片段；`dao/mail/MailRecipientDao`（join 型）；`service/mail/MailNotifier`（組信）；`AppFlowService` 接事件 1～6；先查證只通知關卡；單元測試（標題帶 `<script>` 被轉義、去重、0 收件人不寫入）；修既有 AppFlowService 測試 | 待開工 |
+| R2 | 6 份樣板＋明細片段；`dao/mail/MailRecipientDao`（join 型）；`service/mail/MailNotifier`（組信）；`AppFlowService` 接事件 1～6；先查證只通知關卡；單元測試（標題帶 `<script>` 被轉義、去重、0 收件人不寫入）；修既有 AppFlowService 測試 | 完成（2026-10-08；只通知關卡舊系統也沒寄 → 不做知會樣板，登記 BACKLOG 第 110 項 ④；另加 `im.mail.site-name` 鍵；事件 7～10 的 `MailNotifier` 方法已寫好、R3 只接呼叫） |
 | R3 | `AppExecutionService` 接事件 7～10；IT 補「業務 rollback 時 outbox 也沒資料」 | 待開工 |
 | 階段末 | `./mvnw verify`；`code-reviewer`；本機真檔 `im.mail.enabled=true`＋`override-to=ciliao@`，經 3201 走流程，**待簽核、退件、核准完成三種信寄到測試信箱**；PRD／CHANGELOG 補齊（CHANGELOG 列第 56 項憑證驗證維持關閉、舊系統 Host header 組連結已修）；PRD 註明「舊系統 admin 可撤回、新系統只限申請人」 | 待開工 |
 
