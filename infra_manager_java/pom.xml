@@ -101,10 +101,26 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<!-- S8a：測試會讀本機真實 application.properties，那裡開了 im.mail.enabled=true 時寄信排程也會在測試裡跑、
+			     把測試流程產生的信真的寄出去，並與 MailOutboxDaoIT 搶鎖；測試一律用系統屬性關掉排程（系統屬性優先於 properties 檔） -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<im.mail.enabled>false</im.mail.enabled>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<!-- S1：整合測試（*IT，連真實測試 Oracle）只在 mvnw verify 執行；mvnw clean package 只跑單元測試（surefire 預設不含 *IT） -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<im.mail.enabled>false</im.mail.enabled>
+					</systemPropertyVariables>
+				</configuration>
 				<executions>
 					<execution>
 						<goals>
