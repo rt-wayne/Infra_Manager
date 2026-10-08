@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：退件通知（S8 R2；事件 5 簽核退件、8 執行端退回、9 治理退回共用，階段名用參數 stageName）。
+            收件人是退件群組；只用 th:text
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">退件</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #c01c28;" th:text="|[退件] ${d.appId} ${d.title}|">退件</h2>
+  <p th:text="|以下申請單在「${stageName}」被退回，請申請人補件後重新送審。|">說明</p>
+  <table cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+    <tr><td width="130" style="border: 1px solid #ddd; background: #fafafa;">退件人</td>
+        <td style="border: 1px solid #ddd;" th:text="${rejecterName}">退件人</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">退件說明</td>
+        <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${memo}">說明</td></tr>
+  </table>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: detail(${d})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

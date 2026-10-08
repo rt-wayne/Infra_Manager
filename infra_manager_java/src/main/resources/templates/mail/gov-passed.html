@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：執行結果已通過通知（S8 R2 寫好、R3 接事件 10 治理通過結案；只寄申請人；舊主旨的 emoji 拿掉）
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">執行結果已通過</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #26a269;" th:text="|[執行結果已通過] ${d.appId} ${d.title}|">執行結果已通過</h2>
+  <p th:text="|${d.applicantName} 您好，您的申請單執行結果已通過資訊治理審核，本單結案。|">說明</p>
+  <table cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+    <tr><td width="130" style="border: 1px solid #ddd; background: #fafafa;">單號</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.appId}">單號</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">標題</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.title}">標題</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">治理意見</td>
+        <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${memo != null ? memo : '（無）'}">意見</td></tr>
+  </table>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

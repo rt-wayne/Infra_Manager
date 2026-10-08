@@ -20,6 +20,9 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           CURR_VER_NO + 1、RESUB_MEMO、依新優先等級重算 FLOW_ID → 子表整批重建 → 重讀主檔跑必填檢核（缺就 400 整筆
 //           rollback）→ 用與送審共用的 startApproval 建新版簽核實例 → 事件 RESUBMIT（補件說明進 MEMO）。
 //           舊版 IM_APPR 維持 REJECTED 不動，歷次簽核紀錄照 verNo 查得到
+//           2026-10-08 S8 R2：接信件事件 1～6（MailNotifier，寫 IM_MAIL_OUTBOX、與業務同交易）：startApproval 末尾寄
+//           「待簽核」給第一關候選人（送審與補件共用）；同意進下一關寄「待簽核」給新關卡、末關同意寄「核准完成」給申請人、
+//           退件寄「退件」給退件群組；撤回在 closeOpenSteps 之前寄「撤回通知」給當下待簽關卡候選人（關掉就找不到目前關卡）
 // ============================================================
 
 import java.sql.Timestamp;
@@ -53,6 +56,7 @@ import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.model.changerequest.OptionRow;
 import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
+import com.mpx.infra_manager_java.service.mail.MailNotifier;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
 import com.mpx.infra_manager_java.util.TaiwanTime;
 import com.mpx.infra_manager_java.util.TextLength;
@@ -101,10 +105,11 @@ public class AppFlowService {
 	private final AppVerDao appVerDao;
 	private final AttachDao attachDao;
 	private final ObjectMapper objectMapper;
+	private final MailNotifier mailNotifier;
 
 	public AppFlowService(AppDao appDao, AppWriteDao appWriteDao, ApprovalDao approvalDao,
 			ApprovalWriteDao approvalWriteDao, FormOptionDao formOptionDao, SysParamService sysParamService,
-			AppVerDao appVerDao, AttachDao attachDao, ObjectMapper objectMapper) {
+			AppVerDao appVerDao, AttachDao attachDao, ObjectMapper objectMapper, MailNotifier mailNotifier) {
 		this.appDao = appDao;
 		this.appWriteDao = appWriteDao;
 		this.approvalDao = approvalDao;
@@ -114,6 +119,7 @@ public class AppFlowService {
 		this.appVerDao = appVerDao;
 		this.attachDao = attachDao;
 		this.objectMapper = objectMapper;
+		this.mailNotifier = mailNotifier;
 	}
 
 	/** 送審：DRAFT → IN_REVIEW 並建立簽核實例；回新的 rowVerNo */
@@ -231,6 +237,7 @@ public class AppFlowService {
 			ApprStepRow s = empty.get(0);
 			throw new ApiBadRequestException("第 " + s.getSeqNo() + " 關（" + s.getStepName() + "）沒有可簽核的人，請聯絡管理員");
 		}
+		mailNotifier.stepPending(appId, apprId, by);
 	}
 
 	/** 版次結束方式與原因（IM_APP_VER 的 CLOSE_STATUS_CODE 與 VER_REASON） */
@@ -340,6 +347,8 @@ public class AppFlowService {
 		if (approvalWriteDao.countDecidedSteps(apprId) > 0) {
 			throw new ApiConflictException(MSG_RECALL_DECIDED);
 		}
+		// 先寄再關關卡：關卡 CANCELLED 之後就找不到「目前待簽關卡」的候選人
+		mailNotifier.recalled(appId, apprId, reason, me.userId());
 		approvalWriteDao.closeOpenSteps(apprId, "CANCELLED", me.userId());
 		approvalWriteDao.closeAppr(apprId, "RECALLED", me.userId());
 		approvalWriteDao.insertEvent(appId, verNo, EVENT_RECALL, me.userId(), reason);
@@ -397,11 +406,15 @@ public class AppFlowService {
 			if (approvalWriteDao.activateNext(apprId, me.userId()) == 0) {
 				approvalWriteDao.closeAppr(apprId, "APPROVED", me.userId());
 				appWriteDao.updateStatus(appId, STATUS_APPROVED, me.userId());
+				mailNotifier.approved(appId, apprId, me.userId());
+			} else {
+				mailNotifier.stepPending(appId, apprId, me.userId());
 			}
 		} else {
 			approvalWriteDao.closeOpenSteps(apprId, "SKIPPED", me.userId());
 			approvalWriteDao.closeAppr(apprId, "REJECTED", me.userId());
 			appWriteDao.updateStatus(appId, STATUS_REJECTED, me.userId());
+			mailNotifier.rejected(appId, apprId, current.getStepName(), me.userName(), memo, me.userId());
 		}
 		return rowVerNo + 1;
 	}

@@ -12,6 +12,9 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           2026-10-07 S9 R1：加補件——鎖是 REJECTED → IN_REVIEW 且只限申請人（admin 403）；成功順序：快照舊版進 IM_APP_VER
 //           （APP_VER_NO＝舊版次、FORM_JSON 是退件當時的標題與 schema 1）→ 覆寫主檔 → 子表重建 → 新版建實例 → RESUBMIT 事件帶說明；
 //           表單格式錯 400 不碰 DB；必填缺漏 400 不建實例；CLOSE_STATUS_CODE 三分支；附件索引只含舊版結束前上傳的檔
+//           2026-10-08 S8 R2：建構子多 MailNotifier（mock）；鎖定信件事件掛點——送審／補件在候選人檢查過後寄待簽核、
+//           同意進下一關寄待簽核、末關同意寄核准完成、退件寄退件（帶關卡名、簽核人姓名、意見）、撤回在 closeOpenSteps 之前寄；
+//           失敗路徑（400／403／409）一封都不寄
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -59,6 +62,7 @@ import com.mpx.infra_manager_java.model.changerequest.DecisionRequest;
 import com.mpx.infra_manager_java.model.changerequest.EventRow;
 import com.mpx.infra_manager_java.model.changerequest.FlowActionRequest;
 import com.mpx.infra_manager_java.model.changerequest.ResubmitRequest;
+import com.mpx.infra_manager_java.service.mail.MailNotifier;
 import com.mpx.infra_manager_java.service.sysparam.SysParamService;
 import com.mpx.infra_manager_java.util.TextTooLongException;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
@@ -83,8 +87,9 @@ class AppFlowServiceTest {
 	private final AppVerDao appVerDao = mock(AppVerDao.class);
 	private final AttachDao attachDao = mock(AttachDao.class);
 	private final JsonMapper jsonMapper = JsonMapper.builder().build();
+	private final MailNotifier mailNotifier = mock(MailNotifier.class);
 	private final AppFlowService service = new AppFlowService(appDao, appWriteDao, approvalDao, approvalWriteDao,
-			formOptionDao, sysParamService, appVerDao, attachDao, jsonMapper);
+			formOptionDao, sysParamService, appVerDao, attachDao, jsonMapper, mailNotifier);
 
 	private static AppRow app() {
 		AppRow a = new AppRow();
@@ -138,13 +143,15 @@ class AppFlowServiceTest {
 		long newVer = service.submit(APP, new FlowActionRequest(3L, null), USER);
 
 		assertThat(newVer).isEqualTo(4L);
-		InOrder o = inOrder(appWriteDao, approvalWriteDao);
+		InOrder o = inOrder(appWriteDao, approvalWriteDao, mailNotifier);
 		o.verify(appWriteDao).transition(APP, 3L, "DRAFT", "IN_REVIEW", "T0001", true);
 		o.verify(appWriteDao).updateFlowId(APP, "full", "T0001");
 		o.verify(approvalWriteDao).insertAppr(APP, 1, "full", "T0001");
 		o.verify(approvalWriteDao).findPendingAppr(APP, 1);
 		o.verify(approvalWriteDao).insertSteps(77L, "full", "T0001");
 		o.verify(approvalWriteDao).insertCandidates(77L, "T0001", "T0001");
+		o.verify(approvalWriteDao).findOpenStepsWithoutCandidate(77L);
+		o.verify(mailNotifier).stepPending(APP, 77L, "T0001");
 		o.verify(approvalWriteDao).insertEvent(APP, 1, "SUBMIT", "T0001", null);
 		verify(appWriteDao, never()).findLockState(anyString());
 	}
@@ -224,6 +231,7 @@ class AppFlowServiceTest {
 
 		verify(approvalWriteDao, never()).insertCandidates(anyLong(), anyString(), anyString());
 		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -238,6 +246,7 @@ class AppFlowServiceTest {
 				.isInstanceOf(ApiBadRequestException.class).hasMessage("第 2 關（部門主管）沒有可簽核的人，請聯絡管理員");
 
 		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -252,8 +261,9 @@ class AppFlowServiceTest {
 		long newVer = service.recall(APP, new FlowActionRequest(3L, "資料要補\r\n再送"), USER);
 
 		assertThat(newVer).isEqualTo(4L);
-		InOrder o = inOrder(appWriteDao, approvalWriteDao);
+		InOrder o = inOrder(appWriteDao, approvalWriteDao, mailNotifier);
 		o.verify(appWriteDao).transition(APP, 3L, "IN_REVIEW", "DRAFT", "T0001", true);
+		o.verify(mailNotifier).recalled(APP, 77L, "資料要補\n再送", "T0001");
 		o.verify(approvalWriteDao).closeOpenSteps(77L, "CANCELLED", "T0001");
 		o.verify(approvalWriteDao).closeAppr(77L, "RECALLED", "T0001");
 		o.verify(approvalWriteDao).insertEvent(APP, 1, "RECALL", "T0001", "資料要補\n再送");
@@ -302,6 +312,7 @@ class AppFlowServiceTest {
 		ApprStepRow s = new ApprStepRow();
 		s.setApprStepId(id);
 		s.setSeqNo(seq);
+		s.setStepName("第 " + seq + " 關");
 		s.setStepStatusCode(status);
 		return s;
 	}
@@ -341,6 +352,8 @@ class AppFlowServiceTest {
 		o.verify(approvalWriteDao).activateNext(77L, "S4U002");
 		verify(approvalWriteDao, never()).closeAppr(anyLong(), anyString(), anyString());
 		verify(appWriteDao, never()).updateStatus(anyString(), anyString(), anyString());
+		verify(mailNotifier).stepPending(APP, 77L, "S4U002");
+		verify(mailNotifier, never()).approved(anyString(), anyLong(), anyString());
 	}
 
 	@Test
@@ -354,6 +367,10 @@ class AppFlowServiceTest {
 		verify(approvalWriteDao).closeAppr(77L, "APPROVED", "S4U002");
 		verify(appWriteDao).updateStatus(APP, "APPROVED", "S4U002");
 		verify(approvalWriteDao, never()).closeOpenSteps(anyLong(), anyString(), anyString());
+		InOrder o = inOrder(appWriteDao, mailNotifier);
+		o.verify(appWriteDao).updateStatus(APP, "APPROVED", "S4U002");
+		o.verify(mailNotifier).approved(APP, 77L, "S4U002");
+		verify(mailNotifier, never()).stepPending(anyString(), anyLong(), anyString());
 	}
 
 	@Test
@@ -368,6 +385,7 @@ class AppFlowServiceTest {
 		o.verify(approvalWriteDao).closeAppr(77L, "REJECTED", "S4U002");
 		o.verify(appWriteDao).updateStatus(APP, "REJECTED", "S4U002");
 		verify(approvalWriteDao, never()).activateNext(anyLong(), anyString());
+		verify(mailNotifier).rejected(APP, 77L, "第 1 關", "機房", "資料不全", "S4U002");
 
 		assertThatThrownBy(() -> service.decide(APP, new DecisionRequest(3L, "REJECT", "  "), APPROVER))
 				.isInstanceOf(ApiBadRequestException.class).hasMessage(DecisionPolicy.MSG_REJECT_NEEDS_MEMO);
@@ -384,6 +402,7 @@ class AppFlowServiceTest {
 				.isInstanceOf(AccessDeniedException.class).hasMessage(AppFlowService.MSG_DECIDE_FORBIDDEN);
 
 		verify(approvalWriteDao, never()).decideStep(anyLong(), anyString(), anyString(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -406,6 +425,7 @@ class AppFlowServiceTest {
 		assertThatThrownBy(() -> service.decide(APP, new DecisionRequest(3L, "APPROVE", null), APPROVER))
 				.isInstanceOf(ApiConflictException.class).hasMessage(AppFlowService.MSG_DECIDE_STALE);
 		verify(approvalWriteDao, never()).activateNext(anyLong(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -422,6 +442,7 @@ class AppFlowServiceTest {
 
 		verify(approvalWriteDao, never()).closeOpenSteps(anyLong(), anyString(), anyString());
 		verify(approvalWriteDao, never()).closeAppr(anyLong(), anyString(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	// ---------- 補件（S9 R1） ----------
@@ -497,6 +518,7 @@ class AppFlowServiceTest {
 		o.verify(approvalWriteDao).insertSteps(88L, "full", "T0001");
 		o.verify(approvalWriteDao).insertCandidates(88L, "T0001", "T0001");
 		o.verify(approvalWriteDao).insertEvent(APP, 2, "RESUBMIT", "T0001", "  已補齊資料 ");
+		verify(mailNotifier).stepPending(APP, 88L, "T0001");
 		verify(appWriteDao, never()).updateFlowId(anyString(), anyString(), anyString());
 
 		ArgumentCaptor<AppDraft> draft = ArgumentCaptor.forClass(AppDraft.class);

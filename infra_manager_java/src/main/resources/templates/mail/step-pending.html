@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：待簽核通知（S8 R2，事件 1 送審／2 補件重送／3 進下一關共用）。
+            收件人是該關全部候選人，所以稱呼用關卡名而不是個人姓名；只用 th:text
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">待簽核</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #1a5fb4;" th:text="|[待簽核] ${d.appId} ${d.title}|">待簽核</h2>
+  <p th:text="|${stepName} 您好，以下申請單已進入「${stepName}」關卡，請登入系統審核。|">說明</p>
+  <p th:if="${isResubmit}" style="color: #b35c00;">本單為補件後重新送審，補件說明請見下方明細。</p>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: detail(${d})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

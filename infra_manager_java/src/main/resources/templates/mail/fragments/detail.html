@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：信件共用片段（S8 R2）。detail＝申請單明細（照舊系統 mailer.js renderDetailSection 的欄位順序），
+            footer＝頁尾。只用 th:text（自動轉義），禁 th:utext；多行欄位用 white-space: pre-wrap 保留換行
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<table th:fragment="detail(d)" width="100%" cellpadding="6" cellspacing="0"
+       style="border-collapse: collapse; font-size: 14px; color: #333;">
+  <tr><th colspan="2" align="left" style="background: #f0f0f0; border: 1px solid #ddd;">基本資訊</th></tr>
+  <tr><td width="130" style="border: 1px solid #ddd; background: #fafafa;">單號</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.appId}">IM2026</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">標題</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.title}">標題</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">事件分級</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.prioName}">P3</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">申請人</td>
+      <td style="border: 1px solid #ddd;"
+          th:text="|${d.applicantName}（${d.applicantDept}）　電話：${d.applicantTel}　Email：${d.applicantEmail}|">申請人</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">版次與流程</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.verAndFlow}">v1／完整流程</td></tr>
+
+  <tr><th colspan="2" align="left" style="background: #f0f0f0; border: 1px solid #ddd;">異動內容</th></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">作業主題</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.workSubj}">主題</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">執行方式</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.execMode}">自行執行</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">廠商</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.supplier}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">作業類別</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.categories}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">異動原因</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.reasons}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">影響範圍</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.scopes}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">預計時間</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.schedule}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">設備位置</td>
+      <td style="border: 1px solid #ddd;" th:text="${d.location}">—</td></tr>
+  <tr th:if="${!#lists.isEmpty(d.equipments)}">
+      <td style="border: 1px solid #ddd; background: #fafafa;">異動設備</td>
+      <td style="border: 1px solid #ddd;">
+        <div th:each="e : ${d.equipments}" th:text="${e}">設備</div>
+      </td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">詳細說明</td>
+      <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${d.workDetail}">—</td></tr>
+  <tr th:if="${!#lists.isEmpty(d.planSteps)}">
+      <td style="border: 1px solid #ddd; background: #fafafa;">執行步驟</td>
+      <td style="border: 1px solid #ddd;">
+        <div th:each="p : ${d.planSteps}" th:text="${p}">步驟</div>
+      </td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">影響說明</td>
+      <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${d.impactDesc}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">風險評估</td>
+      <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${d.riskDesc}">—</td></tr>
+  <tr><td style="border: 1px solid #ddd; background: #fafafa;">回復計畫</td>
+      <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${d.rollBackPlan}">—</td></tr>
+  <tr th:if="${d.resubMemo != null}">
+      <td style="border: 1px solid #ddd; background: #fafafa;">補件說明</td>
+      <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${d.resubMemo}">—</td></tr>
+</table>
+
+<p th:fragment="link(link)" th:if="${link != null}" style="margin: 16px 0;">
+  <a th:href="${link}" th:text="${link}" style="color: #1a5fb4;">連結</a>
+</p>
+
+<p th:fragment="footer" style="margin-top: 24px; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 8px;"
+   th:text="|本信件由「${siteName}」自動發送，請勿直接回覆。發送時間：${sentAt}|">頁尾</p>
+
+</body>
+</html>

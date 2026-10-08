@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：撤回通知（S8 R2，事件 6；寄給撤回當下待簽關卡的候選人）。照舊系統只列單號、標題、申請人、撤回原因，不附明細
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">撤回通知</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #b35c00;" th:text="|[撤回通知] ${d.appId} ${d.title}|">撤回通知</h2>
+  <p th:text="|${stepName} 您好，以下申請單已由申請人撤回修改，不需再進行審核。|">說明</p>
+  <table cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+    <tr><td width="130" style="border: 1px solid #ddd; background: #fafafa;">單號</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.appId}">單號</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">標題</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.title}">標題</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">申請人</td>
+        <td style="border: 1px solid #ddd;" th:text="|${d.applicantName}（${d.applicantDept}）|">申請人</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">撤回原因</td>
+        <td style="border: 1px solid #ddd; white-space: pre-wrap;" th:text="${reason != null ? reason : '（未填）'}">原因</td></tr>
+  </table>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

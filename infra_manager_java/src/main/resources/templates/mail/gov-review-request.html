@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：待審核執行結果通知（S8 R2 寫好、R3 接事件 7 送治理審查；寄給所有啟用中 governance）
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">待審核執行結果</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #1a5fb4;" th:text="|[待審核執行結果] ${d.appId} ${d.title}|">待審核執行結果</h2>
+  <p th:text="|資訊治理 您好，以下申請單的執行結果已送出，請登入「${siteName}」審核。|">說明</p>
+  <table cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+    <tr><td width="130" style="border: 1px solid #ddd; background: #fafafa;">單號</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.appId}">單號</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">標題</td>
+        <td style="border: 1px solid #ddd;" th:text="${d.title}">標題</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">申請人</td>
+        <td style="border: 1px solid #ddd;" th:text="|${d.applicantName}（${d.applicantDept}）|">申請人</td></tr>
+    <tr><td style="border: 1px solid #ddd; background: #fafafa;">執行結果</td>
+        <td style="border: 1px solid #ddd;" th:text="${resultName}">結果</td></tr>
+  </table>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: detail(${d})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

@@ -33,6 +33,8 @@ im.mail.enabled=false
 im.mail.from=
 ### 信內「檢視申請單」連結的網址前綴＝殼 jar 對外位址，不含結尾斜線，例：http://<host>:3201/infra_manager_web
 im.mail.site-url=
+### 信件頁尾與主旨顯示的系統名稱；留空用預設「機房設備異動申請系統」
+im.mail.site-name=
 ### 有值時所有信改寄到這個地址、主旨加「[測試改寄]」、原收件人記在 META_JSON；驗收用，正式環境留空
 im.mail.override-to=
 ### 每輪最多寄幾封／重試上限（達上限標 FAILED，admin 可重寄）／重試退避（分鐘 × 已嘗試次數）／輪詢間隔與首次延遲（毫秒）

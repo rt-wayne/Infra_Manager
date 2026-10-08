@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!--
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-08
+  變更說明: 新增：核准完成通知（S8 R2，事件 4 末關同意；只寄申請人）。附各關簽核紀錄（關卡、簽核人、時間；照舊系統不附意見）
+-->
+<html xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title th:text="${subject}">核准完成</title></head>
+<body style="font-family: 'Microsoft JhengHei', Arial, sans-serif; font-size: 14px; color: #333;">
+  <h2 style="color: #26a269;" th:text="|[核准完成] ${d.appId} ${d.title}|">核准完成</h2>
+  <p th:text="|${d.applicantName} 您好，您的申請單已完成所有關卡簽核，可依預計時間執行，執行完成後請登入系統填寫執行結果。|">說明</p>
+  <h3 style="font-size: 15px;">簽核紀錄</h3>
+  <table cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+    <tr style="background: #f0f0f0;">
+      <th align="left" style="border: 1px solid #ddd;">關卡</th>
+      <th align="left" style="border: 1px solid #ddd;">簽核人</th>
+      <th align="left" style="border: 1px solid #ddd;">時間</th>
+    </tr>
+    <tr th:each="r : ${records}">
+      <td style="border: 1px solid #ddd;" th:text="${r.stepName}">關卡</td>
+      <td style="border: 1px solid #ddd;" th:text="${r.userName}">簽核人</td>
+      <td style="border: 1px solid #ddd;" th:text="${r.decidedAt}">時間</td>
+    </tr>
+  </table>
+  <div th:replace="~{mail/fragments/detail :: link(${link})}"></div>
+  <div th:replace="~{mail/fragments/detail :: detail(${d})}"></div>
+  <div th:replace="~{mail/fragments/detail :: footer}"></div>
+</body>
+</html>

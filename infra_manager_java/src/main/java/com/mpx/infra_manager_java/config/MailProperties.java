@@ -22,6 +22,8 @@ public class MailProperties {
 	private String from = "";
 	/** 信內連結的網址前綴（殼 jar 對外位址，不含結尾斜線） */
 	private String siteUrl = "";
+	/** 信件頁尾「本信件由「{siteName}」自動發送」與主旨前綴用的系統名稱（S8 R2） */
+	private String siteName = "機房設備異動申請系統";
 	/** 有值時所有收件人改成這個地址；正式環境留空 */
 	private String overrideTo = "";
 	/** 每輪最多寄幾封 */
@@ -39,6 +41,10 @@ public class MailProperties {
 	public void setFrom(String from) { this.from = from == null ? "" : from.trim(); }
 	public String getSiteUrl() { return siteUrl; }
 	public void setSiteUrl(String siteUrl) { this.siteUrl = siteUrl == null ? "" : siteUrl.trim(); }
+	public String getSiteName() { return siteName; }
+	public void setSiteName(String siteName) {
+		this.siteName = siteName == null || siteName.isBlank() ? "機房設備異動申請系統" : siteName.trim();
+	}
 	public String getOverrideTo() { return overrideTo; }
 	public void setOverrideTo(String overrideTo) { this.overrideTo = overrideTo == null ? "" : overrideTo.trim(); }
 	public int getBatchSize() { return batchSize; }
