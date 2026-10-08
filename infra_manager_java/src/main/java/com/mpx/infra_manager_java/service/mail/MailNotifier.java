@@ -9,6 +9,8 @@ package com.mpx.infra_manager_java.service.mail;
 //           不影響業務；寫 outbox（MailOutboxService.enqueue）的例外照樣往外拋、跟業務一起 rollback。
 //           收件人為空時不渲染、不寫入，只記 info。log 不記 email 地址（個資），只記單號、事件、人數。
 //           樣板只用 th:text，所有欄位（含標題帶 <script>）都會被轉義；信內連結用 im.mail.site-url 組，不用 Host header
+//           2026-10-08 S8 R3：加 rejectedAtVersion（事件 8／9 執行端與治理退回只有版次，照單號＋版次找該版簽核實例）；
+//           找實例也在組信段內，查詢失敗一樣只記 warn 不影響退回
 // ============================================================
 
 import java.sql.Timestamp;
@@ -29,6 +31,7 @@ import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.ApprovalDao;
 import com.mpx.infra_manager_java.dao.mail.MailRecipientDao;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
 import com.mpx.infra_manager_java.model.changerequest.EquipRow;
 import com.mpx.infra_manager_java.model.changerequest.OptionRow;
@@ -54,6 +57,9 @@ public class MailNotifier {
 	public static final String STAGE_GOVERNANCE = "資訊治理審核";
 
 	private static final String EMPTY = "—";
+
+	/** 找不到簽核實例時的占位主鍵（IDENTITY 從 1 起，-1 不會對到任何列） */
+	private static final long NO_APPR_ID = -1L;
 
 	private static final Logger log = LoggerFactory.getLogger(MailNotifier.class);
 
@@ -148,19 +154,34 @@ public class MailNotifier {
 	 * rejecterName＝退件人姓名、memo＝退件說明；apprId＝該版簽核實例（用來找候選人與簽核人）
 	 */
 	public void rejected(String appId, long apprId, String stageName, String rejecterName, String memo, String by) {
+		send(EVENT_REJECTED, appId, () -> buildRejected(appId, apprId, stageName, rejecterName, memo, by));
+	}
+
+	/**
+	 * 執行階段／治理退回用（事件 8／9）：呼叫端只有版次，這裡照單號＋版次找該版簽核實例（已 APPROVED）再組退件信。
+	 * 找不到實例（理論上不會）時用 -1：候選人與簽核人兩段查不到人，申請人、執行人、治理照寄
+	 */
+	public void rejectedAtVersion(String appId, int verNo, String stageName, String rejecterName, String memo,
+			String by) {
 		send(EVENT_REJECTED, appId, () -> {
-			List<String> to = emails(recipientDao.findRejectGroup(appId, apprId));
-			if (noRecipient(EVENT_REJECTED, appId, to)) {
-				return null;
-			}
-			AppRow app = loadApp(appId);
-			String subject = "[退件] " + app.getAppId() + " " + nz(app.getAppTitle()) + " - " + nz(stageName);
-			Map<String, Object> model = baseModel(app, subject);
-			model.put("stageName", nz(stageName));
-			model.put("rejecterName", nz(rejecterName));
-			model.put("memo", nz(memo));
-			return message(to, subject, render("mail/rejected", model), EVENT_REJECTED, appId, by);
+			long apprId = approvalDao.findCurrent(appId, verNo).map(ApprRow::getApprId).orElse(NO_APPR_ID);
+			return buildRejected(appId, apprId, stageName, rejecterName, memo, by);
 		});
+	}
+
+	private MailMessage buildRejected(String appId, long apprId, String stageName, String rejecterName, String memo,
+			String by) {
+		List<String> to = emails(recipientDao.findRejectGroup(appId, apprId));
+		if (noRecipient(EVENT_REJECTED, appId, to)) {
+			return null;
+		}
+		AppRow app = loadApp(appId);
+		String subject = "[退件] " + app.getAppId() + " " + nz(app.getAppTitle()) + " - " + nz(stageName);
+		Map<String, Object> model = baseModel(app, subject);
+		model.put("stageName", nz(stageName));
+		model.put("rejecterName", nz(rejecterName));
+		model.put("memo", nz(memo));
+		return message(to, subject, render("mail/rejected", model), EVENT_REJECTED, appId, by);
 	}
 
 	// ---------- 事件 6：撤回 ----------

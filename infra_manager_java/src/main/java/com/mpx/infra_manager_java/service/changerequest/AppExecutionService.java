@@ -18,6 +18,9 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           補件時 AppFlowService.closeOf 依這兩種事件把舊版記為 EXEC_REJECTED／GOV_RETURNED
 //           2026-10-07 S10 結案 review ①B（使用者裁示）：檢核項執行人工號改為鎖內檢查，只收「登入者本人」或「該列已存的原值」，
 //           其餘 400（關掉「拿工號查同事姓名」的小路，落實 ⑪）；拿掉鎖外逐一查工號是否啟用。save 拆出展開與逐列更新兩段
+//           2026-10-08 S8 R3：接信件事件 7～10（MailNotifier，寫 IM_MAIL_OUTBOX、與業務同交易）：save 送治理審查寄
+//           「待審核執行結果」給治理（帶執行結果名稱；暫存不寄）；執行端退回寄「退件 - 執行階段」、治理退回寄
+//           「退件 - 資訊治理審核」給退件群組；治理通過寄「執行結果已通過」給申請人。都在狀態與事件寫完之後呼叫
 // ============================================================
 
 import java.sql.Timestamp;
@@ -46,6 +49,7 @@ import com.mpx.infra_manager_java.model.changerequest.ExecutionDraft;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
+import com.mpx.infra_manager_java.service.mail.MailNotifier;
 import com.mpx.infra_manager_java.util.TaiwanTime;
 import com.mpx.infra_manager_java.util.TextLength;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
@@ -88,14 +92,16 @@ public class AppExecutionService {
 	private final ExecWriteDao execWriteDao;
 	private final FormOptionDao formOptionDao;
 	private final ApprovalWriteDao approvalWriteDao;
+	private final MailNotifier mailNotifier;
 
 	public AppExecutionService(AppDao appDao, AppWriteDao appWriteDao, ExecWriteDao execWriteDao,
-			FormOptionDao formOptionDao, ApprovalWriteDao approvalWriteDao) {
+			FormOptionDao formOptionDao, ApprovalWriteDao approvalWriteDao, MailNotifier mailNotifier) {
 		this.appDao = appDao;
 		this.appWriteDao = appWriteDao;
 		this.execWriteDao = execWriteDao;
 		this.formOptionDao = formOptionDao;
 		this.approvalWriteDao = approvalWriteDao;
+		this.mailNotifier = mailNotifier;
 	}
 
 	@Transactional
@@ -139,7 +145,18 @@ public class AppExecutionService {
 		if (!toStatus.equals(app.getAppStatusCode())) {
 			appWriteDao.updateStatus(appId, toStatus, me.userId());
 		}
+		if (draft.submit()) {
+			mailNotifier.govReviewRequest(appId, resultName(options, draft.resultCode()), me.userId());
+		}
 		return new SaveResult(rowVerNo + 1, toStatus);
+	}
+
+	/** 執行結果代碼 → 選項名稱（信件顯示用）；對不到或名稱空白就用代碼本身 */
+	private static String resultName(List<FormOptionRow> options, String resultCode) {
+		return options.stream()
+				.filter(o -> GROUP_EXEC_RESULT.equals(o.getGroupCode()) && resultCode.equals(o.getOptionCode()))
+				.map(FormOptionRow::getOptionName).filter(n -> n != null && !n.isBlank()).findFirst()
+				.orElse(resultCode);
 	}
 
 	/** 該版次已展開的檢核項（序號 → 已存執行人工號）；還沒展開就依啟用中的 CHECK_LIST 選項（SORT_NO 順序）展開 */
@@ -214,6 +231,7 @@ public class AppExecutionService {
 		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
 		appWriteDao.updateStatus(appId, AppFlowService.STATUS_REJECTED, me.userId());
 		approvalWriteDao.insertEvent(appId, verNo, EVENT_EXEC_REJECT, me.userId(), memo);
+		mailNotifier.rejectedAtVersion(appId, verNo, MailNotifier.STAGE_EXECUTION, me.userName(), memo, me.userId());
 		return rowVerNo + 1;
 	}
 
@@ -251,6 +269,12 @@ public class AppExecutionService {
 		int verNo = app.getCurrVerNo() == null ? 1 : app.getCurrVerNo();
 		approvalWriteDao.insertEvent(appId, verNo, PASS.equals(decision) ? EVENT_GOV_PASS : EVENT_GOV_RETURN,
 				me.userId(), memo);
+		if (PASS.equals(decision)) {
+			mailNotifier.govPassed(appId, memo, me.userId());
+		} else {
+			mailNotifier.rejectedAtVersion(appId, verNo, MailNotifier.STAGE_GOVERNANCE, me.userName(), memo,
+					me.userId());
+		}
 		return new SaveResult(rowVerNo + 1, toStatus);
 	}
 

@@ -14,6 +14,9 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           0 列分流 404／409 狀態／409 版本、PASS → EXECUTED 空白意見存 null、RETURN → REJECTED、申請人兼治理不擋）
 //           2026-10-07 S10 結案 review ①B：拿掉「執行人工號未啟用 400」（不再查 UserDao）；改鎖「執行人只收本人或該列原值，
 //           別人工號 400 且一列都不更新、不寫執行結果」
+//           2026-10-08 S8 R3：建構子多 MailNotifier（mock）；鎖定信件事件 7～10——送治理審查在改狀態後寄待審核（帶執行結果
+//           名稱）、暫存不寄；執行端退回寄退件「執行階段」、治理退回寄退件「資訊治理審核」（帶版次、退件人姓名、去空白後意見）；
+//           治理通過寄執行結果已通過；所有失敗路徑一封都不寄
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.sql.Timestamp;
@@ -58,6 +62,7 @@ import com.mpx.infra_manager_java.model.changerequest.ExecutionDraft;
 import com.mpx.infra_manager_java.model.changerequest.ExecutionRequest;
 import com.mpx.infra_manager_java.model.changerequest.FormOptionRow;
 import com.mpx.infra_manager_java.model.changerequest.GovernanceReviewRequest;
+import com.mpx.infra_manager_java.service.mail.MailNotifier;
 import com.mpx.infra_manager_java.util.TextTooLongException;
 import com.mpx.infra_manager_java.web.ApiBadRequestException;
 import com.mpx.infra_manager_java.web.ApiConflictException;
@@ -75,6 +80,7 @@ class AppExecutionServiceTest {
 	private ExecWriteDao execWriteDao;
 	private FormOptionDao formOptionDao;
 	private ApprovalWriteDao approvalWriteDao;
+	private MailNotifier mailNotifier;
 	private AppExecutionService service;
 
 	@BeforeEach
@@ -84,12 +90,16 @@ class AppExecutionServiceTest {
 		execWriteDao = mock(ExecWriteDao.class);
 		formOptionDao = mock(FormOptionDao.class);
 		approvalWriteDao = mock(ApprovalWriteDao.class);
-		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, approvalWriteDao);
+		mailNotifier = mock(MailNotifier.class);
+		service = new AppExecutionService(appDao, appWriteDao, execWriteDao, formOptionDao, approvalWriteDao,
+				mailNotifier);
 		List<FormOptionRow> options = new ArrayList<>();
 		options.add(option(31, "CHECK_LIST", "check_in"));
 		options.add(option(32, "CHECK_LIST", "pre_state"));
 		options.add(option(33, "CHECK_LIST", "backup"));
-		options.add(option(41, "EXEC_RESULT", "DONE"));
+		FormOptionRow done = option(41, "EXEC_RESULT", "DONE");
+		done.setOptionName("全部完成");
+		options.add(done);
 		options.add(option(42, "EXEC_RESULT", "PARTIAL"));
 		options.add(option(51, "PRIO", "P1"));
 		when(formOptionDao.findActive()).thenReturn(options);
@@ -161,6 +171,7 @@ class AppExecutionServiceTest {
 		assertThatThrownBy(() -> service.save("IM20261007-404", draft(List.of()), IDC))
 				.isInstanceOf(ApiNotFoundException.class);
 		verify(appWriteDao, never()).lockForUpdate(anyString(), anyLong(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	private static ExecutionRequest submitMissingEnd() {
@@ -192,6 +203,7 @@ class AppExecutionServiceTest {
 				.isInstanceOf(AccessDeniedException.class);
 		verify(execWriteDao, never()).upsertExec(anyString(), anyInt(), any(), any(), anyString());
 		verify(appWriteDao, never()).updateStatus(anyString(), anyString(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -223,6 +235,7 @@ class AppExecutionServiceTest {
 
 		verify(execWriteDao).upsertExec(eq(APP), eq(2), any(), isNull(), eq(APPLICANT.userId()));
 		verify(appWriteDao).updateStatus(APP, "IN_EXECUTION", APPLICANT.userId());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -265,6 +278,7 @@ class AppExecutionServiceTest {
 		verify(execWriteDao, never()).insertCheckItem(anyString(), anyInt(), anyInt(), anyLong(), anyString());
 		verify(execWriteDao).upsertExec(eq(APP), eq(2), any(), isNull(), eq(IDC.userId()));
 		verify(appWriteDao, never()).updateStatus(anyString(), anyString(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -277,7 +291,18 @@ class AppExecutionServiceTest {
 		verify(execWriteDao).upsertExec(eq(APP), eq(2), d.capture(), eq(IDC.userId()), eq(IDC.userId()));
 		assertThat(d.getValue().resultCode()).isEqualTo("DONE");
 		assertThat(d.getValue().memo()).isEqualTo("完成");
-		verify(appWriteDao).updateStatus(APP, "PENDING_REVIEW", IDC.userId());
+		InOrder order = inOrder(appWriteDao, mailNotifier);
+		order.verify(appWriteDao).updateStatus(APP, "PENDING_REVIEW", IDC.userId());
+		order.verify(mailNotifier).govReviewRequest(APP, "全部完成", IDC.userId());
+	}
+
+	@Test
+	void 送審結果代碼沒有選項名稱時信件用代碼本身() {
+		locked("IN_EXECUTION", List.of(1, 2, 3));
+		ExecutionRequest partial = new ExecutionRequest(3L, List.of(), "2026-10-07 09:00", "2026-10-07 10:00",
+				"PARTIAL", false, null, false, null, null);
+		service.save(APP, partial, APPLICANT);
+		verify(mailNotifier).govReviewRequest(APP, "PARTIAL", APPLICANT.userId());
 	}
 
 	@Test
@@ -303,6 +328,7 @@ class AppExecutionServiceTest {
 		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "字".repeat(2001)), APPLICANT))
 				.isInstanceOf(TextTooLongException.class);
 		verify(appWriteDao, never()).lockForUpdate(anyString(), anyLong(), anyString());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -313,12 +339,16 @@ class AppExecutionServiceTest {
 					.isInstanceOf(ApiConflictException.class).hasMessage(AppExecutionService.MSG_REJECT_NOT_EXECUTABLE);
 		}
 		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+		verifyNoInteractions(mailNotifier);
 
 		locked("IN_EXECUTION", List.of(1, 2, 3));
 		assertThat(service.reject(APP, new ExecRejectRequest(3L, "  設備未到\n"), IDC)).isEqualTo(4L);
 		verify(appWriteDao).updateStatus(APP, "REJECTED", IDC.userId());
-		verify(approvalWriteDao).insertEvent(APP, 2, "EXEC_REJECT", IDC.userId(), "設備未到");
 		verify(execWriteDao, never()).upsertExec(anyString(), anyInt(), any(), any(), anyString());
+		InOrder order = inOrder(approvalWriteDao, mailNotifier);
+		order.verify(approvalWriteDao).insertEvent(APP, 2, "EXEC_REJECT", IDC.userId(), "設備未到");
+		order.verify(mailNotifier).rejectedAtVersion(APP, 2, MailNotifier.STAGE_EXECUTION, "機房", "設備未到",
+				IDC.userId());
 	}
 
 	@Test
@@ -330,6 +360,7 @@ class AppExecutionServiceTest {
 		when(appWriteDao.findLockState(APP)).thenReturn(lockState(APPLICANT.userId()));
 		assertThatThrownBy(() -> service.reject(APP, new ExecRejectRequest(3L, "x"), APPLICANT))
 				.isInstanceOf(ApiConflictException.class).hasMessage(AppFlowService.MSG_STALE);
+		verifyNoInteractions(mailNotifier);
 	}
 
 	// ---- 治理審查（⑨） ----
@@ -354,6 +385,7 @@ class AppExecutionServiceTest {
 				.isInstanceOf(ApiBadRequestException.class).hasMessage(AppDraftService.MSG_NO_VERSION);
 		verify(appWriteDao, never()).transition(anyString(), anyLong(), anyString(), anyString(), anyString(),
 				anyBoolean());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -375,6 +407,7 @@ class AppExecutionServiceTest {
 		assertThatThrownBy(() -> service.review(APP, new GovernanceReviewRequest(3L, "PASS", null), GOV))
 				.isInstanceOf(ApiConflictException.class).hasMessage(AppFlowService.MSG_STALE);
 		verify(approvalWriteDao, never()).insertEvent(anyString(), anyInt(), anyString(), anyString(), any());
+		verifyNoInteractions(mailNotifier);
 	}
 
 	@Test
@@ -385,6 +418,9 @@ class AppExecutionServiceTest {
 		assertThat(pass.rowVerNo()).isEqualTo(4L);
 		assertThat(pass.statusCode()).isEqualTo("EXECUTED");
 		verify(approvalWriteDao).insertEvent(APP, 2, "GOV_PASS", GOV.userId(), null);
+		verify(mailNotifier).govPassed(APP, null, GOV.userId());
+		verify(mailNotifier, never()).rejectedAtVersion(anyString(), anyInt(), anyString(), anyString(), any(),
+				anyString());
 
 		AuthUser applicantGov = new AuthUser(APPLICANT.userId(), "wayne", "申請人", List.of("governance"), false);
 		when(appWriteDao.transition(APP, 5L, "PENDING_REVIEW", "REJECTED", APPLICANT.userId(), false)).thenReturn(1);
@@ -393,6 +429,9 @@ class AppExecutionServiceTest {
 		assertThat(ret.rowVerNo()).isEqualTo(6L);
 		assertThat(ret.statusCode()).isEqualTo("REJECTED");
 		verify(approvalWriteDao).insertEvent(APP, 2, "GOV_RETURN", APPLICANT.userId(), "備份紀錄不完整");
+		verify(mailNotifier).rejectedAtVersion(APP, 2, MailNotifier.STAGE_GOVERNANCE, "申請人", "備份紀錄不完整",
+				APPLICANT.userId());
+		verify(mailNotifier).govPassed(anyString(), any(), anyString()); // 退回不加寄通過信：全程仍只有前面那一封
 		verify(appWriteDao, never()).updateStatus(anyString(), anyString(), anyString());
 	}
 }

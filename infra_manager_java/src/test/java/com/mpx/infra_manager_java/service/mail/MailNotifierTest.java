@@ -8,6 +8,8 @@ package com.mpx.infra_manager_java.service.mail;
 //           核准完成只寄申請人並列各關簽核紀錄；退件寄退件群組、主旨帶階段名；撤回寄目前關卡；補件版次顯示補件提示；
 //           site-url 空白時信內沒有連結；沒有收件人不渲染不寫 outbox；收件人 DAO 丟例外只記 log、不寫 outbox、不往外拋；
 //           enqueue 例外原樣往外拋（跟業務同交易 rollback）；meta 帶 event 與 appId
+//           2026-10-08 S8 R3（Claude Opus 5.5）：加 rejectedAtVersion——依版次查目前簽核實例 ID 組退件群組；
+//           查不到實例用 -1 照樣查（申請人／執行人／治理仍收得到）；查實例失敗只略過不往外拋
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,6 +41,7 @@ import com.mpx.infra_manager_java.dao.changerequest.AppDao;
 import com.mpx.infra_manager_java.dao.changerequest.ApprovalDao;
 import com.mpx.infra_manager_java.dao.mail.MailRecipientDao;
 import com.mpx.infra_manager_java.model.changerequest.AppRow;
+import com.mpx.infra_manager_java.model.changerequest.ApprRow;
 import com.mpx.infra_manager_java.model.changerequest.ApprStepRow;
 import com.mpx.infra_manager_java.model.changerequest.EquipRow;
 import com.mpx.infra_manager_java.model.changerequest.OptionRow;
@@ -240,13 +243,39 @@ class MailNotifierTest {
 	}
 
 	@Test
-	void 執行階段退件用執行階段當階段名() {
-		app("汰換", 1);
+	void 執行階段退件依版次查目前簽核實例再組退件群組() {
+		app("汰換", 2);
+		ApprRow appr = new ApprRow();
+		appr.setApprId(77L);
+		when(approvalDao.findCurrent(APP, 2)).thenReturn(Optional.of(appr));
 		when(recipientDao.findRejectGroup(APP, 77L)).thenReturn(List.of(recipient("T0001", "applicant@pxmart.com.tw")));
 
-		notifier.rejected(APP, 77L, MailNotifier.STAGE_EXECUTION, "王五", "執行失敗", "S4U004");
+		notifier.rejectedAtVersion(APP, 2, MailNotifier.STAGE_EXECUTION, "王五", "執行失敗", "S4U004");
 
-		assertThat(enqueued().subject()).isEqualTo("[退件] IM2026100001 汰換 - 執行階段");
+		MailMessage m = enqueued();
+		assertThat(m.subject()).isEqualTo("[退件] IM2026100001 汰換 - 執行階段");
+		assertThat(m.htmlBody()).contains("王五").contains("執行失敗");
+		assertThat(m.meta()).containsEntry("event", "rejected");
+	}
+
+	@Test
+	void 該版次查不到簽核實例時退件群組仍查得到申請人執行人與治理() {
+		app("汰換", 2);
+		when(approvalDao.findCurrent(APP, 2)).thenReturn(Optional.empty());
+		when(recipientDao.findRejectGroup(APP, -1L)).thenReturn(List.of(recipient("T0001", "applicant@pxmart.com.tw")));
+
+		notifier.rejectedAtVersion(APP, 2, MailNotifier.STAGE_GOVERNANCE, "趙六", "紀錄不完整", "S4U005");
+
+		assertThat(enqueued().subject()).isEqualTo("[退件] IM2026100001 汰換 - 資訊治理審核");
+	}
+
+	@Test
+	void 查簽核實例失敗時只略過不往外拋() {
+		when(approvalDao.findCurrent(APP, 2)).thenThrow(new DataAccessResourceFailureException("db down"));
+
+		notifier.rejectedAtVersion(APP, 2, MailNotifier.STAGE_EXECUTION, "王五", "執行失敗", "S4U004");
+
+		verifyNoInteractions(recipientDao, outbox);
 	}
 
 	// ---------- 撤回 ----------

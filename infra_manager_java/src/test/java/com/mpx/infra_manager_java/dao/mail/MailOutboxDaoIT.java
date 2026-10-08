@@ -10,9 +10,12 @@ package com.mpx.infra_manager_java.dao.mail;
 //           markFailedTry 累到 maxTry 變 FAILED 且不再是候選；退避中（TRY_CNT 1、剛更新）不是候選；
 //           markSent 後 SENT、SEND_DATE／SMTP_MSG_ID 有值、不再是候選、再 markSent 0 列。
 //           測試結束硬刪本測試建的列（只限 CREATE_BY='S8IT' 且主鍵在本測試記下的範圍）
+//           2026-10-08 S8 R3（Claude Opus 5.5）：加「業務交易 rollback 時 outbox 也沒有資料」（enqueue 在外層交易內、
+//           之後業務拋例外 → 本標記的列數不變；萬一殘留也記進清除名單）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.ArrayList;
@@ -36,7 +39,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.mpx.common.db.DbClient;
 import com.mpx.infra_manager_java.config.DbSchema;
 import com.mpx.infra_manager_java.model.mail.MailIdRow;
+import com.mpx.infra_manager_java.model.mail.MailMessage;
 import com.mpx.infra_manager_java.model.mail.MailOutboxRow;
+import com.mpx.infra_manager_java.service.mail.MailOutboxService;
 
 @SpringBootTest
 class MailOutboxDaoIT {
@@ -48,6 +53,9 @@ class MailOutboxDaoIT {
 
 	@Autowired
 	private MailOutboxDao dao;
+
+	@Autowired
+	private MailOutboxService outboxService;
 
 	@Autowired
 	private DbClient dbClient;
@@ -191,5 +199,22 @@ class MailOutboxDaoIT {
 		assertThat(row.getErrorText()).isNull();
 		assertThat(due()).doesNotContain(id);
 		assertThat(dao.markSent(id, "<again>", null)).isZero();
+	}
+
+	@Test
+	void 業務交易rollback時outbox也沒有資料() {
+		List<Long> before = idsByMarker();
+		MailMessage message = MailMessage.of(List.of("s8it-a@example.invalid"), "S8IT rollback", "<p>x</p>",
+				Map.of("event", "step-pending", "appId", "S8IT-0001"), MARKER);
+
+		assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
+			assertThat(outboxService.enqueue(message)).isTrue();
+			throw new IllegalStateException("S8IT 模擬業務失敗");
+		})).isInstanceOf(IllegalStateException.class).hasMessage("S8IT 模擬業務失敗");
+
+		List<Long> after = idsByMarker();
+		// 萬一沒有 rollback，也要記下來讓 cleanUp 刪掉，不在測試 DB 留殘列
+		after.stream().filter(id -> !before.contains(id)).forEach(created::add);
+		assertThat(after).as("enqueue 跟業務同一交易，業務 rollback 信也不留").isEqualTo(before);
 	}
 }
