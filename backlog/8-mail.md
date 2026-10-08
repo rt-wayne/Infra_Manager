@@ -47,7 +47,7 @@
 ### S8a 後端寄信
 | 回合 | 內容 | 狀態 |
 |------|------|------|
-| R1 | 基礎設施：`pom.xml` 加兩套件；`config/MailProperties`、`MailSchedulingConfig`；`dao/mail/MailOutboxDao`（寫入、查候選、逐列鎖、標 SENT／重試／FAILED）；`model/mail/*`；`service/mail/MailOutboxService`（enqueue）、`MailDispatcher`（寄送包裝）、`MailWorker`；`application.properties.example` 加鍵；單元測試（worker 狀態轉移，SMTP mock）；`MailOutboxDaoIT`（寫好不跑）。若做到 DAO＋enqueue 已過半，worker 拆 R1b | 待開工 |
+| R1 | 基礎設施：`pom.xml` 加兩套件；`config/MailProperties`、`MailSchedulingConfig`；`dao/mail/MailOutboxDao`（寫入、查候選、逐列鎖、標 SENT／重試／FAILED）；`model/mail/*`；`service/mail/MailOutboxService`（enqueue）、`MailDispatcher`（寄送包裝）、`MailWorker`；`application.properties.example` 加鍵；單元測試（worker 狀態轉移，SMTP mock）；`MailOutboxDaoIT`（寫好不跑）。若做到 DAO＋enqueue 已過半，worker 拆 R1b | 完成（2026-10-08；worker 未拆、一回合做完；另加 `findById` 供 S8b 用、`im.mail.retry-backoff-minutes`／`initial-delay-ms` 兩鍵） |
 | R2 | 6 份樣板＋明細片段；`dao/mail/MailRecipientDao`（join 型）；`service/mail/MailNotifier`（組信）；`AppFlowService` 接事件 1～6；先查證只通知關卡；單元測試（標題帶 `<script>` 被轉義、去重、0 收件人不寫入）；修既有 AppFlowService 測試 | 待開工 |
 | R3 | `AppExecutionService` 接事件 7～10；IT 補「業務 rollback 時 outbox 也沒資料」 | 待開工 |
 | 階段末 | `./mvnw verify`；`code-reviewer`；本機真檔 `im.mail.enabled=true`＋`override-to=ciliao@`，經 3201 走流程，**待簽核、退件、核准完成三種信寄到測試信箱**；PRD／CHANGELOG 補齊（CHANGELOG 列第 56 項憑證驗證維持關閉、舊系統 Host header 組連結已修）；PRD 註明「舊系統 admin 可撤回、新系統只限申請人」 | 待開工 |

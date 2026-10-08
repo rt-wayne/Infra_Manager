@@ -1,6 +1,7 @@
-### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
-### 修改日期: 2026-10-03
+### AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+### 修改日期: 2026-10-08
 ### 首次建置：複製本檔為 application.properties（不進 git）
+### 2026-10-08 S8 R1：加 SMTP（spring.mail.*）與信件 outbox（im.mail.*）設定（使用者裁示 ①B：連線值放本檔真檔）
 ### 變更單 #2：spring.application.name 為 Spring 用的專案名，不影響 log 落點（log 目錄寫在 logback-spring.xml）
 spring.application.name=infra_manager_java
 ### Infra Manager：後端 API 固定 3202（殼 jar 3201、舊 Node 系統 3200）
@@ -10,3 +11,33 @@ spring.servlet.multipart.resolve-lazily=true
 ### Infra Manager（S4，2026-10-06）：附件實體檔根目錄；IM_ATTACH.FILE_PATH 是相對於此目錄的路徑。
 ### 每台部署機各自設定（例：D:/infra_manager/attach）；留空時附件下載端點回 500 並記 log
 im.attach.root=
+
+### Infra Manager（S8，2026-10-08）：SMTP 連線，用 Boot 內建的 spring.mail.*。沿用舊系統：mail.pxmart.com.tw、port 25、不加密、無帳號認證。
+### spring.mail.host 留空時 Boot 不建立寄信元件，worker 只記一次 log、不寄信（信仍會寫進 IM_MAIL_OUTBOX）
+spring.mail.host=
+spring.mail.port=25
+### 第 56 項裁示（2026-10-07）：維持舊系統做法、不驗證 SMTP 憑證。port 25 明文連線用不到，日後改 STARTTLS 才生效
+spring.mail.properties.mail.smtp.ssl.trust=*
+### 部分收件人無效時仍寄給其他有效收件人，outbox 記 SENT 並備註；否則一個錯字地址會讓整封每次重試都失敗、其他人重複收信
+spring.mail.properties.mail.smtp.sendpartial=true
+### 連線／讀取／寫入逾時各 15 秒（毫秒）；worker 寄信期間持有一條 DB 連線，逾時越長佔越久
+spring.mail.properties.mail.smtp.connectiontimeout=15000
+spring.mail.properties.mail.smtp.timeout=15000
+spring.mail.properties.mail.smtp.writetimeout=15000
+### 將來若 SMTP 需要帳號認證：spring.mail.username 填帳號；密碼不寫本檔，改環境變數 IM_SMTP_PASSWORD 並設 spring.mail.password=${IM_SMTP_PASSWORD:}
+
+### Infra Manager（S8）：信件 outbox 自訂設定 im.mail.*
+### enabled：true 才啟動背景寄信排程（預設 false；開發機與 mvnw verify 不寄信，信只寫進 IM_MAIL_OUTBOX）
+im.mail.enabled=false
+### 寄件人（舊系統 Infra-Manager@pxmart.com.tw）；留空時 worker 視同 SMTP 未設定
+im.mail.from=
+### 信內「檢視申請單」連結的網址前綴＝殼 jar 對外位址，不含結尾斜線，例：http://<host>:3201/infra_manager_web
+im.mail.site-url=
+### 有值時所有信改寄到這個地址、主旨加「[測試改寄]」、原收件人記在 META_JSON；驗收用，正式環境留空
+im.mail.override-to=
+### 每輪最多寄幾封／重試上限（達上限標 FAILED，admin 可重寄）／重試退避（分鐘 × 已嘗試次數）／輪詢間隔與首次延遲（毫秒）
+im.mail.batch-size=20
+im.mail.max-try=5
+im.mail.retry-backoff-minutes=1
+im.mail.poll-delay-ms=30000
+im.mail.initial-delay-ms=15000

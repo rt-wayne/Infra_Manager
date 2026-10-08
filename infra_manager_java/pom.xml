@@ -11,6 +11,7 @@
 	          （webmvc、restclient〔RestTemplateBuilder 所在模組〕、jdbc、test）；
 	          ojdbc8 → ojdbc17，orai18n 改 com.oracle.database.nls 同版號，版號只定義在 properties 一處；
 	          mssql-jdbc 仍交 Boot BOM 管理（實際解析 13.4.0.jre11）
+	          2026-10-08 S8 R1（Claude Fable 5.1）：加 spring-boot-starter-mail 與 spring-boot-starter-thymeleaf（信件 outbox）
 	============================================================
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -51,6 +52,15 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<!-- S8（2026-10-07 裁示 ②）：信件 outbox 寄送（JavaMailSender）與 Thymeleaf 信件樣板；版本由 BOM 管理 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-thymeleaf</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.database.jdbc</groupId>
