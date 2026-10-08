@@ -8,6 +8,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           驗證：送審後 IM_APPR PENDING、關卡數＝流程啟用關卡數且恰一關 PENDING、每個待簽關卡至少一位候選人且都不是申請人、
 //           事件 SUBMIT、ROW_VER_NO +1；撤回後 DRAFT、關卡全 CANCELLED、實例 RECALLED、事件 RECALL 帶原因；撤回後可再送審
 //           （第二個實例）；必填缺漏時 400 且狀態仍 DRAFT、沒有殘留 IM_APPR。測試結束刪除本測試建的所有列
+//           2026-10-08 S8a 階段末（Claude Opus 5.5）：清除時一併刪 ITF 單號寫進 IM_MAIL_OUTBOX 的信
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,6 +104,9 @@ class AppFlowSubmitIT {
 		dbClient.update(itflowDb, "DELETE FROM " + appr + " WHERE DOC_TYPE = 'CR' AND DOC_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_EVENT") + " WHERE APP_ID = :id", p);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
+		// 流程事件寫進 outbox 的信（S8）；用本測試的單號前綴刪，連先前跑留下的也一併清掉
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_MAIL_OUTBOX")
+				+ " WHERE JSON_VALUE(META_JSON, '$.appId') LIKE :prefix", Map.of("prefix", "ITF%"));
 	}
 
 	private boolean exists(String sql, Map<String, Object> params) {

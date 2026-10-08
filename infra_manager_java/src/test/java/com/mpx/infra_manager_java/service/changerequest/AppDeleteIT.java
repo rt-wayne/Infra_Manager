@@ -12,6 +12,7 @@ package com.mpx.infra_manager_java.service.changerequest;
 //           目前實例是 v2 PENDING（第 101 項 ⑤ 撤回那一輪也看得到）。
 //           併發：同 rowVerNo 的刪除與簽核同時出發，恰一成功，另一 409 或 404，結果與勝方一致。
 //           測試結束刪除本測試建的所有列（含 IM_APP_VER 與六張子表）
+//           2026-10-08 S8a 階段末（Claude Opus 5.5）：清除時一併刪 S9DT 單號寫進 IM_MAIL_OUTBOX 的信
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -126,6 +127,9 @@ class AppDeleteIT {
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP_VER") + " WHERE APP_ID = :id", p);
 		appWriteDao.deleteChildren(appId);
 		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_APP") + " WHERE APP_ID = :id", p);
+		// 流程事件寫進 outbox 的信（S8）；用本測試的單號前綴刪，連先前跑留下的也一併清掉
+		dbClient.update(itflowDb, "DELETE FROM " + schema.table("IM_MAIL_OUTBOX")
+				+ " WHERE JSON_VALUE(META_JSON, '$.appId') LIKE :prefix", Map.of("prefix", "S9DT%"));
 	}
 
 	private boolean exists(String sql, Map<String, Object> params) {
