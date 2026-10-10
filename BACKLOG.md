@@ -14,12 +14,11 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 3 | E07 誤報：`RequestService.java:245-247`、`:311-313` 的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號一筆在途索引）時回 409 E07，其他唯一鍵衝突改為記 log 並往上拋（500） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：改 RequestService 兩處 catch（判斷例外鏈訊息含 IND_IM_ACCT_REQ_04 才回 E07）、補測試、送審查與測試
+- 下一步：
 - 已改動（未 commit）：
-- 卡住／待確認：無
+- 卡住／待確認：
 
 ## 已拍板待實作
 
@@ -27,7 +26,7 @@
 |----|------|------|------|
 | 4 | 新增申請退件重送時鎖定帳號類別：前端 `RequestFormView.vue:517` 讓新增重送也鎖類別；後端 `RequestService.java:275-280` 以原申請單類別為準、忽略表單值 | 5 | — |
 | 5 | 後端驗證順序對齊前端，每一處補測試；施工時先查前端實際順序再對齊：(a) 附件檢查統一為副檔名 → 大小（後端 `AttachmentService.java:120-127`、前端 `utils/attach.ts:27-28`）；(b) 關卡 6 回報統一為卡號 → 佐證；(c) 送出時「非新增帳號不存在 404」的位置（`RequestService.java:205-212`）與前端一致；(d) 重新送出時後端先驗 E08（版本或狀態不符）才驗 E01（唯一性聲明）；(e) 關卡 6 回報時後端先驗 E02（缺版本號）／E08／附件格式才驗 E12（缺佐證） | 4 | — |
-| 6 | 從測試 DB 反向產出建表 DDL（21 表、索引、5 個 SEQUENCE）與初始資料 SQL 放進 repo（交接文件第 10 行指向的 `im_acct_insp_create_table.sql` 不在 repo 內）；同一輪補 `SETUP.md`「DB 維護」各操作的可執行 SQL 與「手動觸發排程」的 curl 範例（含登入取 token）。驗收：DDL 與初始資料可在空 schema 重建；SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | 6 | — |
+| 6 | 從測試 DB 反向產出建表 DDL（21 表、索引、5 個 SEQUENCE）與初始資料 SQL 放進 repo（交接文件第 10 行指向的 `im_acct_insp_create_table.sql` 不在 repo 內）；同一輪補 `SETUP.md`「DB 維護」各操作的可執行 SQL 與「手動觸發排程」的 curl 範例（含登入取 token）。驗收：DDL 與初始資料可在空 schema 重建；DDL 保留索引名 IND_IM_ACCT_REQ_04 並在旁註明「程式依此名稱判斷 409 E07（`RequestService.IDX_IN_FLIGHT`），不得改名或改成系統命名的約束」；SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | 6 | — |
 
 ## 僅記錄未拍板
 
