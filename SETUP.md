@@ -10,7 +10,7 @@
 | JDK | 25 | 後端與殼 jar（`JAVA_HOME` 指向 JDK 25） |
 | Maven | 不需安裝 | 兩個 jar 都附 Maven Wrapper（`mvnw`／`mvnw.cmd`，固定 Maven 3.9.16） |
 | Node.js | 24 以上 | 前端（`im_acct_insp_web\im_acct_insp_web_frontend\.nvmrc`） |
-| Oracle | 19c | schema RD_USER，須已有本模組 21 張表與初始資料（目前 repo 內沒有建表 SQL，見 `BACKLOG.md` 第 6 項） |
+| Oracle | 19c | schema RD_USER，須已有本模組 21 張表與初始資料（建表與初始資料 SQL 在 `db\`，用法見第 6 節） |
 | DB 連線資訊 API | — | 後端執行期向它取得 DB 連線資訊，須能連到 |
 
 ## 2. 設定檔
@@ -86,8 +86,116 @@ java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
 | 開放／關閉某帳號類別的新增 | IM_ACCT_CATG.IS_ENABLED 改 1／0；使用者要重新整理頁面或重新登入才看到新的下拉選項 |
 | 停用巡檢項目 | IM_INSP_ITEM.STATUS 改 0（不要刪列，舊巡檢單以快照顯示） |
 
-- 修改時一併填 UPDATE_DATE、UPDATE_BY。
 - 建正式環境 DB 時，只帶初始資料，排除測試 DB 才有的帳號與單據（見 `BACKLOG.md` 第 10 項）。
+
+### 執行前共通注意
+
+- **字元集**：用 SQL*Plus 前先設 `NLS_LANG=.AL32UTF8`；SQL Developer 開檔時選 UTF-8。否則寫入的中文（表 COMMENT、中文姓名、部門）會無聲變成亂碼，不會報錯。
+- **一次只執行一個操作**：下面每個操作各自一個區塊，只複製你要做的那一塊，**不要把整節貼進去一起執行**。
+- **關 autocommit**：每句 INSERT／UPDATE 都應**影響 1 筆**，確認筆數無誤再 COMMIT，異常就 ROLLBACK。
+- 替換 `【】` 後的實際值不要存回本檔、不要 commit 進版控。
+
+### 建新環境：執行 `db\` 兩個 SQL 檔
+
+依序執行：
+
+1. `db\im_acct_insp_create_table.sql`：在空 schema 建 21 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。
+2. `db\im_acct_insp_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
+
+建完補第一位管理者：打開 `im_acct_insp_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 與 COMMIT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【密碼雜湊】等占位符換成實際值後執行，最後要 COMMIT。要讓這位管理者能處理申請單的執行回報，還要依下方「指派執行人」為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色）。
+
+### 各操作的可執行 SQL
+
+**查合法代碼與確認工號**（指派角色、執行人前先查；代碼區分大小寫。系統沒有外鍵，INSERT 時代碼或工號打錯仍會成功、影響 1 筆，但不會生效也不會報錯）
+
+```sql
+SELECT ROLE_ID, ROLE_NAME FROM IM_ACCT_ROLE WHERE STATUS = 1 ORDER BY SORT_SEQ;
+SELECT CATG_ID, CATG_NAME FROM IM_ACCT_CATG WHERE STATUS = 1 ORDER BY SORT_SEQ;
+SELECT USER_ID, USER_EN_NAME, USER_NAME, STATUS FROM IM_ACCT_USER WHERE USER_ID = '【工號】';
+```
+
+**1. 新增使用者**（工號＝登入帳號；雜湊用下方 PwdHashTool 產生）
+
+```sql
+INSERT INTO IM_ACCT_USER (USER_ID, USER_EN_NAME, USER_NAME, DEPT_NAME, EMAIL,
+                          PWD_HASH, PWD_UPDATE_DATE, STATUS, CREATE_DATE, CREATE_BY)
+VALUES ('【工號】', '【英文名】', '【中文姓名】', '【部門】', '【Email】',
+        '【密碼雜湊】', SYSDATE, 1, SYSDATE, '【操作人工號】');
+```
+
+**2. 停用／重新啟用使用者**（停用後從下一個請求起就無法使用系統；若正被系統管理員扮演，會自動視為切回。重新啟用曾停用的人＝同句把 STATUS 改 1，不能再 INSERT，會主鍵衝突）
+
+```sql
+UPDATE IM_ACCT_USER
+   SET STATUS = 0, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE USER_ID = '【工號】';
+```
+
+**3. 解鎖**（登入連錯 5 次被鎖）
+
+```sql
+UPDATE IM_ACCT_USER
+   SET LOCK_DATE = NULL, LOGIN_FAIL_CNT = 0,
+       UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE USER_ID = '【工號】';
+```
+
+**4. 重設密碼**（重設**不會**登出已登入的人）
+
+```sql
+UPDATE IM_ACCT_USER
+   SET PWD_HASH = '【密碼雜湊】', PWD_UPDATE_DATE = SYSDATE,
+       UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE USER_ID = '【工號】';
+```
+
+- 因密碼外洩而重設時，要讓對方手上的登入一起失效：先用第 2 段停用 → 用本段重設 → **停用後至少等 30 分鐘**再用第 2 段改回 STATUS＝1。停用只是暫時擋下舊登入，30 分鐘無存取後舊登入才會因閒置逾時永久失效；提早重新啟用，舊登入會恢復有效。
+
+**5a. 指派角色**（第一次指派；不得為 GENERAL——一般人員權限是程式自動給的）
+
+```sql
+INSERT INTO IM_ACCT_ROLE_USER (ROLE_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
+VALUES ('【角色代碼】', '【工號】', 1, SYSDATE, '【操作人工號】');
+```
+
+**5b. 移除角色**（重新指派曾移除的人＝同句把 STATUS 改回 1，不能再 INSERT，會主鍵衝突。移除前自行確認沒有在途申請卡在只有該人能處理的關卡，系統不檢查）
+
+```sql
+UPDATE IM_ACCT_ROLE_USER
+   SET STATUS = 0, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE ROLE_ID = '【角色代碼】' AND USER_ID = '【工號】';
+```
+
+**6a. 指派執行人**（第一次指派；一列對一個帳號類別）
+
+```sql
+INSERT INTO IM_EXEC_MAP (CATG_ID, USER_ID, STATUS, CREATE_DATE, CREATE_BY)
+VALUES ('【帳號類別代碼】', '【工號】', 1, SYSDATE, '【操作人工號】');
+```
+
+**6b. 移除執行人**（重新指派＝同句改回 1）
+
+```sql
+UPDATE IM_EXEC_MAP
+   SET STATUS = 0, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE CATG_ID = '【帳號類別代碼】' AND USER_ID = '【工號】';
+```
+
+**7. 開放／關閉某帳號類別的新增申請**（1＝開放、0＝關閉；使用者要重新整理頁面或重新登入才看到新的下拉選項）
+
+```sql
+UPDATE IM_ACCT_CATG
+   SET IS_ENABLED = 【1 或 0】, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE CATG_ID = '【帳號類別代碼】';
+```
+
+**8. 停用巡檢項目**（不刪列，舊巡檢單靠快照顯示）
+
+```sql
+UPDATE IM_INSP_ITEM
+   SET STATUS = 0, UPDATE_DATE = SYSDATE, UPDATE_BY = '【操作人工號】'
+ WHERE INSP_ITEM_ID = '【巡檢項目代碼】';
+```
 
 ### 產生密碼雜湊（PwdHashTool）
 
@@ -106,13 +214,56 @@ java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
 
 ## 7. 手動觸發排程
 
-有 SYS_JOB_RUN 權限的使用者（初始資料中為 SYS_ADMIN）登入後，以其 token 呼叫：
+系統沒有觸發排程的畫面，以 curl 呼叫 API。需 SYS_JOB_RUN 權限（初始資料中只有 SYS_ADMIN 角色有）。以下以直連後端（`server.port` 8989）為例；經殼 jar 時把 `http://localhost:8989` 換成殼 jar 的位址並在路徑前加 `/im_acct_insp_web`。指令為 Git Bash 寫法，`【】` 換成實際值。
 
-```
-POST /api/v1/jobs/J01/run
-POST /api/v1/jobs/J02/run?baseDate=yyyy-MM-dd
+**1. 登入取 token**
+
+每個指令都加了 `-w`，回應內容下一行會印出 HTTP 狀態碼（例如 `200`、`401`）。
+
+```bash
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"【工號】","password":"【密碼】"}'
 ```
 
-- 經殼 jar 時路徑前加 `/im_acct_insp_web`；請求須帶 `Authorization: Bearer <token>`。
-- baseDate 只在 `im.acct.insp.job.allow-base-date=true` 的環境可用。
-- 系統沒有觸發排程的畫面。
+- 成功回 200，JSON 的 `token` 欄位就是下一步要帶的 token（另有 `me` 欄位為登入者資料）。
+- 工號不存在、密碼錯、使用者停用都回 401 `{"message":"帳號或密碼錯誤"}`；被鎖定回 401「此帳號已鎖定，請聯絡系統管理員」（解鎖見第 6 節第 3 段）。
+- 密碼含 `'`、`"`、`\` 時這行指令會壞掉（回 400 或 shell 報錯，看起來像帳密錯），請找開發人員協助。
+
+**2. 觸發排程**
+
+```bash
+# J01：到期帳號轉逾期、寄逾期信與到期前 7 天提醒（漏跑會補寄、不重寄）
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J01/run \
+  -H "Authorization: Bearer 【token】"
+
+# J02：每週逾期帳號彙總信，同一週只寄一次
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J02/run \
+  -H "Authorization: Bearer 【token】"
+```
+
+- 成功回 200，JSON 為 `runId`（執行紀錄序號）、`resultCode`（`SUCCESS`／`PARTIAL`／`FAIL`）、`affectedCnt`（處理筆數）。J02 回 `SUCCESS` 且 0 筆＝本週已寄過，不是失敗。
+- 錯誤：
+  - 401「登入已逾時，請重新登入」：token 貼錯、少了 `Bearer `、或閒置超過 30 分鐘，重新登入取 token。
+  - 403「您沒有執行此操作的權限」：登入者沒有 SYS_JOB_RUN。
+  - 404：代碼不是 J01／J02。
+  - 409 E16「排程執行中，請稍後再試」：同一排程正在執行。
+  - 400 E17「此環境不允許指定基準日」：見下方 baseDate。
+
+**指定基準日（僅測試環境）**：`im.acct.insp.job.allow-base-date=true` 的環境可在網址加 `?baseDate=yyyy-MM-dd`，以該日代替今天執行；正式環境為 false，帶了一律回 400 E17。日期格式不對回 400。
+
+```bash
+curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/api/v1/jobs/J01/run?baseDate=【yyyy-MM-dd】" \
+  -H "Authorization: Bearer 【token】"
+```
+
+- **J01 帶未來日期會把到期日早於該日的帳號全部轉成逾期**、寫入帳號歷史並寄通知，系統沒有復原功能；只在確定要模擬那一天時使用。
+
+**3. 用完登出**（token 會跟著指令留在 shell 歷史，最長 8 小時內有效；登出後立即失效）
+
+```bash
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/auth/logout \
+  -H "Authorization: Bearer 【token】"
+```
+
+- 成功回 200、沒有內容。密碼與 token 都會留在 shell 歷史，正式環境操作後自行清除。
