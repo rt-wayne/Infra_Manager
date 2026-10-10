@@ -14,17 +14,17 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 3 | E07 誤報：`RequestService.java:245-247`、`:311-313` 的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號一筆在途索引）時回 409 E07，其他唯一鍵衝突改為記 log 並往上拋（500） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
+- 下一步：改 RequestService 兩處 catch（判斷例外鏈訊息含 IND_IM_ACCT_REQ_04 才回 E07）、補測試、送審查與測試
 - 已改動（未 commit）：
-- 卡住／待確認：
+- 卡住／待確認：無
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 3 | E07 誤報：`RequestService.java:245-247`、`:311-313` 的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號一筆在途索引）時回 409 E07，其他唯一鍵衝突改為記 log 並往上拋（500） | 3 | — |
 | 4 | 新增申請退件重送時鎖定帳號類別：前端 `RequestFormView.vue:517` 讓新增重送也鎖類別；後端 `RequestService.java:275-280` 以原申請單類別為準、忽略表單值 | 5 | — |
 | 5 | 後端驗證順序對齊前端，每一處補測試；施工時先查前端實際順序再對齊：(a) 附件檢查統一為副檔名 → 大小（後端 `AttachmentService.java:120-127`、前端 `utils/attach.ts:27-28`）；(b) 關卡 6 回報統一為卡號 → 佐證；(c) 送出時「非新增帳號不存在 404」的位置（`RequestService.java:205-212`）與前端一致；(d) 重新送出時後端先驗 E08（版本或狀態不符）才驗 E01（唯一性聲明）；(e) 關卡 6 回報時後端先驗 E02（缺版本號）／E08／附件格式才驗 E12（缺佐證） | 4 | — |
 | 6 | 從測試 DB 反向產出建表 DDL（21 表、索引、5 個 SEQUENCE）與初始資料 SQL 放進 repo（交接文件第 10 行指向的 `im_acct_insp_create_table.sql` 不在 repo 內）；同一輪補 `SETUP.md`「DB 維護」各操作的可執行 SQL 與「手動觸發排程」的 curl 範例（含登入取 token）。驗收：DDL 與初始資料可在空 schema 重建；SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | 6 | — |
@@ -45,6 +45,7 @@
 | 17 | `im_acct_insp_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
 | 19 | 人工鎖定（DB 直接寫 LOCK_DATE）只擋之後的登入，不擋已發出的 token；`TokenIdentityProvider` 每次請求只查 STATUS 不查 LOCK_DATE。要不要讓鎖定也立即作廢既有 token 屬設計決策 | 2026-10-10 | — |
+| 20 | 門禁卡新增複驗退回後再次回報、卡號沒變時不應更新主表帳號名稱（`RequestService.java:439` 的 `else if`），此分支沒有測試；只有換卡號會更新的測試（`RequestServiceTest.java:231`） | 2026-10-10 | — |
 
 ## 已拍板不做
 
