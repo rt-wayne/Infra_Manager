@@ -24,7 +24,6 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 4 | 新增申請退件重送時鎖定帳號類別：前端 `RequestFormView.vue:517` 讓新增重送也鎖類別；後端 `RequestService.java:275-280` 以原申請單類別為準、忽略表單值 | 5 | — |
 | 6 | 從測試 DB 反向產出建表 DDL（21 表、索引、5 個 SEQUENCE）與初始資料 SQL 放進 repo（交接文件第 10 行指向的 `im_acct_insp_create_table.sql` 不在 repo 內）；同一輪補 `SETUP.md`「DB 維護」各操作的可執行 SQL 與「手動觸發排程」的 curl 範例（含登入取 token）。驗收：DDL 與初始資料可在空 schema 重建；DDL 保留索引名 IND_IM_ACCT_REQ_04 並在旁註明「程式依此名稱判斷 409 E07（`RequestService.IDX_IN_FLIGHT`），不得改名或改成系統命名的約束」；SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | 6 | — |
 
 ## 僅記錄未拍板
