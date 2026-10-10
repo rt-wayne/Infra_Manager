@@ -14,17 +14,17 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 6 | 從測試 DB 反向產出建表 DDL 與初始資料 SQL 放進 repo；同一輪補 `SETUP.md`「DB 維護」可執行 SQL 與「手動觸發排程」curl 範例（含登入取 token）。驗收：SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動（未 commit）：
-- 卡住／待確認：
+- 下一步：第 6 項回合二＝改 `SETUP.md`：第 6 節「DB 維護」補可執行 SQL（裁示④A：先把全部 SQL 列出給使用者一次核准；執行方式寫「關 autocommit、驗證後 ROLLBACK」）、第 7 節補 curl 範例（裁示⑥A：本機起後端連測試 DB、登入實跑；觸發 J01／J02 前要再單獨問一次）、補 `db/` 兩檔使用說明與初始管理者占位符替換步驟（須與 init_data 檔尾範本的警語一致：實際值不存回檔、不 commit）
+- 已改動（未 commit）：無——回合一成果已入版控（`3680e32`＝`db/im_acct_insp_create_table.sql`＋`db/im_acct_insp_init_data.sql`，與測試 DB 逐句比對零差異）
+- 卡住／待確認：無。已拍板備查：①人名 COMMENT（Terry／邱健唐／#1614）是真人但維持現狀不改；②非 RAC，SEQ_IM_ACCT_HIST 維持 CACHE 20；⑤VENDOR IS_ENABLED repo 寫 0（第 9 項拍板後再統一兩邊）
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 6 | 從測試 DB 反向產出建表 DDL（21 表、索引、5 個 SEQUENCE）與初始資料 SQL 放進 repo（交接文件第 10 行指向的 `im_acct_insp_create_table.sql` 不在 repo 內）；同一輪補 `SETUP.md`「DB 維護」各操作的可執行 SQL 與「手動觸發排程」的 curl 範例（含登入取 token）。驗收：DDL 與初始資料可在空 schema 重建；DDL 保留索引名 IND_IM_ACCT_REQ_04 並在旁註明「程式依此名稱判斷 409 E07（`RequestService.IDX_IN_FLIGHT`），不得改名或改成系統命名的約束」；SETUP 新增的每一段 SQL 與 curl 都已在測試 DB／本機實際跑過才放入（執行 UPDATE 前先問使用者） | 6 | — |
 
 ## 僅記錄未拍板
 
