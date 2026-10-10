@@ -21,6 +21,10 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-10
 // 變更說明: 門禁卡回報執行完畢時申請單 ACCT_NAME 同步寫卡號（第一次與複驗退回換卡號）；非門禁卡新增不寫卡號
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 送出／重新送出的唯一鍵衝突：只有 IND_IM_ACCT_REQ_04 回 E07（含索引名在 cause 的情形），其他原樣往上拋；
+//           新增類型主表主鍵衝突；在途判斷不被前綴相同索引名與 SQL hint 誤中
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -41,6 +45,7 @@ import static com.mpx.im_acct_insp.support.TestFixture.impersonate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -50,6 +55,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -81,6 +87,9 @@ class RequestServiceTest {
 
 	static final String FIRST_ID = "AR20261007-001";
 	static final MultipartFile FILE = new MockMultipartFile("f", "x.pdf", "application/pdf", new byte[] { 0x25, 0x50, 0x44, 0x46 });
+	/** Oracle 19c 唯一鍵衝突訊息：同帳號在途索引／其他唯一鍵 */
+	static final String DUP_IN_FLIGHT = "ORA-00001: unique constraint (RD_USER.IND_IM_ACCT_REQ_04) violated";
+	static final String DUP_OTHER = "ORA-00001: unique constraint (RD_USER.PK_IM_ACCT_ATTACH) violated";
 
 	TestFixture fx;
 	RequestService svc;
@@ -384,10 +393,84 @@ class RequestServiceTest {
 		assertStatus(() -> svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null), HttpStatus.CONFLICT, AcctMsg.E07);
 
 		when(fx.acctReqDao.countInFlight(a.getAcctId(), null)).thenReturn(0L);
-		doThrow(new DuplicateKeyException("ORA-00001")).when(fx.acctReqDao).insert(any(), any(), any());
+		doThrow(new DuplicateKeyException(DUP_IN_FLIGHT)).when(fx.acctReqDao).insert(any(), any(), any());
 		assertStatus(() -> svc.submit(id(KEVIN), modifyForm(a.getAcctId()), FILE), HttpStatus.CONFLICT, AcctMsg.E07);
 		assertThat(fx.txm.rollbacks).isEqualTo(1);
 		verify(fx.attachmentService).cleanup(any());
+	}
+
+	@Test
+	void 送出_非在途索引的唯一鍵衝突_不回E07_原樣往上拋() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		DuplicateKeyException other = new DuplicateKeyException(DUP_OTHER);
+		doThrow(other).when(fx.acctReqDao).insert(any(), any(), any());
+		assertRethrown(() -> svc.submit(id(KEVIN), modifyForm(a.getAcctId()), FILE), other);
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		verify(fx.attachmentService).cleanup(any());
+		verify(fx.notificationService, never()).requestEvent(any(), any(), any());
+	}
+
+	@Test
+	void 送出新增_主表主鍵衝突_不回E07_原樣往上拋() {
+		DuplicateKeyException other = new DuplicateKeyException("ORA-00001: unique constraint (RD_USER.PK_IM_ACCT) violated");
+		doThrow(other).when(fx.acctDao).insertOnSubmit(any(), any(), any());
+		assertRethrown(() -> svc.submit(id(KEVIN), dbForm(), FILE), other);
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		verify(fx.attachmentService).cleanup(any());
+		verify(fx.notificationService, never()).requestEvent(any(), any(), any());
+	}
+
+	@Test
+	void 在途判斷_只認括號內的完整索引名() {
+		// 外層只有 SQL 摘要、索引名在 cause（Spring 實際形式之一）
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException("PreparedStatementCallback",
+				new SQLIntegrityConstraintViolationException(DUP_IN_FLIGHT)))).isTrue();
+		// Oracle 23ai 格式：後面多帶表與欄位
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(
+				"ORA-00001: unique constraint (RD_USER.IND_IM_ACCT_REQ_04) violated on table RD_USER.IM_ACCT_REQ columns (ACCT_ID)")))
+				.isTrue();
+		// 繁中 NLS 訊息：括號為半形（2026-10-10 於測試 DB 以 SQLERRM(-1) 實測範本「(.)」三字元為 U+0028／U+002E／U+0029）
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(
+				"ORA-00001: 違反必須為唯一的限制條件 (RD_USER.IND_IM_ACCT_REQ_04)"))).isTrue();
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(null))).isFalse();
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(DUP_OTHER))).isFalse();
+		// 前綴相同的其他索引名
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(
+				"ORA-00001: unique constraint (RD_USER.IND_IM_ACCT_REQ_040) violated"))).isFalse();
+		// SQL 原文的 hint 提到索引名、實際衝突的是別的主鍵
+		assertThat(RequestService.isInFlightDup(new DuplicateKeyException(
+				"SQL [INSERT /*+ INDEX(R IND_IM_ACCT_REQ_04) */ INTO IM_ACCT_REQ ...]; ORA-00001: unique constraint (RD_USER.PK_IM_ACCT_REQ) violated")))
+				.isFalse();
+	}
+
+	@Test
+	void 重新送出_唯一鍵衝突_在途索引回E07_其他原樣往上拋() {
+		submitAdd();
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "用途不明"));
+		AcctReqForm f = dbForm();
+		f.setVersionNo(2);
+		f.setApplyReason("補充說明後重送");
+		// 實際的 Spring 例外：外層訊息是 SQL 摘要，索引名在 cause（SQLException）的訊息裡
+		doThrow(new DuplicateKeyException("PreparedStatementCallback", new SQLIntegrityConstraintViolationException(DUP_IN_FLIGHT)))
+				.when(fx.acctReqDao).resubmit(any(), anyInt(), any(), any(), any());
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, FILE), HttpStatus.CONFLICT, AcctMsg.E07);
+
+		DuplicateKeyException other = new DuplicateKeyException(DUP_OTHER);
+		doThrow(other).when(fx.acctReqDao).resubmit(any(), anyInt(), any(), any(), any());
+		assertRethrown(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, FILE), other);
+		assertThat(fx.txm.rollbacks).isEqualTo(2);
+		verify(fx.attachmentService, times(2)).cleanup(any());
+		verify(fx.notificationService, never()).requestEvent(eq(AcctConst.EV_RESUB), any(), any());
+	}
+
+	private static void assertRethrown(Runnable call, RuntimeException expected) {
+		try {
+			call.run();
+			fail("應丟例外");
+		} catch (RuntimeException e) {
+			assertThat(e).isSameAs(expected);
+		}
 	}
 
 	@Test

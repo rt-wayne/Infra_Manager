@@ -30,6 +30,11 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #2：僅修正檔頭 v2.0 驗權順序摘要，補「400 E02（未帶 versionNo）」（與 spec §4.4 定案一致；程式未改）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 送出／重新送出的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號在途）時回 409 E07；
+//           其他唯一鍵衝突記 error log（含交易內取到的單號）後原樣往上拋（500），不再誤報在途；
+//           判斷依 ORA-00001 訊息中的「.IND_IM_ACCT_REQ_04)」
 // ============================================================
 
 import java.nio.file.Path;
@@ -91,6 +96,8 @@ public class RequestService {
 
 	static final int RESULT_DESCR_MAX = 1000;
 	static final String LABEL_VERSION = "版本號";
+	/** 同帳號一筆在途的唯一函式索引；ORA-00001 訊息含此名稱才是在途衝突 */
+	static final String IDX_IN_FLIGHT = "IND_IM_ACCT_REQ_04";
 
 	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd")
 			.withResolverStyle(ResolverStyle.STRICT);
@@ -244,7 +251,13 @@ public class RequestService {
 			});
 		} catch (DuplicateKeyException e) {
 			attachmentService.cleanup(written);
-			throw ApiException.conflict(AcctMsg.E07);
+			if (isInFlightDup(e)) {
+				throw ApiException.conflict(AcctMsg.E07);
+			}
+			// 非同帳號在途的唯一鍵衝突是系統問題，不得誤報 E07；堆疊由 GlobalExceptionHandler 記錄
+			// reqId 記交易內取到的單號（新增類型 acctId 為 null，主鍵重複時最需要這個號；取號前就失敗則為 null）
+			log.error("送出申請單發生非在途索引的唯一鍵衝突 reqId={} acctId={} reqType={}", c.getReqId(), acctId, reqType);
+			throw e;
 		} catch (RuntimeException e) {
 			attachmentService.cleanup(written);
 			throw e;
@@ -310,7 +323,11 @@ public class RequestService {
 			});
 		} catch (DuplicateKeyException e) {
 			attachmentService.cleanup(written);
-			throw ApiException.conflict(AcctMsg.E07);
+			if (isInFlightDup(e)) {
+				throw ApiException.conflict(AcctMsg.E07);
+			}
+			log.error("重新送出申請單發生非在途索引的唯一鍵衝突 reqId={}", reqId);
+			throw e;
 		} catch (RuntimeException e) {
 			attachmentService.cleanup(written);
 			throw e;
@@ -800,6 +817,21 @@ public class RequestService {
 			log.error("{}影響筆數 {}（預期 1），交易回復 reqId={}", step, rows, reqId);
 			throw ApiException.internal("資料寫入未完成（單號 " + reqId + "），請聯絡系統管理員");
 		}
+	}
+
+	/**
+	 * 唯一鍵衝突是否來自同帳號在途索引：沿例外鏈找 ORA-00001 訊息中的「(擁有者.索引名)」。
+	 * 比對前後帶「.」與「)」，避免前綴相同的索引名（如 _040）或 SQL 原文中的 hint 誤中
+	 */
+	static boolean isInFlightDup(DuplicateKeyException e) {
+		String token = "." + IDX_IN_FLIGHT + ")";
+		for (Throwable t = e; t != null; t = t.getCause()) {
+			String msg = t.getMessage();
+			if (msg != null && msg.contains(token)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static ReqActionResult result(String reqId, String state, Integer stage, int versionNo) {
