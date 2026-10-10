@@ -676,7 +676,7 @@ erDiagram
 <tr><td class="n">HOLDER_EMAIL</td><td class="n">VARCHAR2(100)</td><td class="c"></td><td></td><td>申請內容－使用人 Email（僅機房門禁卡）</td></tr>
 <tr><td class="n">ACCESS_LEVEL_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>申請內容－權限範圍：RO＝唯讀、OP＝操作、ADMIN＝管理員（完全控制）、DOOR＝門禁通行權（機房門禁卡固定值）</td></tr>
 <tr><td class="n">ACCESS_TARGET</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>申請內容－存取對象（門禁卡不用）</td></tr>
-<tr><td class="n">APPLY_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>申請內容－申請原因（刪除申請時為刪除原因）</td></tr>
+<tr><td class="n">APPLY_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>申請內容－申請原因（停用／刪除申請時為停用／刪除原因）</td></tr>
 <tr><td class="n">EXPIRY_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>申請內容－有效期限類型：PERM＝永久有效、DATE＝指定到期日。default PERM</td></tr>
 <tr><td class="n">EXPIRY_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>申請內容－到期日（EXPIRY_TYPE_CODE＝DATE 時必有值，時分秒為 0）</td></tr>
 <tr><td class="n">IS_UNIQUE_CONF</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>帳號唯一性聲明已勾選：1＝已勾選、0＝未勾選。default 0</td></tr>

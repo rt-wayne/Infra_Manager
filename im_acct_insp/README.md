@@ -182,8 +182,7 @@ public class ItemController {
 
 - 以上 `*.properties` 都是**真檔，不進 git**（已被 `.gitignore` 排除）；進 git 的是同名 `.properties.example`。
 - 新增任何 key 時，**同步寫進對應的 `.example`**（只寫 key 與說明，不寫真實位址或帳密）。
-- 本機沒有真檔時，從 `.example` 複製一份再填值，例：
-  `copy src\main\resources\config\host.properties.example src\main\resources\config\host.properties`
+- 本機沒有真檔時的建立步驟見根目錄 `SETUP.md`。
 - `host.properties` 四個 key 都要存在（值可空），不存在時啟動失敗；API 位址為空時仍可啟動，第一次呼叫 `DbClient` 才丟例外。
 
 ## 5. 限制與假設
@@ -206,13 +205,8 @@ public class ItemController {
 
 ## 7. 建置與執行
 
-```
-./mvnw clean package          # Windows：.\mvnw.cmd clean package
-java -jar target/im_acct_insp-0.0.1-SNAPSHOT.jar
-```
+建置與啟動步驟見根目錄 `SETUP.md`。
 
-- Maven Wrapper（`mvnw`、`.\mvnw.cmd`、`.mvn/wrapper/`）釘 Maven 3.9.16，不需本機安裝 Maven；需要 JDK 25。
-- port 取自 `application.properties` 的 `server.port`（也可用 `--server.port=xxxx` 覆蓋）。
 - 既有 42 個 common.db 單元測試不可修改、不可刪除；`./mvnw clean package` 必須全過。
 - 業務程式的測試放 `src/test/java/com/mpx/im_acct_insp/`。單元測試不要依賴真 DB 或真 API。
 
@@ -233,16 +227,7 @@ java -jar target/im_acct_insp-0.0.1-SNAPSHOT.jar
 `IM_ACCT_USER.PWD_HASH` 由工具類別 `com.mpx.im_acct_insp.tools.PwdHashTool` 產生（雜湊本體為 `com.mpx.im_acct_insp.common.PasswordHasher`：
 PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000，輸出 `PBKDF2$310000$base64(salt)$base64(hash)`）。
 
-```
-set JAVA_HOME=D:\Users\thlin\tools\jdk-25
-.\mvnw.cmd -q compile
-"%JAVA_HOME%\bin\java" -cp target\classes com.mpx.im_acct_insp.tools.PwdHashTool
-```
-
-- 讀一行密碼（只去掉行尾換行，其他字元含空白原樣保留），把雜湊字串印到標準輸出；不接受命令列參數（帶參數會直接結束，exit 2）、不寫檔、不記 log。
-- 在 cmd／PowerShell 直接執行（有主控台）時以 `Console.readPassword` 讀取，**輸入不回顯**（變更單 #1）。
-- 無主控台（管線餵入、stdin 被導向）時改從標準輸入讀一行，可被管線呼叫；但密碼會留在 shell 歷史；cmd 的 `echo xxx|` 會把 `|` 前的空白也送進去，請改用 Git Bash 或 PowerShell。
-- 同一個密碼每次產生的字串都不同（salt 隨機），都能驗證通過。
+執行步驟見根目錄 `SETUP.md`。
 
 ## 10. 業務程式概要（spec v2.0，2026-10-07）
 

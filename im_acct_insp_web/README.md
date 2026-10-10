@@ -36,7 +36,7 @@
 | `im_acct_insp_web_frontend\src\router\index.ts` | 路由（hash 模式），`routes` 目前是空陣列 | 新增畫面時加一筆 |
 | `im_acct_insp_web_frontend\src\composables\useToast.ts` | toast 通知（查詢失敗提示用） | 可沿用 |
 | `im_acct_insp_web_frontend\src\assets\main.css` | 色票與基礎字級 | 謹慎修改 |
-| `im_acct_insp_web_frontend\tests\` | Vitest 測試；目前只有佔位用的 `.gitkeep`（沒有測試檔時 `npm test` 也會成功結束） | 自由新增 |
+| `im_acct_insp_web_frontend\tests\` | Vitest 測試；目前有 8 個 `*.spec.ts` 與共用的 `helpers.ts` | 自由新增 |
 
 佔位檔只是讓空資料夾能進 git，新增檔案後留著即可，不必刪。
 
@@ -401,7 +401,7 @@ describe('ItemView', () => {
 ### 真檔與 .example
 
 - 以上都是**真檔，不進 git**；進 git 的是同名 `.properties.example`。新增 key 時同步寫進 `.example`（不寫真實位址）。
-- 本機沒有真檔時從 `.example` 複製，例：`copy src\main\resources\config\host.properties.example src\main\resources\config\host.properties`。
+- 本機沒有真檔時的建立步驟見根目錄 `SETUP.md`。
 
 ### cookie 與 header
 
@@ -410,22 +410,7 @@ describe('ItemView', () => {
 
 ## 7. 建置與執行
 
-需要 **Node 24**（`im_acct_insp_web_frontend\.nvmrc`，`package.json` 的 `engines.node` 為 `>=24`）與 **JDK 25**。
-
-```
-cd im_acct_insp_web_frontend
-npm install
-npm test                           # Vitest（jsdom），測試檔在 tests\；沒有測試檔時也成功結束
-npm run build                      # 先型別檢查，再輸出到 ..\im_acct_insp_web\src\frontend
-cd ..\im_acct_insp_web
-./mvnw clean package               # Windows：.\mvnw.cmd clean package
-java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
-```
-
-- 開啟 `http://localhost:<server.port>/im_acct_insp_web/`。
-- 殼 jar 帶 Maven Wrapper（`mvnw`、`.\mvnw.cmd`，釘 Maven 3.9.16），不需本機安裝 Maven。
-- 開發時另開 `npm run dev`（Vite dev server），`/im_acct_insp_web/api` 會 proxy 到本機殼 jar（port 同 `server.port`），殼 jar 要先啟動。
-- `npm run build` 會清空 `im_acct_insp_web\src\frontend`（含 `.gitkeep`），可用 `git checkout` 還原 `.gitkeep`；只有 `.gitkeep` 時殼 jar 也能建置。
+建置與啟動步驟見根目錄 `SETUP.md`。
 
 ## 8. Vite 版本說明
 
