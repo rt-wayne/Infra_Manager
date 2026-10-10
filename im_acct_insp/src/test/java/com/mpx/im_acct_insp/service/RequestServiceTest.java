@@ -28,6 +28,10 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-10
 // 變更說明: 回報執行完畢驗證順序同前端：403 → 附件格式 E14 → E13 → E12 → E11 → 缺版本號 E02 → E08（每步同時帶後面的錯誤）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 送出驗證順序同前端：403 → 申請類型 → 404 → 附件（空的 .exe 公文 E14）→ E01 → E02 → E09 → E07；
+//           重新送出：403 → 404 → 附件 → E01 → E02 → 缺版本號 → E08 → E09 → E07（每步同時帶後面的錯誤）
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -344,6 +348,41 @@ class RequestServiceTest {
 	}
 
 	@Test
+	void 送出驗證順序同前端_403_類型_404_附件_E01_內容_E09_E07() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_EXPIRED);
+		when(fx.acctReqDao.countInFlight(a.getAcctId(), null)).thenReturn(1L);
+		// 空的 .exe 公文：AttachmentService 為 mock，以丟 E14 代表附件檢查失敗（空檔副檔名不符回 E14 見 AttachmentServiceTest）
+		MultipartFile emptyExe = new MockMultipartFile("docFile", "x.exe", "application/octet-stream", new byte[0]);
+		when(fx.attachmentService.check(emptyExe)).thenThrow(ApiException.badRequest(AcctMsg.E14));
+		// 每一步都同時帶著後面的錯誤（未勾唯一性聲明、缺申請單位、帳號已逾期 E09、同帳號在途 E07），只能回當步的錯誤
+		AcctReqForm f = modifyForm("AR20991231-999");
+		f.setIsUniqueConf(null);
+		f.setApplyDept(null);
+		Identity noApply = idWith(KEVIN, Set.of(), List.of());
+		assertStatus(() -> svc.submit(noApply, f, emptyExe), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		f.setReqTypeCode(null);
+		assertStatus(() -> svc.submit(id(KEVIN), f, emptyExe), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "申請類型");
+		// 新增帶帳號、異動缺帳號：同樣先於附件與 E01
+		f.setReqTypeCode("ADD");
+		assertStatus(() -> svc.submit(id(KEVIN), f, emptyExe), HttpStatus.BAD_REQUEST, AcctMsg.ADD_WITH_ACCT);
+		f.setReqTypeCode("MODIFY");
+		f.setAcctId(null);
+		assertStatus(() -> svc.submit(id(KEVIN), f, emptyExe), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "帳號");
+		f.setAcctId("AR20991231-999");
+		assertStatus(() -> svc.submit(id(KEVIN), f, emptyExe), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		f.setAcctId(a.getAcctId());
+		assertStatus(() -> svc.submit(id(KEVIN), f, emptyExe), HttpStatus.BAD_REQUEST, AcctMsg.E14);
+		assertStatus(() -> svc.submit(id(KEVIN), f, null), HttpStatus.BAD_REQUEST, AcctMsg.E01);
+		f.setIsUniqueConf(1);
+		assertStatus(() -> svc.submit(id(KEVIN), f, null), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "申請單位");
+		f.setApplyDept("資訊治理組");
+		assertStatus(() -> svc.submit(id(KEVIN), f, null), HttpStatus.CONFLICT, AcctMsg.E09);
+		a.setAcctStateCode(AcctConst.AS_APPROVED);
+		assertStatus(() -> svc.submit(id(KEVIN), f, null), HttpStatus.CONFLICT, AcctMsg.E07);
+		verify(fx.acctReqDao, never()).insert(any(), any(), any());
+	}
+
+	@Test
 	void 送出驗證_E03_E04_E05_E06_E11() {
 		AcctReqForm f = dbForm();
 		f.setExpiryDate(null);
@@ -521,6 +560,48 @@ class RequestServiceTest {
 	// ------------------------------------------------------------
 	// 退件與重送
 	// ------------------------------------------------------------
+
+	@Test
+	void 重新送出驗證順序同前端_403_404_附件_E01_內容_缺版本_E08_E09_E07() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "用途不明"));
+		MultipartFile exe = new MockMultipartFile("docFile", "x.exe", "application/octet-stream", new byte[] { 0x25, 0x50, 0x44, 0x46 });
+		when(fx.attachmentService.check(exe)).thenThrow(ApiException.badRequest(AcctMsg.E14));
+		// 每一步都同時帶著後面的錯誤（未勾唯一性聲明、缺申請單位、缺版本號），只能回當步的錯誤
+		AcctReqForm f = modifyForm(a.getAcctId());
+		f.setIsUniqueConf(null);
+		f.setApplyDept(null);
+		f.setVersionNo(null);
+		fx.accts.remove(a.getAcctId());
+		assertStatus(() -> svc.resubmit(id(SAGE), FIRST_ID, f, exe), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, exe), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		fx.accts.put(a.getAcctId(), a);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, exe), HttpStatus.BAD_REQUEST, AcctMsg.E14);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST, AcctMsg.E01);
+		f.setIsUniqueConf(1);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "申請單位");
+		// 版本過期且缺申請單位：內容錯誤先於 409 E08
+		f.setVersionNo(1);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "申請單位");
+		f.setVersionNo(null);
+		f.setApplyDept("資訊治理組");
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST,
+				AcctMsg.E02_PREFIX + RequestService.LABEL_VERSION);
+		// 版本過期且帳號已逾期：先回 409 E08
+		f.setVersionNo(1);
+		a.setAcctStateCode(AcctConst.AS_EXPIRED);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.CONFLICT, AcctMsg.E08);
+		// 帳號已逾期且同帳號在途：先回 E09
+		f.setVersionNo(2);
+		when(fx.acctReqDao.countInFlight(a.getAcctId(), FIRST_ID)).thenReturn(1L);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.CONFLICT, AcctMsg.E09);
+		a.setAcctStateCode(AcctConst.AS_APPROVED);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.CONFLICT, AcctMsg.E07);
+		assertThat(fx.req.getReqStateCode()).isEqualTo(AcctConst.RS_REJECTED);
+		assertThat(fx.req.getVersionNo()).isEqualTo(2);
+	}
 
 	@Test
 	void 退件原因必填E10_退件後只有原申請人可重送() {

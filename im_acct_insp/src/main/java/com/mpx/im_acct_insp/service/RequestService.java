@@ -39,6 +39,11 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-10
 // 變更說明: 回報執行完畢驗證順序對齊前端：403 → 附件格式 → E13 卡號 → E12 佐證 → E11 → 缺版本號 E02 → 409 E08
 //           （原為 403 → E02 → E08 → 附件 → E12 → E13 → E11）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 送出／重新送出驗證順序對齊前端（開畫面 → 選檔 → 按送出 → 只有後端能判斷的）：
+//           送出：403 → 申請類型／帳號 → 404 → 附件 → E01 → 內容（E02～E11）→ E09 → E07（原 E01 在 403 之後、附件在內容之後）；
+//           重新送出：403 → 404 → 附件 → E01 → 內容 → 缺版本號 E02 → 409 E08 → E09 → E07（原為 403 → E02 → E08 → E01 → 404 → 內容 → 附件）
 // ============================================================
 
 import java.nio.file.Path;
@@ -194,9 +199,7 @@ public class RequestService {
 	public ReqIdResult submit(Identity id, AcctReqForm form, MultipartFile docFile) {
 		perm.require(id, AcctConst.PERM_ACC_APPLY);
 		AcctReqForm f = form == null ? new AcctReqForm() : form;
-		if (!Integer.valueOf(1).equals(f.getIsUniqueConf())) {
-			throw ApiException.badRequest(AcctMsg.E01);
-		}
+		// 順序同使用者遇到的先後：開畫面（類型、帳號 404）→ 選檔（附件）→ 按送出（E01～E04）→ 只有後端能判斷的
 		String reqType = Texts.trimToNull(f.getReqTypeCode());
 		if (reqType == null) {
 			throw AcctMsg.required("申請類型");
@@ -220,8 +223,9 @@ public class RequestService {
 				throw AcctMsg.notFound();
 			}
 		}
-		AcctReq c = buildContent(f, reqType, target);
 		AttachmentService.PendingFile doc = attachmentService.check(docFile);
+		requireUniqueConf(f);
+		AcctReq c = buildContent(f, reqType, target);
 		if (!isAdd) {
 			checkPrereq(reqType, target);
 			if (acctReqDao.countInFlight(acctId, null) > 0) {
@@ -279,24 +283,24 @@ public class RequestService {
 			throw AcctMsg.forbidden();
 		}
 		AcctReqForm f = form == null ? new AcctReqForm() : form;
-		Integer v = requireVersion(f.getVersionNo());
-		if (!AcctConst.RS_REJECTED.equals(r.getReqStateCode()) || !v.equals(r.getVersionNo())) {
-			throw AcctMsg.concurrent();
-		}
-		if (!Integer.valueOf(1).equals(f.getIsUniqueConf())) {
-			throw ApiException.badRequest(AcctMsg.E01);
-		}
 		String reqType = r.getReqTypeCode();
 		boolean isAdd = AcctConst.REQ_ADD.equals(reqType);
 		Acct target = null;
 		if (!isAdd) {
+			// 內容檢查需主表（異動類型取帳號類別等），帳號 404 留在附件之前
 			target = acctDao.findById(r.getAcctId());
 			if (target == null) {
 				throw AcctMsg.notFound();
 			}
 		}
-		AcctReq c = buildContent(f, reqType, target);
 		AttachmentService.PendingFile doc = attachmentService.check(docFile);
+		requireUniqueConf(f);
+		AcctReq c = buildContent(f, reqType, target);
+		// 版本與狀態只有後端能判斷，排在使用者可自行修正的錯誤之後
+		Integer v = requireVersion(f.getVersionNo());
+		if (!AcctConst.RS_REJECTED.equals(r.getReqStateCode()) || !v.equals(r.getVersionNo())) {
+			throw AcctMsg.concurrent();
+		}
 		if (!isAdd) {
 			checkPrereq(reqType, target);
 			if (acctReqDao.countInFlight(r.getAcctId(), r.getReqId()) > 0) {
@@ -581,7 +585,7 @@ public class RequestService {
 	// ------------------------------------------------------------
 
 	/**
-	 * 依類型驗證並整理申請內容（不含 reqId／acctId／reqTypeCode／applyBy）。順序：E02 必填 → E03 → E04 → E05 → E06 → 代碼值 → E11。
+	 * 依類型驗證並整理申請內容（不含 reqId／acctId／reqTypeCode／applyBy）。順序：E02 必填 → E03 → 有效期限類型值域 → E04 → E05 → E06 → 代碼值 → E11。
 	 * 異動類型的帳號類別、名稱、所屬系統取自主表；停用、刪除只取申請單位與原因，其餘複製主表。
 	 */
 	AcctReq buildContent(AcctReqForm f, String reqType, Acct target) {
@@ -704,6 +708,13 @@ public class RequestService {
 		c.setAccessTarget(a.getAccessTarget());
 		c.setExpiryTypeCode(a.getExpiryTypeCode() == null ? AcctConst.EXPIRY_PERM : a.getExpiryTypeCode());
 		c.setExpiryDate(a.getExpiryDate());
+	}
+
+	/** 唯一性聲明未勾（isUniqueConf≠1）→ 400 E01 */
+	private static void requireUniqueConf(AcctReqForm f) {
+		if (!Integer.valueOf(1).equals(f.getIsUniqueConf())) {
+			throw ApiException.badRequest(AcctMsg.E01);
+		}
 	}
 
 	/** 申請前提（Table 6.5）不符 → 409 E09 */
