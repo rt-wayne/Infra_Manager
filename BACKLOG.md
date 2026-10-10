@@ -24,7 +24,6 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 1 | 登入鎖定競態：`UserDao.java:43-47` 登入成功的 UPDATE 補 `AND LOCK_DATE IS NULL`，影響 0 筆時回 401 A02，避免同一瞬間被鎖定的帳號仍取得 token | 1 | — |
 | 2 | 門禁卡新增在關卡 6 回報時，申請單本身的 ACCT_NAME 也寫入卡號（`AcctReqDao.java:158-164` 的 UPDATE_EXEC_DONE 目前只寫 CARD_NO；交接文件第 711、1606 行），讓複驗通知與待辦標題顯示卡號而非「（門禁卡，待發卡）」 | 2 | — |
 | 3 | E07 誤報：`RequestService.java:245-247`、`:311-313` 的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號一筆在途索引）時回 409 E07，其他唯一鍵衝突改為記 log 並往上拋（500） | 3 | — |
 | 4 | 新增申請退件重送時鎖定帳號類別：前端 `RequestFormView.vue:517` 讓新增重送也鎖類別；後端 `RequestService.java:275-280` 以原申請單類別為準、忽略表單值 | 5 | — |
@@ -45,6 +44,8 @@
 | 14 | 第二階段功能：定期審查、緊急存取、統計頁、帳號與巡檢匯出、資產分類與巡檢項目維護；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `im_acct_insp_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
+| 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
+| 19 | 人工鎖定（DB 直接寫 LOCK_DATE）只擋之後的登入，不擋已發出的 token；`TokenIdentityProvider` 每次請求只查 STATUS 不查 LOCK_DATE。要不要讓鎖定也立即作廢既有 token 屬設計決策 | 2026-10-10 | — |
 
 ## 已拍板不做
 
