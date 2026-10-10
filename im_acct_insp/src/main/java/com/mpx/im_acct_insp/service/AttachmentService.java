@@ -14,6 +14,11 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #3：啟動時檢查 im.acct.insp.attach.dir，未設定或不是絕對路徑（例 properties 單反斜線被吃掉成 D:homeattach）
 //           即記 ERROR 說明寫法並丟 IllegalStateException 使啟動失敗（不印設定值）；取代原本只記 WARN；目錄不存在仍於寫檔時自動建立
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 檢查順序對齊前端選檔檢查：副檔名 E14 → 大小 E15 → 空檔視同未上傳 → 檔名欄寬 → 檔頭 E14
+//           （原為空檔 → 大小 → 副檔名）；空檔但副檔名不符改回 E14，沒選檔（無檔名的空 part）仍視同未上傳。
+//           超過 multipart 上限（預設 10 MB）的檔案在進入本方法前即由框架回 413 E15，此處的大小檢查僅在上限調高時生效
 // ============================================================
 
 import java.io.IOException;
@@ -112,18 +117,28 @@ public class AttachmentService {
 	// 上傳
 	// ------------------------------------------------------------
 
-	/** 檢查上傳檔；未上傳或空檔回 null */
+	/**
+	 * 檢查上傳檔；未上傳（null 或無檔名的空 part）或副檔名合法的空檔回 null，副檔名不符的空檔回 E14。
+	 * 順序同前端選檔檢查（utils/attach.ts）：副檔名 E14 → 大小 E15 → 空檔視同未上傳 → 檔名欄寬 → 檔頭 E14
+	 */
 	public PendingFile check(MultipartFile file) {
-		if (file == null || file.isEmpty()) {
+		if (file == null) {
 			return null;
+		}
+		String name = baseName(file.getOriginalFilename());
+		if (file.isEmpty() && name.isEmpty()) {
+			// 沒選檔（空的 part、無檔名）
+			return null;
+		}
+		String ext = extension(name);
+		if (ext == null || !MIME.containsKey(ext)) {
+			throw ApiException.badRequest(AcctMsg.E14);
 		}
 		if (file.getSize() > AcctConst.ATTACH_MAX_BYTES) {
 			throw new ApiException(org.springframework.http.HttpStatus.CONTENT_TOO_LARGE, AcctMsg.E15);
 		}
-		String name = baseName(file.getOriginalFilename());
-		String ext = extension(name);
-		if (ext == null || !MIME.containsKey(ext)) {
-			throw ApiException.badRequest(AcctMsg.E14);
+		if (file.isEmpty()) {
+			return null;
 		}
 		Texts.maxChars("附件檔名", name, FILE_NAME_MAX);
 		byte[] bytes;

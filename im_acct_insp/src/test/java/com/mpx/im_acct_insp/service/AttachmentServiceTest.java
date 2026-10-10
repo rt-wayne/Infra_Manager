@@ -9,6 +9,10 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #3：啟動檢查根目錄——空值、相對路徑、單反斜線被吃掉後的 D:homeattach 皆丟 IllegalStateException（訊息不含設定值），絕對路徑通過
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 補檢查順序測試（同前端選檔）：超過 10 MB 的 .exe 回 E14、空的 .exe 回 E14、無檔名的空 part 視同未上傳；
+//           檔名超過 255 字時空檔視同未上傳、超過 10 MB 回 E15，皆先於檔名欄寬 E11
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -89,6 +93,22 @@ class AttachmentServiceTest {
 		assertThat(svc.check(file("max.pdf", max))).isNotNull();
 		assertThat(svc.check(file("empty.pdf", new byte[0]))).isNull();
 		assertThat(svc.check(null)).isNull();
+	}
+
+	@Test
+	void 檢查順序同前端_副檔名先於大小與空檔() {
+		// 超過 10 MB 且副檔名不符：先回 E14（前端 attach.ts 同序）
+		byte[] big = new byte[(int) AcctConst.ATTACH_MAX_BYTES + 1];
+		assertStatus(() -> svc.check(file("big.exe", big)), HttpStatus.BAD_REQUEST, AcctMsg.E14);
+		// 空檔但副檔名不符：E14，不視同未上傳
+		assertStatus(() -> svc.check(file("empty.exe", new byte[0])), HttpStatus.BAD_REQUEST, AcctMsg.E14);
+		// 沒選檔（無檔名的空 part）仍視同未上傳
+		assertThat(svc.check(file("", new byte[0]))).isNull();
+		// 檔名超過 255 字：空檔先視同未上傳、超過 10 MB 先回 E15，都不回檔名欄寬 E11
+		String longName = "n".repeat(AttachmentService.FILE_NAME_MAX) + ".pdf";
+		assertThat(svc.check(file(longName, new byte[0]))).isNull();
+		assertStatus(() -> svc.check(file(longName, big)), HttpStatus.CONTENT_TOO_LARGE, AcctMsg.E15);
+		assertStatus(() -> svc.check(file(longName, PDF)), HttpStatus.BAD_REQUEST, AcctMsg.E11_PREFIX + "附件檔名");
 	}
 
 	@Test

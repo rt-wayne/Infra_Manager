@@ -25,6 +25,9 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-10
 // 變更說明: 送出／重新送出的唯一鍵衝突：只有 IND_IM_ACCT_REQ_04 回 E07（含索引名在 cause 的情形），其他原樣往上拋；
 //           新增類型主表主鍵衝突；在途判斷不被前綴相同索引名與 SQL hint 誤中
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 回報執行完畢驗證順序同前端：403 → 附件格式 E14 → E13 → E12 → E11 → 缺版本號 E02 → E08（每步同時帶後面的錯誤）
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -227,6 +230,34 @@ class RequestServiceTest {
 		verify(fx.acctReqDao).execDone(eq(FIRST_ID), eq(4), any(), eq(true), eq("CARD-001"), any(), any(), any());
 		// 門禁卡強制符合審查條件
 		verify(fx.acctDao).updateReviewDates(FIRST_ID, TODAY, TODAY.plusDays(180), TestFixture.NOW, ALEX);
+	}
+
+	@Test
+	void 回報執行_驗證順序同前端_格式_E13_E12_E11_缺版本_E08() {
+		toExec(doorForm());
+		MultipartFile exe = new MockMultipartFile("f", "x.exe", "application/octet-stream", new byte[] { 0x25, 0x50, 0x44, 0x46 });
+		// AttachmentService 為 mock：以格式錯誤代表附件檢查失敗（檢查本身的順序見 AttachmentServiceTest）
+		when(fx.attachmentService.check(exe)).thenThrow(ApiException.badRequest(AcctMsg.E14));
+		// 每一步都同時帶著後面的錯誤（版本 3 已過期），只能回當步的錯誤
+		// MICHAEL 為 DB 執行人、非門禁卡執行人：帶著所有 400 錯誤仍先回 403
+		assertStatus(() -> svc.execDone(id(MICHAEL), FIRST_ID, exec(3, null), exe), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, exec(3, null), exe), HttpStatus.BAD_REQUEST, AcctMsg.E14);
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, exec(3, null), null), HttpStatus.BAD_REQUEST, AcctMsg.E13);
+		// 卡號超過 50 bytes 且缺佐證：先回 E12
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, exec(3, "C".repeat(51)), null), HttpStatus.BAD_REQUEST, AcctMsg.E12);
+		// 卡號超過 50 bytes 且缺版本號：先回 E11
+		ExecDoneForm tooLongNoVersion = exec(4, "C".repeat(51));
+		tooLongNoVersion.setVersionNo(null);
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, tooLongNoVersion, FILE), HttpStatus.BAD_REQUEST,
+				AcctMsg.E11_PREFIX + "門禁卡號");
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, exec(3, "C".repeat(51)), FILE), HttpStatus.BAD_REQUEST,
+				AcctMsg.E11_PREFIX + "門禁卡號");
+		ExecDoneForm noVersion = exec(4, "CARD-001");
+		noVersion.setVersionNo(null);
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, noVersion, FILE), HttpStatus.BAD_REQUEST,
+				AcctMsg.E02_PREFIX + RequestService.LABEL_VERSION);
+		assertStatus(() -> svc.execDone(id(ALEX), FIRST_ID, exec(3, "CARD-001"), FILE), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertState(AcctConst.RS_EXEC, 6, 4);
 	}
 
 	@Test

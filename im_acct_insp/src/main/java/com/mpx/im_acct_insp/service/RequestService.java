@@ -35,6 +35,10 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: 送出／重新送出的 DuplicateKeyException 只在違反 IND_IM_ACCT_REQ_04（同帳號在途）時回 409 E07；
 //           其他唯一鍵衝突記 error log（含交易內取到的單號）後原樣往上拋（500），不再誤報在途；
 //           判斷依 ORA-00001 訊息中的「.IND_IM_ACCT_REQ_04)」
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 回報執行完畢驗證順序對齊前端：403 → 附件格式 → E13 卡號 → E12 佐證 → E11 → 缺版本號 E02 → 409 E08
+//           （原為 403 → E02 → E08 → 附件 → E12 → E13 → E11）
 // ============================================================
 
 import java.nio.file.Path;
@@ -422,22 +426,23 @@ public class RequestService {
 			throw AcctMsg.forbidden();
 		}
 		ExecDoneForm f = form == null ? new ExecDoneForm() : form;
-		Integer v = requireVersion(f.getVersionNo());
-		if (!AcctConst.RS_EXEC.equals(r.getReqStateCode()) || !Integer.valueOf(AcctConst.STAGE_EXEC).equals(r.getCurrStageId())
-				|| !v.equals(r.getVersionNo())) {
-			throw AcctMsg.concurrent();
-		}
+		// 順序同前端回報彈窗：選檔時附件格式 → 按送出時卡號 E13 → 佐證 E12；只有後端能判斷的欄寬、版本放在後面
 		AttachmentService.PendingFile proof = attachmentService.check(proofFile);
-		if (proof == null) {
-			throw ApiException.badRequest(AcctMsg.E12);
-		}
 		boolean doorAdd = AcctConst.CATG_DOOR.equals(r.getCatgId()) && AcctConst.REQ_ADD.equals(r.getReqTypeCode());
 		String cardNo = doorAdd ? Texts.trimToNull(f.getCardNo()) : null;
 		if (doorAdd && cardNo == null) {
 			throw ApiException.badRequest(AcctMsg.E13);
 		}
+		if (proof == null) {
+			throw ApiException.badRequest(AcctMsg.E12);
+		}
 		Texts.maxBytes("門禁卡號", cardNo, 50);
 		String execDescr = Texts.maxChars("執行說明", Texts.trimToNull(f.getExecDescr()), 500);
+		Integer v = requireVersion(f.getVersionNo());
+		if (!AcctConst.RS_EXEC.equals(r.getReqStateCode()) || !Integer.valueOf(AcctConst.STAGE_EXEC).equals(r.getCurrStageId())
+				|| !v.equals(r.getVersionNo())) {
+			throw AcctMsg.concurrent();
+		}
 		boolean first = r.getEffectDate() == null;
 		Acct acct = acctDao.findById(r.getAcctId());
 		if (acct == null) {
