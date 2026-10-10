@@ -28,6 +28,9 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-07
   變更說明: 變更單 #2：門禁卡「卡號無法在申請時預先填寫」提示只在新增申請時顯示（v-if="doorAdd"）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-10
+  變更說明: 新增申請退件重送也鎖定帳號類別（catgLocked；原只鎖異動單），提示改「不可變更申請類型與帳號類別」
 -->
 <template>
   <main>
@@ -67,7 +70,7 @@
       <div class="grid2">
         <div class="field">
           <label for="catgId">帳號類別</label>
-          <select id="catgId" v-model="form.catgId" :disabled="identityLocked">
+          <select id="catgId" v-model="form.catgId" :disabled="catgLocked">
             <option v-for="c in catgOptions" :key="c.catgId" :value="c.catgId">{{ c.catgName }}</option>
           </select>
           <div v-if="catgDescr" class="hint">{{ catgDescr }}</div>
@@ -336,9 +339,11 @@ const applyDateText = computed(() => (resubmitId ? dateOnly(origApplyDate.value)
 const assetIsTrigger = computed(() => isReviewTriggerAsset(codes.value, form.assetClassId))
 const suggestExpiry = computed(() => suggestExpiryOf(codes.value, form.catgId))
 const sortedCatgs = computed(() => [...(codes.value?.categories ?? [])].sort((a, b) => a.sortSeq - b.sortSeq))
-/** 新增時只列開放新增的類別（重送若原類別已關閉仍列出，讓畫面顯示原值）；異動鎖定時列全部 */
+/** 重送（含新增）與異動一律鎖定帳號類別；後端新增重送也以原申請單類別為準 */
+const catgLocked = computed(() => identityLocked.value || !!resubmitId)
+/** 新增時只列開放新增的類別；類別鎖定時列全部（原類別已關閉也能顯示原值） */
 const catgOptions = computed((): Category[] => {
-  if (identityLocked.value || form.reqTypeCode !== 'ADD') return sortedCatgs.value
+  if (catgLocked.value || form.reqTypeCode !== 'ADD') return sortedCatgs.value
   return sortedCatgs.value.filter(c => c.enabled || c.catgId === form.catgId)
 })
 const catgDescr = computed(() => sortedCatgs.value.find(c => c.catgId === form.catgId)?.catgDescr ?? '')
@@ -366,7 +371,7 @@ function secTitle(key: string): string {
 }
 
 const typeHint = computed(() => {
-  if (resubmitId) return '重新送出不可變更申請類型，僅能修改申請內容。'
+  if (resubmitId) return '重新送出不可變更申請類型與帳號類別，僅能修改申請內容。'
   if (changeType) return '申請類型已依您點選的操作鎖定，不可更改。'
   return '「修改」「停用」「重新啟用」「刪除」請從帳號列表或帳號申請單列表點選對應帳號的操作按鈕發起，此處僅能新增全新帳號。'
 })

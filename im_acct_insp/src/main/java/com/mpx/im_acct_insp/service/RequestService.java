@@ -44,6 +44,9 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: 送出／重新送出驗證順序對齊前端（開畫面 → 選檔 → 按送出 → 只有後端能判斷的）：
 //           送出：403 → 申請類型／帳號 → 404 → 附件 → E01 → 內容（E02～E11）→ E09 → E07（原 E01 在 403 之後、附件在內容之後）；
 //           重新送出：403 → 404 → 附件 → E01 → 內容 → 缺版本號 E02 → 409 E08 → E09 → E07（原為 403 → E02 → E08 → E01 → 404 → 內容 → 附件）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 新增申請重新送出鎖定帳號類別：以原申請單 CATG_ID 為準、忽略表單值（原以表單值覆寫）；原類別已關閉時照常回 E05
 // ============================================================
 
 import java.nio.file.Path;
@@ -285,6 +288,10 @@ public class RequestService {
 		AcctReqForm f = form == null ? new AcctReqForm() : form;
 		String reqType = r.getReqTypeCode();
 		boolean isAdd = AcctConst.REQ_ADD.equals(reqType);
+		if (isAdd) {
+			// 新增重送鎖定帳號類別：以原申請單為準、忽略表單值（原類別已關閉時照常回 E05）
+			f.setCatgId(r.getCatgId());
+		}
 		Acct target = null;
 		if (!isAdd) {
 			// 內容檢查需主表（異動類型取帳號類別等），帳號 404 留在附件之前

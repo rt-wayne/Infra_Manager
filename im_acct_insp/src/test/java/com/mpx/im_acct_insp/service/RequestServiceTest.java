@@ -32,6 +32,10 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-10
 // 變更說明: 送出驗證順序同前端：403 → 申請類型 → 404 → 附件（空的 .exe 公文 E14）→ E01 → E02 → E09 → E07；
 //           重新送出：403 → 404 → 附件 → E01 → E02 → 缺版本號 → E08 → E09 → E07（每步同時帶後面的錯誤）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 新增重送帳號類別以原申請單為準：表單帶別的類別或空值仍寫原類別（申請單與主表），原類別關閉回 E05；
+//           門禁卡單表單改一般類別仍依門禁卡規則
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -83,6 +87,7 @@ import com.mpx.im_acct_insp.model.Acct;
 import com.mpx.im_acct_insp.model.AcctHist;
 import com.mpx.im_acct_insp.model.AcctReq;
 import com.mpx.im_acct_insp.model.AcctReqDetail;
+import com.mpx.im_acct_insp.model.Category;
 import com.mpx.im_acct_insp.model.ReqActionResult;
 import com.mpx.im_acct_insp.model.request.AcctReqForm;
 import com.mpx.im_acct_insp.model.request.ExecDoneForm;
@@ -628,6 +633,56 @@ class RequestServiceTest {
 		verify(fx.attachDao).deactivate(FIRST_ID, AcctConst.ATTACH_DOC, TestFixture.NOW, KEVIN);
 		assertThat(fx.histActions()).endsWith("REJECT", "RESUB");
 		verify(fx.notificationService).requestEvent(AcctConst.EV_RESUB, FIRST_ID, KEVIN);
+	}
+
+	@Test
+	void 新增重送_帳號類別以原申請單為準_表單值忽略_原類別關閉回E05() {
+		submitAdd();
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "用途不明"));
+		AcctReqForm f = dbForm();
+		f.setVersionNo(2);
+		f.setCatgId("HOST");
+		// 原類別（DB）已關閉：表單改選開放中的 HOST 也回 E05
+		List<Category> closed = TestFixture.categories();
+		closed.stream().filter(c -> "DB".equals(c.getCatgId())).forEach(c -> c.setEnabled(false));
+		when(fx.codeDao.findCategories()).thenReturn(closed);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST, AcctMsg.E05);
+		// 表單類別送空值也不回 E02「帳號類別」，仍以原類別檢查
+		f.setCatgId(null);
+		assertStatus(() -> svc.resubmit(id(KEVIN), FIRST_ID, f, null), HttpStatus.BAD_REQUEST, AcctMsg.E05);
+		// 原類別開放：表單帶 HOST，申請單與主表仍寫原類別（服務會覆寫傳入的表單，每次呼叫前重設）
+		when(fx.codeDao.findCategories()).thenReturn(TestFixture.categories());
+		f.setCatgId("HOST");
+		svc.resubmit(id(KEVIN), FIRST_ID, f, null);
+		ArgumentCaptor<AcctReq> reqCap = ArgumentCaptor.forClass(AcctReq.class);
+		verify(fx.acctReqDao).resubmit(reqCap.capture(), eq(2), eq(KEVIN), any(), any());
+		assertThat(reqCap.getValue().getCatgId()).isEqualTo("DB");
+		ArgumentCaptor<AcctReq> acctCap = ArgumentCaptor.forClass(AcctReq.class);
+		verify(fx.acctDao).resubmitAdd(acctCap.capture(), any(), eq(KEVIN));
+		assertThat(acctCap.getValue().getCatgId()).isEqualTo("DB");
+	}
+
+	@Test
+	void 新增重送_門禁卡單表單改一般類別_仍依門禁卡規則() {
+		svc.submit(id(KEVIN), doorForm(), null);
+		fx.acct(FIRST_ID, fx.req.getCatgId(), AcctConst.AS_REVIEW);
+		approve(ALEX);
+		svc.reject(id(TERRY), FIRST_ID, reason(1, "用途不明"));
+		// 門禁卡表單沒有帳號名稱與所屬系統：若改以 HOST 驗證會回 E02
+		AcctReqForm f = doorForm();
+		f.setVersionNo(2);
+		f.setCatgId("HOST");
+		svc.resubmit(id(KEVIN), FIRST_ID, f, null);
+		ArgumentCaptor<AcctReq> cap = ArgumentCaptor.forClass(AcctReq.class);
+		verify(fx.acctReqDao).resubmit(cap.capture(), eq(2), eq(KEVIN), any(), any());
+		assertThat(cap.getValue().getCatgId()).isEqualTo(AcctConst.CATG_DOOR);
+		assertThat(cap.getValue().getSysName()).isEqualTo(AcctConst.DOOR_SYS_NAME);
+		assertThat(cap.getValue().getAcctName()).isNull();
+		assertThat(cap.getValue().getAccessLevelCode()).isEqualTo(AcctConst.DOOR_ACCESS_LEVEL);
+		ArgumentCaptor<AcctReq> acctCap = ArgumentCaptor.forClass(AcctReq.class);
+		verify(fx.acctDao).resubmitAdd(acctCap.capture(), any(), eq(KEVIN));
+		assertThat(acctCap.getValue().getCatgId()).isEqualTo(AcctConst.CATG_DOOR);
 	}
 
 	// ------------------------------------------------------------
