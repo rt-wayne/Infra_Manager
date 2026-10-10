@@ -972,7 +972,7 @@ Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單�
 | GET | `/requests/{id}` | 可看申請單 | — | IM_ACCT_REQ 全欄（含 versionNo）、stageName、applyByName、execByName、verifyByName、attachments[attachId、attachTypeCode、fileName、fileSize、createDate、createByName]、history、actions[]（APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、RESUBMIT） | 403、404 |
 | POST | `/requests/{id}/approve` | 該關權限 | versionNo | reqId、reqStateCode、currStageId、versionNo | 403、400 E02、404、409 E08 |
 | POST | `/requests/{id}/reject` | 該關權限 | versionNo、reason | 同上 | 同上＋400 E10 |
-| POST | `/requests/{id}/resubmit` | 原申請人＋ACC_APPLY | multipart：form＝送出內容欄位＋versionNo（reqTypeCode、acctId 忽略）；`docFile`（選填，有則取代舊公文） | 同上 | 403、400 E01～E06、E11、E14；409 E07、E08、E09；413 |
+| POST | `/requests/{id}/resubmit` | 原申請人＋ACC_APPLY | multipart：form＝送出內容欄位＋versionNo（reqTypeCode、acctId 忽略）；`docFile`（選填，有則取代舊公文） | 同上 | 403、400 E01～E06、E11、E14；404（單號或帳號不存在）；409 E07、E08、E09；413 |
 | POST | `/requests/{id}/exec-done` | 該類別執行人 | multipart：form＝versionNo、cardNo、execDescr；`proofFile`（必填） | 同上 | 403、400 E02、E11、E12、E13、E14；409 E08；413 |
 | POST | `/requests/{id}/verify-ok` | VERIFY_G7 | versionNo | 同上 | 403、400 E02、409 E08 |
 | POST | `/requests/{id}/verify-reject` | VERIFY_G7 | versionNo、reason | 同上 | 同上＋400 E10 |
@@ -980,22 +980,22 @@ Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單�
 
 **送出驗證順序**（遇第一個錯誤即回）
 
-| 順序 | 前端（`utils/requestForm.ts`） | 後端送出 `POST /requests`（`RequestService.submit`） |
+前後端依使用者遇到的先後排列：開畫面 → 選檔 → 按送出 → 只有後端能判斷的。
+
+| 順序 | 前端（`RequestFormView.vue`、`utils/attach.ts`、`utils/requestForm.ts`） | 後端送出 `POST /requests`（`RequestService.submit`） |
 |---|---|---|
 | 0 | — | 附件超限 413 E15（見通則）；無 ACC_APPLY → 403 |
-| 1 | E01 唯一性聲明 | E01 |
-| 2 | E02 必填（一次列出缺的欄位，以頓號分隔） | 申請類型必填與值域；新增帶帳號 → 400；非新增缺帳號 → E02「帳號」；**非新增帳號不存在 → 404 N01** |
-| 3 | E03 指定日缺到期日（停用、刪除不做） | E02 必填 |
-| 4 | E04 到期日早於今天（新增、修改、重新啟用） | （停用、刪除：內容複製主表，跳過 E03～E11）E03 |
-| 5 | E05 新增時類別未開放 | E04 |
-| 6 | E06 資產分類不可選 | E05（僅新增） |
-| 7 | E11 欄寬：`n CHAR` 欄以字數、`VARCHAR2(n)` 欄以 UTF-8 byte 計 | E06 → 代碼欄值域（欄位內容不正確）→ E11 |
-| 8 | 附件：副檔名 E14 → 大小 E15 → 空檔提示 | 附件：副檔名 E14 → 大小 E15 → 空檔視同未上傳 → 檔名欄寬 → 檔頭 E14 |
-| 9 | — | 前提狀態 409 E09 → 在途 409 E07 → 交易（IND_IM_ACCT_REQ_04 衝突 → E07；其他唯一鍵衝突 → 500） |
+| 1 | 開畫面：異動類型以 `GET /accounts/lookup/{id}` 帶入帳號，不存在即提示 | 申請類型必填與值域；新增帶帳號 → 400；非新增缺帳號 → E02「帳號」；非新增帳號不存在 → 404 N01 |
+| 2 | 選檔：副檔名 E14 → 大小 E15 → 空檔提示 | 附件：副檔名 E14 → 大小 E15 → 空檔視同未上傳 → 檔名欄寬 → 檔頭 E14 |
+| 3 | 按送出：E01 唯一性聲明 | E01 |
+| 4 | E02 必填（一次列出缺的欄位，以頓號分隔） | E02 必填 |
+| 5 | E03 指定日缺到期日（停用、刪除不做） | （停用、刪除：內容複製主表，跳過 E03～E06 與代碼值域；E11 只檢查申請單位與原因）E03 → 有效期限類型值域 |
+| 6 | E04 到期日早於今天（停用、刪除不做） | E04 |
+| 7 | 不檢查：類別與資產分類下拉只列可選項（目前選中的值即使已不可選仍保留在選單），欄寬不設上限 | E05（僅新增）→ E06 → 代碼欄值域（欄位內容不正確）→ E11（`n CHAR` 欄以字數、`VARCHAR2(n)` 欄以 UTF-8 byte 計） |
+| 8 | — | 前提狀態 409 E09 → 在途 409 E07 → 交易（IND_IM_ACCT_REQ_04 衝突 → E07；其他唯一鍵衝突 → 500） |
 
-- 本功能分批施工中，進度見 `BACKLOG.md` 第 5 項：前後端在「帳號不存在 404 的位置」與「附件檢查相對於 E01～E11 的位置」順序不同。
 - E11 與 E03 同時成立時回 E03。代碼欄值不在值域 → 400「欄位內容不正確：{欄位}」；日期格式錯 → 400「日期格式錯誤（yyyy-MM-dd）」。
-- 重新送出（`RequestService.resubmit`）順序：非原申請人或無 ACC_APPLY → 403 → 缺 versionNo → E02 → 狀態非已退件或版本不符 → 409 E08 → E01 → 非新增帳號不存在 → 404 → 內容檢查（同送出第 3～7 步；新增的帳號類別取自表單）→ 附件 → E09 → E07 → 交易。E08 先於 E01 為已知差異，修正見 BACKLOG 第 5 項。
+- 重新送出（`RequestService.resubmit`）順序：單號不存在 → 404 → 非原申請人或無 ACC_APPLY → 403 → 非新增帳號不存在 → 404（內容檢查需主表）→ 附件 → E01 → 內容檢查（同送出第 4～7 步；新增的帳號類別取自表單）→ 缺 versionNo → E02 → 狀態非已退件或版本不符 → 409 E08 → E09 → E07 → 交易。
 - 回報執行完畢（`RequestService.execDone`）順序同前端彈窗（選檔時檢查附件格式，按送出時先卡號後佐證）：非該類別執行人 → 403 → 附件檢查（見「附件」表「檢查順序」列）→ 門禁卡新增缺卡號 E13 → 缺佐證 E12 → 卡號超過 50 bytes、執行說明超過 500 字 → E11 → 缺 versionNo → E02 → 狀態／關卡／版本不符 → 409 E08 → 交易。409 在最後，因此門禁卡執行人對不在關卡 6 的門禁卡單，可由回 E13 或 E12 得知是否為新增申請；只多透露類型一個欄位、限已登入的同類別執行人，為已接受的揭露。
 
 **巡檢**
