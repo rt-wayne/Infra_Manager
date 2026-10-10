@@ -601,7 +601,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 ### 資料結構
 
-21 張表、42 個索引（PK 21＋一般 21）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。以下已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，與測試 DB 的 1 不同，見 BACKLOG 第 9 項），兩檔自測試 DB 反向產出並逐句比對一致。`SETUP.md` 的 DB 維護 SQL 與排程 curl 範例分批施工中，進度見 BACKLOG 第 6 項。
+21 張表、42 個索引（PK 21＋一般 21）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。以下已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，與測試 DB 的 1 不同，見 BACKLOG 第 9 項），兩檔自測試 DB 反向產出並逐句比對一致。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
