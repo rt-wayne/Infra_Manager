@@ -18,6 +18,9 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #1（L2）：申請單位欄寬 E11 排在 E03、E06 之後
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 門禁卡回報執行完畢時申請單 ACCT_NAME 同步寫卡號（第一次與複驗退回換卡號）；非門禁卡新增不寫卡號
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -40,6 +43,7 @@ import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -210,6 +214,8 @@ class RequestServiceTest {
 		svc.execDone(id(ALEX), FIRST_ID, exec(4, "CARD-001"), FILE);
 		assertThat(fx.req.getCardNo()).isEqualTo("CARD-001");
 		verify(fx.acctDao).applyAdd(any(), eq("CARD-001"), any(), eq(ALEX));
+		// 申請單 ACCT_NAME 同句寫入卡號（複驗通知與待辦標題才會顯示卡號）
+		verify(fx.acctReqDao).execDone(eq(FIRST_ID), eq(4), any(), eq(true), eq("CARD-001"), any(), any(), any());
 		// 門禁卡強制符合審查條件
 		verify(fx.acctDao).updateReviewDates(FIRST_ID, TODAY, TODAY.plusDays(180), TestFixture.NOW, ALEX);
 	}
@@ -220,8 +226,11 @@ class RequestServiceTest {
 		svc.execDone(id(ALEX), FIRST_ID, exec(4, "CARD-001"), FILE);
 		svc.verifyReject(id(MOLLY), FIRST_ID, reason(5, "卡號錯"));
 		svc.execDone(id(ALAN), FIRST_ID, exec(6, "CARD-002"), FILE);
+		// 第二次回報同樣以新卡號覆寫申請單卡號與帳號名稱
+		verify(fx.acctReqDao).execDone(eq(FIRST_ID), eq(6), any(), eq(true), eq("CARD-002"), any(), any(), any());
 		verify(fx.acctDao).updateAcctName(FIRST_ID, "CARD-002", TestFixture.NOW, ALAN);
 		verify(fx.acctDao, times(1)).applyAdd(any(), any(), any(), any());
+		assertThat(fx.req.getAcctName()).isEqualTo("CARD-002");
 	}
 
 	@Test
@@ -232,6 +241,8 @@ class RequestServiceTest {
 		svc.submit(id(KEVIN), f, null);
 		toExecFromReview();
 		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
+		// 非門禁卡新增：不覆寫申請單卡號與帳號名稱
+		verify(fx.acctReqDao).execDone(eq(FIRST_ID), eq(4), any(), eq(false), isNull(), any(), any(), any());
 		ArgumentCaptor<AcctReq> cap = ArgumentCaptor.forClass(AcctReq.class);
 		verify(fx.acctDao).applyModify(cap.capture(), eq(true), any(), eq(ALEX));
 		assertThat(cap.getValue().getAssetClassId()).isEqualTo("H01");

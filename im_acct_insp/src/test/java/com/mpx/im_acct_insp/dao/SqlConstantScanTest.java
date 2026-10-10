@@ -9,6 +9,9 @@ package com.mpx.im_acct_insp.dao;
 //           （ORIG_REQ_ID、ORIG_ACCT_ID、NEW_ACCT_ID、IMPORT_ID、DISABLE_TYPE_CODE、REVIEW_BASIS_CODE、IS_DIRECT、IS_SHOW、
 //           APPLY_TEL_NO、APPLY_EMAIL、INSP_STATE_CODE 欄位寫入）；AcctConst 的字串常數也不得含已廢除代碼；
 //           Controller 除 POST /auth/login 外每個 API 方法都宣告 Identity（＝都驗 token）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: UPDATE_EXEC_DONE 須含門禁卡新增時申請單 ACCT_NAME 寫卡號
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,7 +112,9 @@ class SqlConstantScanTest {
 			assertThat(sql).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
 					.contains("REQ_STATE_CODE =").contains("CURR_STAGE_ID");
 		}
-		assertThat(AcctReqDao.UPDATE_EXEC_DONE).contains("EFFECT_DATE = NVL(EFFECT_DATE, :now)");
+		assertThat(AcctReqDao.UPDATE_EXEC_DONE).contains("EFFECT_DATE = NVL(EFFECT_DATE, :now)")
+				// 門禁卡新增：申請單 ACCT_NAME 與 CARD_NO 同條件寫卡號
+				.contains("ACCT_NAME = CASE WHEN :setCard = 1 THEN :cardNo ELSE ACCT_NAME END");
 		assertThat(AcctReqDao.UPDATE_REJECT).contains("REJECT_CNT = REJECT_CNT + 1");
 		assertThat(AcctReqDao.UPDATE_VERIFY_REJECT).contains("VERIFY_REJECT_CNT = VERIFY_REJECT_CNT + 1");
 		assertThat(AcctReqDao.UPDATE_RESUBMIT).doesNotContain("APPLY_DATE");

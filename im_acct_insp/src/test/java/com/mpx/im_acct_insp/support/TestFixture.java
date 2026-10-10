@@ -326,6 +326,7 @@ public class TestFixture {
 			req.setExecDescr(inv.getArgument(2));
 			if (inv.<Boolean>getArgument(3)) {
 				req.setCardNo(inv.getArgument(4));
+				req.setAcctName(inv.getArgument(4));
 			}
 			req.setExecBy(inv.getArgument(5));
 			if (req.getEffectDate() == null) {

@@ -18,6 +18,10 @@ package com.mpx.im_acct_insp.dao;
 //           所有狀態轉移 UPDATE 帶 REQ_ID、VERSION_NO、REQ_STATE_CODE、CURR_STAGE_ID 條件並 VERSION_NO＋1（樂觀鎖）；
 //           業務欄位（APPLY_BY、REJECT_BY、EXEC_BY、VERIFY_BY）記有效身分（:actorId），UPDATE_BY 記實際使用者（:userId）；
 //           姓名改 JOIN IM_ACCT_USER（不再引用既有模組使用者表）；時間一律綁定 :now；刪展延作廢 SQL
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-10
+// 變更說明: 門禁卡新增回報執行完畢時，申請單 ACCT_NAME 同步寫入卡號（與 CARD_NO 同條件），
+//           複驗通知與待辦標題改顯示卡號（交接文件第 711、1606 行）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -154,11 +158,12 @@ public class AcctReqDao {
 			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :userId
 			""" + WHERE_EXPECT;
 
-	/** 回報執行完畢；EFFECT_DATE 只在第一次寫；CARD_NO 只在門禁卡新增時以 :cardNo 覆寫（:setCard＝1） */
+	/** 回報執行完畢；EFFECT_DATE 只在第一次寫；CARD_NO 與 ACCT_NAME 只在門禁卡新增時以 :cardNo 覆寫（:setCard＝1） */
 	public static final String UPDATE_EXEC_DONE = """
 			UPDATE IM_ACCT_REQ
 			   SET REQ_STATE_CODE = 'VERIFY', CURR_STAGE_ID = 7, EXEC_BY = :actorId, EXEC_DATE = :now,
 			       EXEC_DESCR = :execDescr, CARD_NO = CASE WHEN :setCard = 1 THEN :cardNo ELSE CARD_NO END,
+			       ACCT_NAME = CASE WHEN :setCard = 1 THEN :cardNo ELSE ACCT_NAME END,
 			       EFFECT_DATE = NVL(EFFECT_DATE, :now),
 			       VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :userId
 			""" + WHERE_EXPECT;
