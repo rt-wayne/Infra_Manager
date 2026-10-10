@@ -1,0 +1,34 @@
+###################################
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-07
+### 變更說明: 新增：im_acct_insp 自訂設定（spec_im_acct_insp_v2.0.md §9.4；README 第 4 節的選用檔）
+###           由 com.mpx.im_acct_insp.common.AppConfig 以 @PropertySource 載入；檔案不存在仍可啟動，缺 key 用下列預設值
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-07
+### 變更說明: 變更單 #2：移除 im.acct.insp.mail.expiry.roles、im.acct.insp.mail.job-fail.roles；
+###           通知收件角色改為程式常數（到期類 GOV、排程失敗 SYS_ADMIN），成員寄信當下查角色人員表 IM_ACCT_ROLE_USER
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-07
+### 變更說明: 變更單 #3：附件根目錄未設定或不是絕對路徑時後端啟動失敗（取代原本記 WARN），補 Windows 路徑寫法提醒
+### 首次建置：複製本檔為 environment.properties 後填值（environment.properties 不進 git）
+###################################
+
+###################################
+###     附件（spec §4.10）
+###################################
+### 附件根目錄絕對路徑（必填，無預設）；未設定或不是絕對路徑時後端啟動失敗（log 記 ERROR）
+### Windows 請用 / 或 \\（properties 的單一 \ 是跳脫字元會被吃掉，例 D:\home\attach 會變成相對路徑 D:homeattach）；例：D:/home/im_acct_insp/attach
+### 實體檔存在 <根目錄>/<申請單號>/<uuid>.<副檔名>，DB 只存相對路徑；目錄需讓執行帳號可讀寫
+im.acct.insp.attach.dir=
+
+###################################
+###     排程（spec §4.11）
+###################################
+### false 時不排程（手動 API POST /jobs/{code}/run 仍可用）；預設 true
+im.acct.insp.job.enabled=true
+### J01 到期處理；Spring cron 六欄（秒 分 時 日 月 週），時區 Asia/Taipei；預設每日 00:10
+im.acct.insp.job.j01.cron=0 10 0 * * *
+### J02 每週彙總；每日觸發、每週只寄一次；預設每日 08:00
+im.acct.insp.job.j02.cron=0 0 8 * * *
+### 測試環境設 true 才能以 baseDate 手動執行（否則 400「此環境不允許指定基準日」）；預設 false
+im.acct.insp.job.allow-base-date=false

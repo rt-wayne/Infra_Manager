@@ -1,0 +1,47 @@
+/* ============================================================
+   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+   修改日期: 2026-10-04
+   變更說明: 新增：全站 CSS 變數與基礎樣式（規格 v4），比照 store_web_barcode_frontend
+             門市螢幕小、人員年長：body 19px、line-height 1.6、input 20px、label 17px、按鈕最小高 48px
+             body margin 0（滿版必要條件）；不設 max-width 與最小寬度，寬度由各專案自行決定
+             <button>、<input> 預設不繼承 font-family，統一 inherit
+   ============================================================ */
+:root {
+  --teal: #0f8f86;
+  --teal-dark: #0b6f68;
+  --teal-bg: #e8f7f5;
+  --navy: #1b2a4a;
+  --orange: #d9880f;
+  --blue: #2f5fad;
+  --green: #2e9e50;
+  --red: #dc2626;
+  --dark: #334155;
+  --gray: #64748b;
+  --line: #e2e8f0;
+  --bg: #f2f6f5;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: var(--dark);
+  min-height: 100vh;
+  padding-bottom: 32px;
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+button, input, select, textarea { font-family: inherit; }
+
+input { font-size: 20px; }
+
+label { font-size: 17px; }
+
+button { min-height: 48px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

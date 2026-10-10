@@ -1,0 +1,92 @@
+package com.mpx.im_acct_insp.common;
+
+// ============================================================
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-07
+// 變更說明: 新增：錯誤訊息文案（spec v2.0 §4.15，代號 E01～E20、A01～A03、P01、N01）與對應的 ApiException 工廠
+//           文案原樣給前端顯示；帶參數的（E02、E10、E11）由方法組字；文件未定文案的 400 類集中在下方
+// ============================================================
+
+import java.util.List;
+
+public final class AcctMsg {
+
+	private AcctMsg() {
+	}
+
+	public static final String E01 = "請勾選帳號唯一性聲明";
+	public static final String E02_PREFIX = "請填寫必填欄位：";
+	public static final String E03 = "請填寫到期日";
+	public static final String E04 = "到期日不可早於今天";
+	public static final String E05 = "此帳號類別尚未開放申請";
+	public static final String E06 = "此資產分類碼不可選用";
+	public static final String E07 = "此帳號目前已有一筆申請正在處理中";
+	public static final String E08 = "此申請已由他人處理，請重新整理";
+	public static final String E09 = "此帳號目前的狀態不可提出此類申請";
+	public static final String E10_PREFIX = "請填寫";
+	public static final String E11_PREFIX = "欄位長度超過上限：";
+	public static final String E12 = "請上傳執行佐證附件";
+	public static final String E13 = "請填寫門禁卡號";
+	public static final String E14 = "附件格式僅限 .pdf .doc .docx .jpg .png";
+	public static final String E15 = "附件大小不可超過 10 MB";
+	public static final String E16 = "排程執行中，請稍後再試";
+	public static final String E17 = "此環境不允許指定基準日";
+	public static final String E18 = "巡檢項目不完整，請重新整理後再填寫";
+	public static final String E19 = "此項目已處理或不是異常項目";
+	public static final String E20 = "目前未切換身分";
+	public static final String A01 = "帳號或密碼錯誤";
+	public static final String A02 = "此帳號已鎖定，請聯絡系統管理員";
+	public static final String A03 = "登入已逾時，請重新登入";
+	public static final String P01 = "您沒有執行此操作的權限";
+	public static final String N01 = "查無資料";
+
+	// E10 的受詞
+	public static final String WHAT_REASON = "原因";
+	public static final String WHAT_EXCPT = "異常說明";
+	public static final String WHAT_FIX = "處理方式與結果";
+
+	// 文件未定文案、由 developer 補的（400 類）
+	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";
+	public static final String BAD_DATE = "日期格式錯誤（yyyy-MM-dd）";
+	public static final String BAD_DATE_TIME = "時間格式錯誤（yyyy-MM-dd HH:mm:ss）";
+	public static final String ADD_WITH_ACCT = "新增申請不可指定帳號";
+	public static final String IMPERSONATE_SELF = "不可切換為自己";
+	public static final String INSP_DATE_FUTURE = "巡檢時間不可晚於現在";
+
+	public static ApiException required(List<String> fields) {
+		return ApiException.badRequest(E02_PREFIX + String.join("、", fields));
+	}
+
+	public static ApiException required(String field) {
+		return ApiException.badRequest(E02_PREFIX + field);
+	}
+
+	/** E10：請填寫{原因／異常說明／處理方式與結果} */
+	public static ApiException fillIn(String what) {
+		return ApiException.badRequest(E10_PREFIX + what);
+	}
+
+	public static ApiException tooLong(String field) {
+		return ApiException.badRequest(E11_PREFIX + field);
+	}
+
+	public static ApiException badCode(String field) {
+		return ApiException.badRequest(BAD_CODE_PREFIX + field);
+	}
+
+	public static ApiException forbidden() {
+		return ApiException.forbidden(P01);
+	}
+
+	public static ApiException notFound() {
+		return ApiException.notFound(N01);
+	}
+
+	public static ApiException concurrent() {
+		return ApiException.conflict(E08);
+	}
+
+	public static ApiException unauthorized() {
+		return ApiException.unauthorized(A03);
+	}
+}

@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>帳號權限管理與機房巡檢（im_acct_insp）Table 欄位關係圖 v0.2</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #161c24; --panel2: #1c2430; --line: #2c3746;
+    --text: #e3e8ee; --muted: #9aa7b5; --accent: #6cb6ff; --pk: #f0c674; --code: #c3e88d;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+         font-size: 16px; line-height: 1.6; }
+  main { padding: 24px 28px 64px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  h2 { font-size: 22px; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 19px; margin: 32px 0 8px; color: var(--accent); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: Consolas, "Courier New", monospace; color: var(--code);
+         background: var(--panel2); padding: 1px 5px; border-radius: 3px; font-size: 0.92em; }
+  .meta { color: var(--muted); margin-bottom: 16px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 18px; margin: 12px 0; }
+  .toc { columns: 3 260px; column-gap: 24px; }
+  .toc ul { margin: 0 0 8px; padding-left: 20px; break-inside: avoid; }
+  .toc .grp { font-weight: bold; color: var(--muted); break-after: avoid; }
+  .tbl-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); margin: 8px 0; }
+  th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); color: var(--text); white-space: nowrap; }
+  td.c { text-align: center; white-space: nowrap; }
+  td.n { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+  td.pk { color: var(--pk); font-weight: bold; text-align: center; }
+  tr:nth-child(even) td { background: #18202a; }
+  .diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
+             border-radius: 6px; padding: 12px; margin: 12px 0; }
+  .diagram .mermaid svg { max-width: none !important; height: auto; }
+  .note { color: var(--muted); font-size: 15px; }
+  .ref { margin: 6px 0 0; padding-left: 20px; }
+  .top { font-size: 14px; float: right; font-weight: normal; }
+  @media (max-width: 1100px) { main { padding: 16px; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>帳號權限管理與機房巡檢（im_acct_insp）Table 欄位關係圖</h1>
+<div class="meta">版本 v0.2　｜　日期 2026-10-07　｜　資料來源：<code>source\im_acct_insp_create_table.sql</code>（欄位、型別、必填、PK、中文說明）、<code>md\帳號權限管理與機房巡檢_Table規劃_v0.2.md</code> 第 4 章（關係、分組）</div>
+
+<div class="box" id="intro">
+  <p style="margin-top:0">本模組第一階段實建 <b>21 張表</b>（Schema <code>RD_USER</code>），依 DB 規範<b>不建實體 Foreign Key</b>；圖中的關係線與各表「參照說明」都是<b>邏輯參照</b>（靠同名或註明的欄位對應），完整性由程式保證。</p>
+  <p>共用五欄每張表都有，固定放在每表最後；為避免圖面擁擠，<b>圖中與各表欄位表皆省略</b>，在此列一次。個別表的共用欄說明與下表不同時，於該表「共用欄差異」註明。</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>欄名</th><th>型別</th><th>必填</th><th>中文說明（標準）</th></tr>
+    <tr><td class="n">STATUS</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td>資料狀態：1＝啟用、0＝停用。default 1（業務狀態另用 *_STATE_CODE）</td></tr>
+    <tr><td class="n">CREATE_DATE</td><td class="n">DATE</td><td class="c">Y</td><td>建立日期（含時分秒）。default SYSDATE</td></tr>
+    <tr><td class="n">CREATE_BY</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td>建立人員工號（系統排程寫入時為 SYSTEM）</td></tr>
+    <tr><td class="n">UPDATE_DATE</td><td class="n">DATE</td><td class="c"></td><td>最後更新日期（含時分秒）。新增時為空</td></tr>
+    <tr><td class="n">UPDATE_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td>最後更新人員工號</td></tr>
+  </table>
+  </div>
+  <p class="note" style="margin-bottom:0">其他慣例：人員欄一律存工號 VARCHAR2(30)，參照 <code>IM_ACCT_USER.USER_ID</code>。圖中型別省略 <code>CHAR</code> 長度語意（例 <code>VARCHAR2(30 CHAR)</code> 畫成 <code>VARCHAR2(30)</code>），完整型別以各表欄位表為準。「必填」Y＝NOT NULL。</p>
+</div>
+
+<h2 id="toc">目錄</h2>
+<div class="box toc">
+  <ul>
+    <li class="grp">關係圖</li>
+    <li><a href="#diagA">圖 A　使用者與角色權限</a></li>
+    <li><a href="#diagB">圖 B　帳號申請</a></li>
+    <li><a href="#diagC">圖 C　巡檢與共用</a></li>
+  </ul>
+  <ul>
+    <li class="grp">權限與稽核</li>
+    <li><a href="#t-IM_ACCT_USER">1. IM_ACCT_USER 使用者</a></li>
+    <li><a href="#t-IM_ACCT_ROLE">2. IM_ACCT_ROLE 角色</a></li>
+    <li><a href="#t-IM_ACCT_PERM">3. IM_ACCT_PERM 權限碼</a></li>
+    <li><a href="#t-IM_ACCT_ROLE_PERM">4. IM_ACCT_ROLE_PERM 角色權限對照</a></li>
+    <li><a href="#t-IM_ACCT_ROLE_USER">5. IM_ACCT_ROLE_USER 角色人員</a></li>
+    <li><a href="#t-IM_EXEC_MAP">6. IM_EXEC_MAP 執行人對照</a></li>
+    <li><a href="#t-IM_ACCT_LOGIN_TOKEN">7. IM_ACCT_LOGIN_TOKEN 登入 token</a></li>
+    <li><a href="#t-IM_ACCT_ADMIN_LOG">8. IM_ACCT_ADMIN_LOG 系統管理軌跡</a></li>
+  </ul>
+  <ul>
+    <li class="grp">設定與代碼</li>
+    <li><a href="#t-IM_ACCT_APPR_STAGE">9. IM_ACCT_APPR_STAGE 簽核關卡</a></li>
+    <li><a href="#t-IM_DOC_SEQ">10. IM_DOC_SEQ 單號流水號</a></li>
+    <li><a href="#t-IM_ACCT_CATG">11. IM_ACCT_CATG 帳號類別</a></li>
+    <li><a href="#t-IM_ASSET_CLASS">12. IM_ASSET_CLASS 資產分類碼</a></li>
+    <li><a href="#t-IM_INSP_ITEM">13. IM_INSP_ITEM 巡檢項目</a></li>
+  </ul>
+  <ul>
+    <li class="grp">業務</li>
+    <li><a href="#t-IM_ACCT">14. IM_ACCT 帳號主表</a></li>
+    <li><a href="#t-IM_ACCT_REQ">15. IM_ACCT_REQ 帳號申請單</a></li>
+    <li><a href="#t-IM_ACCT_ATTACH">16. IM_ACCT_ATTACH 申請單附件</a></li>
+    <li><a href="#t-IM_ACCT_HIST">17. IM_ACCT_HIST 帳號歷史事件</a></li>
+    <li><a href="#t-IM_INSP">18. IM_INSP 巡檢單</a></li>
+    <li><a href="#t-IM_INSP_RESULT">19. IM_INSP_RESULT 巡檢結果明細</a></li>
+  </ul>
+  <ul>
+    <li class="grp">共用</li>
+    <li><a href="#t-IM_ACCT_NOTIFY_LOG">20. IM_ACCT_NOTIFY_LOG 通知紀錄</a></li>
+    <li><a href="#t-IM_ACCT_JOB_RUN">21. IM_ACCT_JOB_RUN 排程執行紀錄</a></li>
+  </ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="diagA">圖 A　使用者與角色權限 <a class="top" href="#toc">回目錄</a></h2>
+<p class="note">9 個實體、10 條關係。IM_ACCT_USER 與 IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG 各有兩條線（實際人員／代理或對象人員）。</p>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  IM_ACCT_USER ||--o{ IM_ACCT_ROLE_USER : "擁有角色"
+  IM_ACCT_ROLE ||--o{ IM_ACCT_ROLE_USER : "指派"
+  IM_ACCT_ROLE ||--o{ IM_ACCT_ROLE_PERM : "授予"
+  IM_ACCT_PERM ||--o{ IM_ACCT_ROLE_PERM : "被授予"
+  IM_ACCT_USER ||--o{ IM_EXEC_MAP : "擔任執行人"
+  IM_ACCT_CATG ||--o{ IM_EXEC_MAP : "對應類別"
+  IM_ACCT_USER ||--o{ IM_ACCT_LOGIN_TOKEN : "登入"
+  IM_ACCT_USER |o--o{ IM_ACCT_LOGIN_TOKEN : "代理身分"
+  IM_ACCT_USER ||--o{ IM_ACCT_ADMIN_LOG : "操作"
+  IM_ACCT_USER |o--o{ IM_ACCT_ADMIN_LOG : "切換對象"
+
+  IM_ACCT_USER {
+    VARCHAR2(30) USER_ID PK "工號即登入帳號"
+    VARCHAR2(50) USER_EN_NAME "英文顯示名"
+    VARCHAR2(30) USER_NAME "中文姓名"
+    VARCHAR2(50) DEPT_NAME "部門"
+    VARCHAR2(100) EMAIL "Email"
+    VARCHAR2(30) TEL_NO "分機電話"
+    VARCHAR2(200) PWD_HASH "密碼雜湊"
+    DATE PWD_UPDATE_DATE "密碼設定時間"
+    NUMBER(2) LOGIN_FAIL_CNT "連續失敗次數"
+    DATE LOCK_DATE "鎖定時間"
+    DATE LAST_LOGIN_DATE "最後登入時間"
+  }
+  IM_ACCT_ROLE {
+    VARCHAR2(20) ROLE_ID PK "角色代碼"
+    VARCHAR2(30) ROLE_NAME "角色名稱"
+    VARCHAR2(200) ROLE_DESCR "職責說明"
+    NUMBER(1) IS_SYSTEM "系統角色"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_ACCT_PERM {
+    VARCHAR2(30) PERM_ID PK "權限碼"
+    VARCHAR2(50) PERM_NAME "權限名稱"
+    VARCHAR2(10) MODULE_CODE "所屬模組"
+    VARCHAR2(1) PHASE_CODE "上線階段"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_ACCT_ROLE_PERM {
+    VARCHAR2(20) ROLE_ID PK "角色代碼"
+    VARCHAR2(30) PERM_ID PK "權限碼"
+  }
+  IM_ACCT_ROLE_USER {
+    VARCHAR2(20) ROLE_ID PK "角色代碼"
+    VARCHAR2(30) USER_ID PK "人員工號"
+  }
+  IM_EXEC_MAP {
+    VARCHAR2(10) CATG_ID PK "帳號類別"
+    VARCHAR2(30) USER_ID PK "執行人工號"
+  }
+  IM_ACCT_CATG {
+    VARCHAR2(10) CATG_ID PK "類別代碼"
+    VARCHAR2(30) CATG_NAME "類別名稱"
+    VARCHAR2(100) CATG_DESCR "類別說明"
+    NUMBER(1) IS_ENABLED "開放新增申請"
+    NUMBER(1) IS_SUGGEST_EXPIRY "建議到期日提示"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_ACCT_LOGIN_TOKEN {
+    VARCHAR2(64) TOKEN_HASH PK "token雜湊"
+    VARCHAR2(30) USER_ID "實際使用者"
+    VARCHAR2(30) ACT_AS_USER_ID "代理身分"
+    DATE EXPIRE_DATE "最長時效到期"
+    DATE LAST_ACCESS_DATE "最後使用時間"
+    DATE LOGOUT_DATE "登出時間"
+  }
+  IM_ACCT_ADMIN_LOG {
+    NUMBER(12) LOG_ID PK "軌跡流水號"
+    DATE ACT_DATE "發生時間"
+    VARCHAR2(30) ACT_BY "實際操作人"
+    VARCHAR2(100) ACT_BY_NAME "操作人名快照"
+    VARCHAR2(30) ACTION_CODE "動作"
+    VARCHAR2(30) TARGET_USER_ID "對象使用者"
+    VARCHAR2(2000) CONTENT_JSON "內容JSON"
+    VARCHAR2(500) REASON "原因"
+    VARCHAR2(10) RESULT_CODE "結果"
+  }
+</pre></div>
+
+<!-- ============================================================ -->
+<h2 id="diagB">圖 B　帳號申請 <a class="top" href="#toc">回目錄</a></h2>
+<p class="note">8 個實體、10 條關係（IM_ACCT_CATG 與圖 A 重複出現）。IM_DOC_SEQ 不與其他表以欄位關聯，僅供產生 IM_ACCT_REQ.REQ_ID（AR）與 IM_INSP.INSP_ID（IN）單號。跨圖參照不畫線：IM_ACCT_APPR_STAGE.PERM_ID → IM_ACCT_PERM（圖 A）；APPLY_BY、ACT_BY、ACT_AS_ID 等人員欄 → IM_ACCT_USER（圖 A）。</p>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  IM_ACCT_CATG ||--o{ IM_ACCT : "分類"
+  IM_ASSET_CLASS |o--o{ IM_ACCT : "資產分類"
+  IM_ACCT ||--o{ IM_ACCT_REQ : "申請"
+  IM_ACCT_CATG ||--o{ IM_ACCT_REQ : "申請類別"
+  IM_ASSET_CLASS |o--o{ IM_ACCT_REQ : "申請分類"
+  IM_ACCT_APPR_STAGE |o--o{ IM_ACCT_REQ : "目前關卡"
+  IM_ACCT_REQ ||--o{ IM_ACCT_ATTACH : "附件"
+  IM_ACCT ||--o{ IM_ACCT_HIST : "歷史"
+  IM_ACCT_REQ |o--o{ IM_ACCT_HIST : "事件來源"
+  IM_ACCT_APPR_STAGE |o--o{ IM_ACCT_HIST : "發生關卡"
+
+  IM_ACCT {
+    VARCHAR2(20) ACCT_ID PK "帳號單號"
+    VARCHAR2(10) CATG_ID "帳號類別"
+    VARCHAR2(100) ACCT_NAME "帳號名稱"
+    VARCHAR2(100) SYS_NAME "所屬系統設備"
+    VARCHAR2(10) DOOR_SCOPE_CODE "門禁權限範圍"
+    VARCHAR2(5) ASSET_CLASS_ID "資產分類碼"
+    NUMBER(1) IS_PRIV "特權帳號"
+    VARCHAR2(50) HOLDER_NAME "使用人保管人"
+    VARCHAR2(50) HOLDER_DEPT "使用人單位"
+    VARCHAR2(100) HOLDER_CNTCT "使用人聯絡方式"
+    VARCHAR2(100) HOLDER_EMAIL "使用人Email"
+    VARCHAR2(10) ACCESS_LEVEL_CODE "權限範圍"
+    VARCHAR2(200) ACCESS_TARGET "存取對象"
+    VARCHAR2(500) APPLY_REASON "最近申請原因"
+    VARCHAR2(10) EXPIRY_TYPE_CODE "有效期限類型"
+    DATE EXPIRY_DATE "到期日"
+    VARCHAR2(10) ACCT_STATE_CODE "帳號狀態"
+    VARCHAR2(10) SOURCE_CODE "建立來源"
+    VARCHAR2(30) APPLY_BY "原新增申請人"
+    DATE LAST_REVIEW_DATE "上次審查日"
+    DATE NEXT_REVIEW_DATE "下次應審查日"
+    NUMBER(1) IS_REVIEW_FLAG "審查異常標記"
+    VARCHAR2(500) REVIEW_FLAG_REASON "審查異常原因"
+    VARCHAR2(10) REVIEW_FLAG_SOURCE_CODE "審查異常來源"
+    DATE REVIEW_FLAG_DATE "異常標記時間"
+    VARCHAR2(30) REVIEW_FLAG_BY "異常標記人"
+  }
+  IM_ACCT_REQ {
+    VARCHAR2(20) REQ_ID PK "申請單號"
+    VARCHAR2(20) ACCT_ID "目標帳號"
+    VARCHAR2(10) REQ_TYPE_CODE "申請類型"
+    VARCHAR2(10) REQ_STATE_CODE "申請單狀態"
+    NUMBER(2) CURR_STAGE_ID "目前關卡"
+    VARCHAR2(30) APPLY_BY "申請人"
+    VARCHAR2(50) APPLY_DEPT "申請單位"
+    DATE APPLY_DATE "申請日期"
+    VARCHAR2(10) CATG_ID "帳號類別"
+    VARCHAR2(100) ACCT_NAME "帳號名稱"
+    VARCHAR2(100) SYS_NAME "所屬系統設備"
+    VARCHAR2(10) DOOR_SCOPE_CODE "門禁權限範圍"
+    VARCHAR2(5) ASSET_CLASS_ID "資產分類碼"
+    NUMBER(1) IS_PRIV "特權帳號"
+    VARCHAR2(50) HOLDER_NAME "使用人保管人"
+    VARCHAR2(50) HOLDER_DEPT "使用人單位"
+    VARCHAR2(100) HOLDER_CNTCT "使用人聯絡方式"
+    VARCHAR2(100) HOLDER_EMAIL "使用人Email"
+    VARCHAR2(10) ACCESS_LEVEL_CODE "權限範圍"
+    VARCHAR2(200) ACCESS_TARGET "存取對象"
+    VARCHAR2(500) APPLY_REASON "申請原因"
+    VARCHAR2(10) EXPIRY_TYPE_CODE "有效期限類型"
+    DATE EXPIRY_DATE "到期日"
+    NUMBER(1) IS_UNIQUE_CONF "唯一性聲明"
+    DATE SUBMIT_DATE "最近送出時間"
+    NUMBER(3) RESUB_CNT "重新送出次數"
+    NUMBER(3) REJECT_CNT "被退件次數"
+    NUMBER(2) REJECT_STAGE_ID "最近退件關卡"
+    VARCHAR2(30) REJECT_BY "最近退件人"
+    DATE REJECT_DATE "最近退件時間"
+    VARCHAR2(500) REJECT_REASON "最近退件原因"
+    VARCHAR2(30) EXEC_BY "執行人"
+    DATE EXEC_DATE "回報執行時間"
+    VARCHAR2(500) EXEC_DESCR "執行說明"
+    VARCHAR2(50) CARD_NO "門禁卡號"
+    DATE EFFECT_DATE "生效時間"
+    VARCHAR2(30) VERIFY_BY "複驗通過人"
+    DATE VERIFY_DATE "複驗通過時間"
+    NUMBER(3) VERIFY_REJECT_CNT "複驗退回次數"
+    VARCHAR2(500) VERIFY_REJECT_REASON "複驗退回原因"
+    DATE DONE_DATE "結案時間"
+    NUMBER(9) VERSION_NO "樂觀鎖版本號"
+  }
+  IM_ACCT_ATTACH {
+    NUMBER(12) ATTACH_ID PK "附件流水號"
+    VARCHAR2(20) REQ_ID "申請單號"
+    VARCHAR2(10) ATTACH_TYPE_CODE "附件類型"
+    VARCHAR2(255) FILE_NAME "原始檔名"
+    VARCHAR2(500) FILE_PATH "相對路徑"
+    NUMBER(12) FILE_SIZE "檔案大小"
+    VARCHAR2(100) MIME_TYPE "MIME類型"
+  }
+  IM_ACCT_HIST {
+    NUMBER(12) HIST_ID PK "歷史流水號"
+    VARCHAR2(20) ACCT_ID "帳號單號"
+    VARCHAR2(20) REQ_ID "來源申請單"
+    VARCHAR2(20) EMG_ID "來源緊急存取"
+    NUMBER(12) REVIEW_ID "來源定期審查"
+    VARCHAR2(10) SOURCE_CODE "事件來源"
+    VARCHAR2(20) ACTION_CODE "動作"
+    NUMBER(2) STAGE_ID "發生關卡"
+    VARCHAR2(30) ACT_BY "實際操作人"
+    VARCHAR2(100) ACT_BY_NAME "操作人名快照"
+    VARCHAR2(30) ACT_AS_ID "代理身分"
+    VARCHAR2(100) ACT_AS_NAME "代理身分名快照"
+    DATE ACT_DATE "發生時間"
+    VARCHAR2(50) APPLY_DEPT "申請單位快照"
+    VARCHAR2(1000) RESULT_DESCR "結果文字"
+    NUMBER(1) IS_SELF_ACTION "自行核准旗標"
+  }
+  IM_ACCT_APPR_STAGE {
+    NUMBER(2) STAGE_ID PK "關卡序號"
+    VARCHAR2(30) STAGE_NAME "關卡名稱"
+    VARCHAR2(10) STAGE_TYPE_CODE "關卡類型"
+    VARCHAR2(30) PERM_ID "所需權限碼"
+  }
+  IM_ASSET_CLASS {
+    VARCHAR2(5) ASSET_CLASS_ID PK "資產分類碼"
+    VARCHAR2(1) ASSET_TYPE_CODE "資產類型"
+    VARCHAR2(50) ASSET_CLASS_NAME "分類名稱"
+    NUMBER(1) IS_REVIEW_TRIGGER "納入定期審查"
+    NUMBER(1) IS_SELECTABLE "表單可選"
+    VARCHAR2(200) CTRL_DESCR "存取控制摘要"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_ACCT_CATG {
+    VARCHAR2(10) CATG_ID PK "類別代碼"
+    VARCHAR2(30) CATG_NAME "類別名稱"
+    VARCHAR2(100) CATG_DESCR "類別說明"
+    NUMBER(1) IS_ENABLED "開放新增申請"
+    NUMBER(1) IS_SUGGEST_EXPIRY "建議到期日提示"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_DOC_SEQ {
+    VARCHAR2(2) DOC_TYPE_ID PK "單據前綴"
+    VARCHAR2(8) SEQ_DATE PK "取號日期"
+    NUMBER(3) CURR_SEQ "當日流水號"
+  }
+</pre></div>
+
+<!-- ============================================================ -->
+<h2 id="diagC">圖 C　巡檢與共用 <a class="top" href="#toc">回目錄</a></h2>
+<p class="note">5 個實體、3 條關係。IM_ACCT_NOTIFY_LOG.REF_ID 是多型參照（依 REF_TYPE_CODE 指向申請單、帳號、週彙總或排程），圖中只畫同圖內的 JOB→IM_ACCT_JOB_RUN。跨圖參照不畫線：INSP_BY、ACT_AS_ID、FIX_BY、FIX_ACT_AS_ID、RCPT_USER_ID、RUN_BY → IM_ACCT_USER（圖 A）；REF_ID（REQ／ACCT）→ IM_ACCT_REQ／IM_ACCT（圖 B）。</p>
+<div class="diagram"><pre class="mermaid">
+erDiagram
+  IM_INSP ||--|{ IM_INSP_RESULT : "包含"
+  IM_INSP_ITEM ||--o{ IM_INSP_RESULT : "項目來源"
+  IM_ACCT_JOB_RUN |o--o{ IM_ACCT_NOTIFY_LOG : "排程失敗通知"
+
+  IM_INSP {
+    VARCHAR2(20) INSP_ID PK "巡檢單號"
+    DATE INSP_DATE "巡檢日期時間"
+    VARCHAR2(30) INSP_BY "實際填寫人"
+    VARCHAR2(100) INSP_BY_NAME "填寫人名快照"
+    VARCHAR2(30) ACT_AS_ID "代理身分"
+    VARCHAR2(100) ACT_AS_NAME "代理身分名快照"
+    DATE SIGN_DATE "簽章結案時間"
+  }
+  IM_INSP_RESULT {
+    VARCHAR2(20) INSP_ID PK "巡檢單號"
+    VARCHAR2(10) INSP_ITEM_ID PK "巡檢項目"
+    VARCHAR2(100) ITEM_NAME_SNAP "項目名稱快照"
+    VARCHAR2(50) SECT_NAME_SNAP "大類名稱快照"
+    VARCHAR2(10) RESULT_CODE "巡檢結果"
+    VARCHAR2(500) EXCPT_DESCR "異常說明"
+    NUMBER(1) IS_FIXED "已標記處理"
+    VARCHAR2(500) FIX_DESCR "處理方式結果"
+    VARCHAR2(30) FIX_BY "實際處理人"
+    VARCHAR2(100) FIX_BY_NAME "處理人名快照"
+    VARCHAR2(30) FIX_ACT_AS_ID "處理代理身分"
+    VARCHAR2(100) FIX_ACT_AS_NAME "代理身分名快照"
+    DATE FIX_DATE "標記處理時間"
+  }
+  IM_INSP_ITEM {
+    VARCHAR2(10) INSP_ITEM_ID PK "項目代碼"
+    VARCHAR2(1) SECT_CODE "大類"
+    VARCHAR2(50) SECT_NAME "大類名稱"
+    VARCHAR2(100) ITEM_NAME "項目名稱"
+    VARCHAR2(200) ITEM_DESCR "項目說明"
+    NUMBER(3) SORT_SEQ "顯示排序"
+  }
+  IM_ACCT_NOTIFY_LOG {
+    NUMBER(12) NOTIFY_ID PK "通知流水號"
+    VARCHAR2(20) EVENT_CODE "通知事件"
+    VARCHAR2(10) REF_TYPE_CODE "參照類型"
+    VARCHAR2(40) REF_ID "參照鍵"
+    VARCHAR2(30) RCPT_USER_ID "收件人"
+    VARCHAR2(100) RCPT_EMAIL "寄出當下Email"
+    DATE SEND_DATE "寄送時間"
+    VARCHAR2(10) RESULT_CODE "寄送結果"
+    VARCHAR2(500) ERR_MSG "失敗原因"
+  }
+  IM_ACCT_JOB_RUN {
+    NUMBER(12) RUN_ID PK "執行流水號"
+    VARCHAR2(10) JOB_CODE "排程代碼"
+    VARCHAR2(30) RUN_BY "手動觸發者"
+    DATE BASE_DATE "基準日"
+    DATE START_DATE "開始時間"
+    DATE END_DATE "結束時間"
+    VARCHAR2(10) RESULT_CODE "執行結果"
+    NUMBER(6) AFFECTED_CNT "處理筆數"
+    VARCHAR2(1000) ERR_MSG "錯誤摘要"
+  }
+</pre></div>
+
+<!-- ============================================================ -->
+<h2 id="tables">各表欄位說明 <a class="top" href="#toc">回目錄</a></h2>
+<p class="note">欄位表省略共用五欄（見<a href="#intro">頁首說明</a>）；中文說明為 SQL <code>COMMENT ON COLUMN</code> 全文。</p>
+
+<h3 id="t-IM_ACCT_USER">1. IM_ACCT_USER 使用者 <a class="top" href="#toc">回目錄</a></h3>
+<p>使用者。本模組自建的登入使用者表；STATUS＝1 才能登入，並自動擁有 GENERAL 角色權限。與既有機房異動申請模組的使用者表各自獨立。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td class="pk">PK</td><td>工號（數字字串、最多 7 碼），即登入帳號</td></tr>
+<tr><td class="n">USER_EN_NAME</td><td class="n">VARCHAR2(50)</td><td class="c">Y</td><td></td><td>英文顯示名（例：Terry）</td></tr>
+<tr><td class="n">USER_NAME</td><td class="n">VARCHAR2(30 CHAR)</td><td class="c"></td><td></td><td>中文姓名（例：邱健唐）。畫面顯示格式「英文名 (中文名)」，空白時只顯示英文名</td></tr>
+<tr><td class="n">DEPT_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>部門</td></tr>
+<tr><td class="n">EMAIL</td><td class="n">VARCHAR2(100)</td><td class="c"></td><td></td><td>Email；空白者不收信（通知紀錄記 SKIP）</td></tr>
+<tr><td class="n">TEL_NO</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>分機／電話（例：#1614）</td></tr>
+<tr><td class="n">PWD_HASH</td><td class="n">VARCHAR2(200)</td><td class="c"></td><td></td><td>密碼雜湊，格式 PBKDF2$迭代次數$base64(salt)$base64(hash)（PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000）；空值＝不可登入。由雜湊工具產生，不存明文</td></tr>
+<tr><td class="n">PWD_UPDATE_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>密碼最後設定時間</td></tr>
+<tr><td class="n">LOGIN_FAIL_CNT</td><td class="n">NUMBER(2)</td><td class="c">Y</td><td></td><td>連續登入失敗次數；達 5 次寫 LOCK_DATE，登入成功歸 0。default 0</td></tr>
+<tr><td class="n">LOCK_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>鎖定時間；非空＝鎖定中（即使密碼正確也拒絕登入），DB 清空此欄並將 LOGIN_FAIL_CNT 歸 0 即解鎖</td></tr>
+<tr><td class="n">LAST_LOGIN_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>最後成功登入時間</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_USER（USER_ID）。</li>
+<li>參照：不參照其他表；被 IM_ACCT_ROLE_USER、IM_EXEC_MAP、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_ACCT、IM_ACCT_REQ、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN 的人員欄參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用（可登入、自動擁有 GENERAL 權限）、0＝停用（不可登入）。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_ROLE">2. IM_ACCT_ROLE 角色 <a class="top" href="#toc">回目錄</a></h3>
+<p>角色（帳號權限管理／機房巡檢專用）。角色經 IM_ACCT_ROLE_PERM 展開為權限碼，程式只判斷權限碼、不判斷角色名稱。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ROLE_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>角色代碼：SYS_ADMIN＝系統管理員、GENERAL＝一般人員（所有啟用中使用者自動擁有，不存 IM_ACCT_ROLE_USER）、DC_ADMIN＝機房管理員、INFRA_MGR＝Infra 主管、GOV＝資訊治理、GOV_MGR＝資訊治理主管、IT_HEAD＝資訊主管、ACCT_REGISTRY＝帳號清冊檢視、INSP_STAFF＝巡檢人員</td></tr>
+<tr><td class="n">ROLE_NAME</td><td class="n">VARCHAR2(30 CHAR)</td><td class="c">Y</td><td></td><td>角色名稱</td></tr>
+<tr><td class="n">ROLE_DESCR</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>職責說明</td></tr>
+<tr><td class="n">IS_SYSTEM</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>系統角色：1＝不可刪除（GENERAL、SYS_ADMIN）、0＝一般。default 0</td></tr>
+<tr><td class="n">SORT_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>顯示排序。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_ROLE（ROLE_ID）。</li>
+<li>參照：不參照其他表；被 IM_ACCT_ROLE_PERM.ROLE_ID、IM_ACCT_ROLE_USER.ROLE_ID 參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（停用的角色不計入權限）。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_PERM">3. IM_ACCT_PERM 權限碼 <a class="top" href="#toc">回目錄</a></h3>
+<p>權限碼。SA 4.3 的 26 個加上本案新增 ACC_EXPIRY_ALL、SYS_JOB_RUN，共 28 個一次建齊；程式以 can(身分, 權限碼) 判斷。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">PERM_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td class="pk">PK</td><td>權限碼（例：ACC_APPLY、APPR_G2、INSP_VIEW、SYS_IMPERSONATE），值域見 Table 規劃 6.2</td></tr>
+<tr><td class="n">PERM_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c">Y</td><td></td><td>權限名稱</td></tr>
+<tr><td class="n">MODULE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>所屬模組：ACCT＝帳號、INSP＝巡檢、SYS＝系統管理、REVIEW＝定期審查、EMG＝緊急存取、STATS＝統計</td></tr>
+<tr><td class="n">PHASE_CODE</td><td class="n">VARCHAR2(1)</td><td class="c">Y</td><td></td><td>上線階段：1＝第一階段、2＝第二階段、3＝後續評估</td></tr>
+<tr><td class="n">SORT_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>顯示排序。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_PERM（PERM_ID）。</li>
+<li>參照：不參照其他表；被 IM_ACCT_ROLE_PERM.PERM_ID、IM_ACCT_APPR_STAGE.PERM_ID 參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（停用的權限不計入）。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_ROLE_PERM">4. IM_ACCT_ROLE_PERM 角色權限對照 <a class="top" href="#toc">回目錄</a></h3>
+<p>角色權限對照。角色授予的權限碼；GENERAL 的權限以資料列存在，程式對每位啟用中使用者自動加上。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ROLE_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>角色代碼，參照 IM_ACCT_ROLE.ROLE_ID</td></tr>
+<tr><td class="n">PERM_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td class="pk">PK</td><td>權限碼，參照 IM_ACCT_PERM.PERM_ID</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_ROLE_PERM（ROLE_ID, PERM_ID）；IND_IM_ACCT_ROLE_PERM_01（PERM_ID）。</li>
+<li>參照：ROLE_ID → IM_ACCT_ROLE.ROLE_ID；PERM_ID → IM_ACCT_PERM.PERM_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（停用即不再授予）。default 1；CREATE_BY＝授予人員工號。</li>
+</ul>
+
+<h3 id="t-IM_ACCT_ROLE_USER">5. IM_ACCT_ROLE_USER 角色人員 <a class="top" href="#toc">回目錄</a></h3>
+<p>角色人員。一位人員可擁有多個角色；權限每次請求依當下名單判斷。不得存 GENERAL。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ROLE_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>角色代碼，參照 IM_ACCT_ROLE.ROLE_ID；不得存 GENERAL</td></tr>
+<tr><td class="n">USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td class="pk">PK</td><td>人員工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_ROLE_USER（ROLE_ID, USER_ID）；IND_IM_ACCT_ROLE_USER_01（USER_ID）。</li>
+<li>參照：ROLE_ID → IM_ACCT_ROLE.ROLE_ID；USER_ID → IM_ACCT_USER.USER_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（停用即不再具此角色）。default 1；CREATE_BY＝指派人員工號。</li>
+</ul>
+
+<h3 id="t-IM_EXEC_MAP">6. IM_EXEC_MAP 執行人對照 <a class="top" href="#toc">回目錄</a></h3>
+<p>執行人對照。帳號類別對應關卡 6（執行回報）的執行人，同類別多人時任一人可執行。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">CATG_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td class="pk">PK</td><td>帳號類別代碼，參照 IM_ACCT_CATG.CATG_ID</td></tr>
+<tr><td class="n">USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td class="pk">PK</td><td>執行人工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_EXEC_MAP（CATG_ID, USER_ID）；IND_IM_EXEC_MAP_01（USER_ID）。</li>
+<li>參照：CATG_ID → IM_ACCT_CATG.CATG_ID；USER_ID → IM_ACCT_USER.USER_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（停用即失效）。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_LOGIN_TOKEN">7. IM_ACCT_LOGIN_TOKEN 登入 token <a class="top" href="#toc">回目錄</a></h3>
+<p>登入 token。每次登入一列，DB 只存 token 的 SHA-256；同一人可多個 token 並存；切換身分狀態記於 ACT_AS_USER_ID。登入時間即 CREATE_DATE。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">TOKEN_HASH</td><td class="n">VARCHAR2(64)</td><td class="c">Y</td><td class="pk">PK</td><td>token 的 SHA-256（16 進位小寫 64 碼）；token 本身不入庫</td></tr>
+<tr><td class="n">USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>登入的實際使用者工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">ACT_AS_USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>切換身分中的代理身分工號，參照 IM_ACCT_USER.USER_ID；空＝未切換</td></tr>
+<tr><td class="n">EXPIRE_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最長時效到期時間（登入時間＋8 小時）</td></tr>
+<tr><td class="n">LAST_ACCESS_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最後使用時間；超過 30 分鐘未使用即失效</td></tr>
+<tr><td class="n">LOGOUT_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>登出時間；非空＝已作廢</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_LOGIN_TOKEN（TOKEN_HASH）；IND_IM_ACCT_LOGIN_TOKEN_01（USER_ID）。</li>
+<li>參照：USER_ID、ACT_AS_USER_ID → IM_ACCT_USER.USER_ID。</li>
+<li>共用欄差異：CREATE_BY＝建立人員工號（登入者本人）。</li>
+</ul>
+
+<h3 id="t-IM_ACCT_ADMIN_LOG">8. IM_ACCT_ADMIN_LOG 系統管理軌跡 <a class="top" href="#toc">回目錄</a></h3>
+<p>系統管理軌跡。只增不改；第一階段只記切換身分（IMPERSONATE）與切回（IMPERSONATE_END），無權限者嘗試切換記 DENY。主鍵取號序列 SEQ_IM_ACCT_ADMIN_LOG。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">LOG_ID</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td class="pk">PK</td><td>軌跡流水號（同秒事件以此排序）</td></tr>
+<tr><td class="n">ACT_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>發生時間（伺服器時間，含時分秒）</td></tr>
+<tr><td class="n">ACT_BY</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>實際操作人工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">ACT_BY_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c">Y</td><td></td><td>操作人顯示名快照（英文名 (中文名)）</td></tr>
+<tr><td class="n">ACTION_CODE</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>動作：IMPERSONATE＝切換身分、IMPERSONATE_END＝切回；預留 ROLE_GRANT、ROLE_REVOKE、EXEC_GRANT、EXEC_REVOKE</td></tr>
+<tr><td class="n">TARGET_USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>對象使用者工號（切換／切回的代理身分），參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">CONTENT_JSON</td><td class="n">VARCHAR2(2000 CHAR)</td><td class="c"></td><td></td><td>內容（修改前後，JSON 文字）；切換時記對象顯示名</td></tr>
+<tr><td class="n">REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>原因（日後角色指派必填；切換身分可空）</td></tr>
+<tr><td class="n">RESULT_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>結果：SUCCESS＝成功、DENY＝拒絕</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_ADMIN_LOG（LOG_ID）；IND_IM_ACCT_ADMIN_LOG_01（ACT_DATE）。</li>
+<li>參照：ACT_BY、TARGET_USER_ID → IM_ACCT_USER.USER_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_APPR_STAGE">9. IM_ACCT_APPR_STAGE 簽核關卡 <a class="top" href="#toc">回目錄</a></h3>
+<p>簽核關卡。帳號申請單的關卡 1～7 與各關所需權限；五種申請類型（新增、修改、停用、重新啟用、刪除）皆走 1～7 關。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">STAGE_ID</td><td class="n">NUMBER(2)</td><td class="c">Y</td><td class="pk">PK</td><td>關卡序號 1～7：1＝申請人送出、2＝機房管理員、3＝Infra 主管、4＝資訊治理、5＝資訊主管、6＝執行人、7＝資訊治理複驗</td></tr>
+<tr><td class="n">STAGE_NAME</td><td class="n">VARCHAR2(30 CHAR)</td><td class="c">Y</td><td></td><td>關卡名稱</td></tr>
+<tr><td class="n">STAGE_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>關卡類型：SUBMIT＝送出、APPR＝核准／退件、EXEC＝執行回報、VERIFY＝複驗</td></tr>
+<tr><td class="n">PERM_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>處理此關所需權限碼，參照 IM_ACCT_PERM.PERM_ID；關卡 1（送出者需 ACC_APPLY）、關卡 6（依 IM_EXEC_MAP）為空</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_APPR_STAGE（STAGE_ID）。</li>
+<li>參照：PERM_ID → IM_ACCT_PERM.PERM_ID（圖 A，跨圖不畫線）；被 IM_ACCT_REQ.CURR_STAGE_ID、IM_ACCT_HIST.STAGE_ID 參照。</li>
+</ul>
+
+<h3 id="t-IM_DOC_SEQ">10. IM_DOC_SEQ 單號流水號 <a class="top" href="#toc">回目錄</a></h3>
+<p>單號流水號。各類單據每日取號用，單號＝前綴 2 碼＋yyyymmdd＋「-」＋3 碼流水號（例 AR20261015-001），依前綴分開、每日從 001 起；唯一性由各業務表主鍵保證。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">DOC_TYPE_ID</td><td class="n">VARCHAR2(2)</td><td class="c">Y</td><td class="pk">PK</td><td>單據前綴：AR＝帳號申請單（新增申請的單號同時是帳號單號）、IN＝機房巡檢；EA＝緊急存取（第二階段預留，第一階段不取號）</td></tr>
+<tr><td class="n">SEQ_DATE</td><td class="n">VARCHAR2(8)</td><td class="c">Y</td><td class="pk">PK</td><td>取號日期 yyyymmdd</td></tr>
+<tr><td class="n">CURR_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>當日已用到的流水號。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_DOC_SEQ（DOC_TYPE_ID, SEQ_DATE）。</li>
+<li>參照：無欄位參照；AR 產生 IM_ACCT_REQ.REQ_ID（新增申請時亦為 IM_ACCT.ACCT_ID），IN 產生 IM_INSP.INSP_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_CATG">11. IM_ACCT_CATG 帳號類別 <a class="top" href="#toc">回目錄</a></h3>
+<p>帳號類別。帳號申請表單的 8 種類別；IS_ENABLED 控制新增表單是否可選（不影響既有帳號）；DOOR（機房門禁卡）有特殊欄位規則。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">CATG_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td class="pk">PK</td><td>帳號類別代碼：HOST＝主機帳號、DB＝資料庫帳號、APP＝應用系統帳號、SVC＝服務帳號、NET＝網路設備帳號、VENDOR＝廠商/委外帳號、CERT＝憑證/金鑰、DOOR＝機房門禁卡</td></tr>
+<tr><td class="n">CATG_NAME</td><td class="n">VARCHAR2(30 CHAR)</td><td class="c">Y</td><td></td><td>類別名稱</td></tr>
+<tr><td class="n">CATG_DESCR</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>類別說明（表單旁的範例文字）</td></tr>
+<tr><td class="n">IS_ENABLED</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>開放新增申請：1＝新增表單類別下拉可選、0＝不可選。只管新增；既有帳號照常可異動、列表照常顯示。default 0</td></tr>
+<tr><td class="n">IS_SUGGEST_EXPIRY</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>表單顯示「建議指定明確到期日」提示（非強制）：1＝顯示、0＝不顯示。default 0</td></tr>
+<tr><td class="n">SORT_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>顯示排序。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_CATG（CATG_ID）。</li>
+<li>參照：不參照其他表；被 IM_EXEC_MAP.CATG_ID、IM_ACCT.CATG_ID、IM_ACCT_REQ.CATG_ID 參照。</li>
+</ul>
+
+<h3 id="t-IM_ASSET_CLASS">12. IM_ASSET_CLASS 資產分類碼 <a class="top" href="#toc">回目錄</a></h3>
+<p>資產分類碼。依 SR-008-A04 資訊資產標示、保護與處置說明表的硬體／軟體分類碼，供申請表單選擇與資產分類說明頁顯示；「未分類」不建資料列，以 ASSET_CLASS_ID 為空表示。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ASSET_CLASS_ID</td><td class="n">VARCHAR2(5)</td><td class="c">Y</td><td class="pk">PK</td><td>資產分類碼（H01～H10、S01～S05）</td></tr>
+<tr><td class="n">ASSET_TYPE_CODE</td><td class="n">VARCHAR2(1)</td><td class="c">Y</td><td></td><td>資產類型：H＝硬體、S＝軟體</td></tr>
+<tr><td class="n">ASSET_CLASS_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c">Y</td><td></td><td>分類名稱（例：伺服器－與營運直接相關）</td></tr>
+<tr><td class="n">IS_REVIEW_TRIGGER</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>納入定期審查條件：1＝是（H01、H05、S01）、0＝否。程式以此欄判斷，不寫死代碼。default 0</td></tr>
+<tr><td class="n">IS_SELECTABLE</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>申請表單可選：1＝可選、0＝僅列於說明頁（H07、H10）。default 1</td></tr>
+<tr><td class="n">CTRL_DESCR</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>存取控制要求摘要（分類說明頁顯示）</td></tr>
+<tr><td class="n">SORT_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>顯示排序。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ASSET_CLASS（ASSET_CLASS_ID）。</li>
+<li>參照：不參照其他表；被 IM_ACCT.ASSET_CLASS_ID、IM_ACCT_REQ.ASSET_CLASS_ID 參照（可空＝未分類）。</li>
+</ul>
+
+<h3 id="t-IM_INSP_ITEM">13. IM_INSP_ITEM 巡檢項目 <a class="top" href="#toc">回目錄</a></h3>
+<p>巡檢項目。機房巡檢的檢查項目，STATUS 即 SA 的 is_active，1＝填寫巡檢時列出；停用不刪除。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">INSP_ITEM_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td class="pk">PK</td><td>巡檢項目代碼（A01～A10、B01～B04）</td></tr>
+<tr><td class="n">SECT_CODE</td><td class="n">VARCHAR2(1)</td><td class="c">Y</td><td></td><td>大類：A＝甲、機房環境設施；B＝乙、資訊設備狀態</td></tr>
+<tr><td class="n">SECT_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c">Y</td><td></td><td>大類名稱</td></tr>
+<tr><td class="n">ITEM_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c">Y</td><td></td><td>項目名稱</td></tr>
+<tr><td class="n">ITEM_DESCR</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>項目說明（初始為空，日後維護用）</td></tr>
+<tr><td class="n">SORT_SEQ</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>顯示排序。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_INSP_ITEM（INSP_ITEM_ID）。</li>
+<li>參照：不參照其他表；被 IM_INSP_RESULT.INSP_ITEM_ID 參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用（填寫巡檢時列出）、0＝停用。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT">14. IM_ACCT 帳號主表 <a class="top" href="#toc">回目錄</a></h3>
+<p>帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），之後只在關卡 6 執行回報時依申請內容更新。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ACCT_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>帳號單號＝建立它的新增申請 REQ_ID（AR 前綴）</td></tr>
+<tr><td class="n">CATG_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>帳號類別代碼，參照 IM_ACCT_CATG.CATG_ID</td></tr>
+<tr><td class="n">ACCT_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>帳號名稱；機房門禁卡為卡號，關卡 6 執行回報後才有值</td></tr>
+<tr><td class="n">SYS_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>所屬系統／設備名稱；機房門禁卡固定為「機房門禁管制系統」</td></tr>
+<tr><td class="n">DOOR_SCOPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>門禁權限範圍（僅機房門禁卡）：TEST＝僅測試區（第一道門）、FULL＝機房完整權限（兩道門）</td></tr>
+<tr><td class="n">ASSET_CLASS_ID</td><td class="n">VARCHAR2(5)</td><td class="c"></td><td></td><td>資產分類碼，參照 IM_ASSET_CLASS.ASSET_CLASS_ID；空值＝未分類（門禁卡固定空）</td></tr>
+<tr><td class="n">IS_PRIV</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>特權帳號：1＝是、0＝否。default 0</td></tr>
+<tr><td class="n">HOLDER_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>實際使用人／保管人</td></tr>
+<tr><td class="n">HOLDER_DEPT</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>使用人所屬單位</td></tr>
+<tr><td class="n">HOLDER_CNTCT</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>使用人聯絡方式（門禁卡不用）</td></tr>
+<tr><td class="n">HOLDER_EMAIL</td><td class="n">VARCHAR2(100)</td><td class="c"></td><td></td><td>使用人 Email（僅機房門禁卡）</td></tr>
+<tr><td class="n">ACCESS_LEVEL_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>權限範圍：RO＝唯讀、OP＝操作、ADMIN＝管理員（完全控制）、DOOR＝門禁通行權（機房門禁卡固定值）</td></tr>
+<tr><td class="n">ACCESS_TARGET</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>存取對象（門禁卡不用）</td></tr>
+<tr><td class="n">APPLY_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>最近一次生效申請的原因；歷次原因見 IM_ACCT_HIST</td></tr>
+<tr><td class="n">EXPIRY_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>有效期限類型：PERM＝永久有效、DATE＝指定到期日。default PERM</td></tr>
+<tr><td class="n">EXPIRY_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>到期日（EXPIRY_TYPE_CODE＝DATE 時必有值，時分秒為 0）</td></tr>
+<tr><td class="n">ACCT_STATE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>帳號狀態：REVIEW＝審核中、APPROVED＝已核准、EXPIRED＝已逾期、DISABLED＝已停用、REJECTED＝已退件、DELETED＝已刪除（與申請單狀態是不同集合）</td></tr>
+<tr><td class="n">SOURCE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>建立來源：APPLY＝新增申請；MIGRATE＝資料轉入（後續評估，預留）。default APPLY</td></tr>
+<tr><td class="n">APPLY_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>原新增申請人工號，參照 IM_ACCT_USER.USER_ID（之後的異動不覆蓋；資料轉入者為空）</td></tr>
+<tr><td class="n">LAST_REVIEW_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>上次審查日；第一階段於帳號生效且符合審查條件時寫入生效日</td></tr>
+<tr><td class="n">NEXT_REVIEW_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>下次應審查日＝LAST_REVIEW_DATE＋180 天</td></tr>
+<tr><td class="n">IS_REVIEW_FLAG</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>審查異常標記：1＝有異常、0＝正常（第二階段使用）。default 0</td></tr>
+<tr><td class="n">REVIEW_FLAG_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>審查異常原因（第二階段）</td></tr>
+<tr><td class="n">REVIEW_FLAG_SOURCE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>審查異常來源：REVIEW＝定期審查駁回、EMG＝緊急存取（第二階段）</td></tr>
+<tr><td class="n">REVIEW_FLAG_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>審查異常標記時間（第二階段）</td></tr>
+<tr><td class="n">REVIEW_FLAG_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>審查異常標記人工號（第二階段）</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT（ACCT_ID）；IND_IM_ACCT_01（ACCT_STATE_CODE, CATG_ID）、02（ACCT_NAME）、03（EXPIRY_DATE）、04（NEXT_REVIEW_DATE）、05（APPLY_BY）。</li>
+<li>參照：CATG_ID → IM_ACCT_CATG.CATG_ID；ASSET_CLASS_ID → IM_ASSET_CLASS.ASSET_CLASS_ID；APPLY_BY → IM_ACCT_USER.USER_ID；ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 同值。被 IM_ACCT_REQ.ACCT_ID、IM_ACCT_HIST.ACCT_ID 參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝啟用、0＝停用（業務狀態請用 ACCT_STATE_CODE）。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_REQ">15. IM_ACCT_REQ 帳號申請單 <a class="top" href="#toc">回目錄</a></h3>
+<p>帳號申請單。存申請的內容與簽核進度，在途期間不動主表；停用、刪除申請由主表複製當下內容（快照）。同一帳號同時只能有一筆在途申請。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">REQ_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>申請單號（AR 前綴）</td></tr>
+<tr><td class="n">ACCT_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td></td><td>目標帳號單號，參照 IM_ACCT.ACCT_ID；新增申請＝本單 REQ_ID</td></tr>
+<tr><td class="n">REQ_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>申請類型：ADD＝新增、MODIFY＝修改、DISABLE＝停用、ENABLE＝重新啟用、DELETE＝刪除</td></tr>
+<tr><td class="n">REQ_STATE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>申請單狀態：REVIEW＝審核中（關卡 2～5）、EXEC＝待執行（關卡 6）、VERIFY＝待複驗（關卡 7）、APPROVED＝已核准、REJECTED＝已退件。在途＝REVIEW、EXEC、VERIFY</td></tr>
+<tr><td class="n">CURR_STAGE_ID</td><td class="n">NUMBER(2)</td><td class="c"></td><td></td><td>目前關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID：REVIEW＝2～5、EXEC＝6、VERIFY＝7；APPROVED、REJECTED 為空</td></tr>
+<tr><td class="n">APPLY_BY</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>申請人工號，參照 IM_ACCT_USER.USER_ID（切換身分時為代理身分）</td></tr>
+<tr><td class="n">APPLY_DEPT</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c">Y</td><td></td><td>申請單位</td></tr>
+<tr><td class="n">APPLY_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>申請日期＝第一次送出的系統時間，唯讀、重送不變</td></tr>
+<tr><td class="n">CATG_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>申請內容－帳號類別代碼，參照 IM_ACCT_CATG.CATG_ID</td></tr>
+<tr><td class="n">ACCT_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>申請內容－帳號名稱；機房門禁卡為卡號，關卡 6 執行回報後才有值</td></tr>
+<tr><td class="n">SYS_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>申請內容－所屬系統／設備名稱；機房門禁卡固定為「機房門禁管制系統」</td></tr>
+<tr><td class="n">DOOR_SCOPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>申請內容－門禁權限範圍（僅機房門禁卡）：TEST＝僅測試區（第一道門）、FULL＝機房完整權限（兩道門）</td></tr>
+<tr><td class="n">ASSET_CLASS_ID</td><td class="n">VARCHAR2(5)</td><td class="c"></td><td></td><td>申請內容－資產分類碼，參照 IM_ASSET_CLASS.ASSET_CLASS_ID；空值＝未分類（門禁卡固定空）</td></tr>
+<tr><td class="n">IS_PRIV</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>申請內容－特權帳號：1＝是、0＝否。default 0</td></tr>
+<tr><td class="n">HOLDER_NAME</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>申請內容－實際使用人／保管人</td></tr>
+<tr><td class="n">HOLDER_DEPT</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>申請內容－使用人所屬單位</td></tr>
+<tr><td class="n">HOLDER_CNTCT</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>申請內容－使用人聯絡方式（門禁卡不用）</td></tr>
+<tr><td class="n">HOLDER_EMAIL</td><td class="n">VARCHAR2(100)</td><td class="c"></td><td></td><td>申請內容－使用人 Email（僅機房門禁卡）</td></tr>
+<tr><td class="n">ACCESS_LEVEL_CODE</td><td class="n">VARCHAR2(10)</td><td class="c"></td><td></td><td>申請內容－權限範圍：RO＝唯讀、OP＝操作、ADMIN＝管理員（完全控制）、DOOR＝門禁通行權（機房門禁卡固定值）</td></tr>
+<tr><td class="n">ACCESS_TARGET</td><td class="n">VARCHAR2(200 CHAR)</td><td class="c"></td><td></td><td>申請內容－存取對象（門禁卡不用）</td></tr>
+<tr><td class="n">APPLY_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>申請內容－申請原因（刪除申請時為刪除原因）</td></tr>
+<tr><td class="n">EXPIRY_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>申請內容－有效期限類型：PERM＝永久有效、DATE＝指定到期日。default PERM</td></tr>
+<tr><td class="n">EXPIRY_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>申請內容－到期日（EXPIRY_TYPE_CODE＝DATE 時必有值，時分秒為 0）</td></tr>
+<tr><td class="n">IS_UNIQUE_CONF</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>帳號唯一性聲明已勾選：1＝已勾選、0＝未勾選。default 0</td></tr>
+<tr><td class="n">SUBMIT_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最近一次送出時間（重送時更新）</td></tr>
+<tr><td class="n">RESUB_CNT</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>重新送出次數。default 0</td></tr>
+<tr><td class="n">REJECT_CNT</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>被退件次數（關卡 2～5）。default 0</td></tr>
+<tr><td class="n">REJECT_STAGE_ID</td><td class="n">NUMBER(2)</td><td class="c"></td><td></td><td>最近一次退件關卡</td></tr>
+<tr><td class="n">REJECT_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>最近一次退件人工號</td></tr>
+<tr><td class="n">REJECT_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>最近一次退件時間</td></tr>
+<tr><td class="n">REJECT_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>最近一次退件原因</td></tr>
+<tr><td class="n">EXEC_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>最近一次回報執行完畢的執行人工號</td></tr>
+<tr><td class="n">EXEC_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>最近一次回報執行完畢時間</td></tr>
+<tr><td class="n">EXEC_DESCR</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>執行說明（選填）</td></tr>
+<tr><td class="n">CARD_NO</td><td class="n">VARCHAR2(50)</td><td class="c"></td><td></td><td>門禁卡號（門禁卡新增申請於關卡 6 必填）</td></tr>
+<tr><td class="n">EFFECT_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>生效時間＝第一次回報執行完畢的時間；之後不覆寫</td></tr>
+<tr><td class="n">VERIFY_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>複驗通過人工號</td></tr>
+<tr><td class="n">VERIFY_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>複驗通過時間</td></tr>
+<tr><td class="n">VERIFY_REJECT_CNT</td><td class="n">NUMBER(3)</td><td class="c">Y</td><td></td><td>複驗退回次數。default 0</td></tr>
+<tr><td class="n">VERIFY_REJECT_REASON</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>最近一次複驗退回原因</td></tr>
+<tr><td class="n">DONE_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>結案時間＝關卡 7 複驗通過時間</td></tr>
+<tr><td class="n">VERSION_NO</td><td class="n">NUMBER(9)</td><td class="c">Y</td><td></td><td>樂觀鎖版本號；每次狀態變更＋1。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_REQ（REQ_ID）；IND_IM_ACCT_REQ_01（ACCT_ID）、02（REQ_STATE_CODE, CURR_STAGE_ID）、03（APPLY_BY, SUBMIT_DATE）；04 為 UNIQUE 函式索引 <code>CASE WHEN REQ_STATE_CODE IN ('REVIEW','EXEC','VERIFY') THEN ACCT_ID END</code>，保證同一帳號同時只能有一筆在途申請。</li>
+<li>參照：ACCT_ID → IM_ACCT.ACCT_ID；CURR_STAGE_ID → IM_ACCT_APPR_STAGE.STAGE_ID；CATG_ID → IM_ACCT_CATG.CATG_ID；ASSET_CLASS_ID → IM_ASSET_CLASS.ASSET_CLASS_ID；APPLY_BY → IM_ACCT_USER.USER_ID。REJECT_STAGE_ID 值域同 STAGE_ID、REJECT_BY／EXEC_BY／VERIFY_BY 存工號（COMMENT 未標參照，屬慣例對應，圖中不畫線）。被 IM_ACCT_ATTACH.REQ_ID、IM_ACCT_HIST.REQ_ID 參照。</li>
+</ul>
+
+<h3 id="t-IM_ACCT_ATTACH">16. IM_ACCT_ATTACH 申請單附件 <a class="top" href="#toc">回目錄</a></h3>
+<p>申請單附件。關卡 1 的公文與關卡 6 的執行佐證；被新檔取代的舊檔 STATUS＝0（檔案保留）。上傳人與時間即 CREATE_BY、CREATE_DATE。主鍵取號序列 SEQ_IM_ACCT_ATTACH。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">ATTACH_ID</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td class="pk">PK</td><td>附件流水號</td></tr>
+<tr><td class="n">REQ_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td></td><td>申請單號，參照 IM_ACCT_REQ.REQ_ID</td></tr>
+<tr><td class="n">ATTACH_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>附件類型：DOC＝公文（關卡 1）、PROOF＝執行佐證（關卡 6）</td></tr>
+<tr><td class="n">FILE_NAME</td><td class="n">VARCHAR2(255 CHAR)</td><td class="c">Y</td><td></td><td>原始檔名</td></tr>
+<tr><td class="n">FILE_PATH</td><td class="n">VARCHAR2(500)</td><td class="c">Y</td><td></td><td>相對於附件根目錄的路徑：REQ_ID/uuid.副檔名</td></tr>
+<tr><td class="n">FILE_SIZE</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td></td><td>檔案大小（byte）</td></tr>
+<tr><td class="n">MIME_TYPE</td><td class="n">VARCHAR2(100)</td><td class="c">Y</td><td></td><td>依副檔名決定的 MIME 類型</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_ATTACH（ATTACH_ID）；IND_IM_ACCT_ATTACH_01（REQ_ID）。</li>
+<li>參照：REQ_ID → IM_ACCT_REQ.REQ_ID。</li>
+<li>共用欄差異：STATUS＝資料狀態：1＝有效、0＝已被新檔取代（檔案保留）。default 1；CREATE_BY＝上傳人員工號。</li>
+</ul>
+
+<h3 id="t-IM_ACCT_HIST">17. IM_ACCT_HIST 帳號歷史事件 <a class="top" href="#toc">回目錄</a></h3>
+<p>帳號歷史事件。帳號從申請到異動的所有事件，依 ACT_DATE、HIST_ID 排序顯示；只增不改，程式不提供更新、刪除路徑。主鍵取號序列 SEQ_IM_ACCT_HIST。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">HIST_ID</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td class="pk">PK</td><td>歷史流水號（同秒事件以此排序）</td></tr>
+<tr><td class="n">ACCT_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td></td><td>帳號單號，參照 IM_ACCT.ACCT_ID</td></tr>
+<tr><td class="n">REQ_ID</td><td class="n">VARCHAR2(20)</td><td class="c"></td><td></td><td>來源申請單號（SOURCE_CODE＝REQ 時），參照 IM_ACCT_REQ.REQ_ID</td></tr>
+<tr><td class="n">EMG_ID</td><td class="n">VARCHAR2(20)</td><td class="c"></td><td></td><td>來源緊急存取單號（第二階段預留）</td></tr>
+<tr><td class="n">REVIEW_ID</td><td class="n">NUMBER(12)</td><td class="c"></td><td></td><td>來源定期審查流水號（第二階段預留）</td></tr>
+<tr><td class="n">SOURCE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>事件來源：REQ＝簽核流程、SYS＝系統排程；EMG＝緊急存取、REVIEW＝定期審查（第二階段預留）</td></tr>
+<tr><td class="n">ACTION_CODE</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td></td><td>動作：SUBMIT＝送出申請、RESUB＝重新送出、APPROVE＝核准、REJECT＝退件、EXEC_DONE＝回報執行完畢（帳號生效）、VERIFY_OK＝複驗通過、VERIFY_REJECT＝複驗退回、EXPIRE＝到期轉為已逾期；第二階段預留 REVIEW_DONE、REVIEW_REJECT、FLAG_CLEAR、EMG_MODIFY、EMG_CLOSE_MODIFY</td></tr>
+<tr><td class="n">STAGE_ID</td><td class="n">NUMBER(2)</td><td class="c"></td><td></td><td>發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空</td></tr>
+<tr><td class="n">ACT_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>實際操作人工號，參照 IM_ACCT_USER.USER_ID；系統排程為空</td></tr>
+<tr><td class="n">ACT_BY_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c">Y</td><td></td><td>實際操作人顯示名快照（英文名 (中文名)）；系統排程為「系統排程」</td></tr>
+<tr><td class="n">ACT_AS_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>代理身分工號（切換身分時），參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">ACT_AS_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>代理身分顯示名快照</td></tr>
+<tr><td class="n">ACT_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>發生時間（伺服器時間，含時分秒）</td></tr>
+<tr><td class="n">APPLY_DEPT</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c"></td><td></td><td>申請單位快照（僅 SOURCE_CODE＝REQ）</td></tr>
+<tr><td class="n">RESULT_DESCR</td><td class="n">VARCHAR2(1000 CHAR)</td><td class="c"></td><td></td><td>結果文字（送出時含申請原因、退件時含原因）</td></tr>
+<tr><td class="n">IS_SELF_ACTION</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>自行核准／同人兼任旗標：1＝是、0＝否。default 0</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_HIST（HIST_ID）；IND_IM_ACCT_HIST_01（ACCT_ID, ACT_DATE）、02（REQ_ID）。</li>
+<li>參照：ACCT_ID → IM_ACCT.ACCT_ID；REQ_ID → IM_ACCT_REQ.REQ_ID；STAGE_ID → IM_ACCT_APPR_STAGE.STAGE_ID；ACT_BY、ACT_AS_ID → IM_ACCT_USER.USER_ID。EMG_ID、REVIEW_ID 預留給第二階段的表（尚未建立）。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1；CREATE_BY＝建立人員工號（實際操作人；系統排程寫 SYSTEM）。</li>
+</ul>
+
+<h3 id="t-IM_INSP">18. IM_INSP 巡檢單 <a class="top" href="#toc">回目錄</a></h3>
+<p>巡檢單。每次機房巡檢一筆，送出即簽章結案；整體狀態（NORMAL 正常結案、EXCPT 有異常、FIXED 異常已排除）不存欄位，由 IM_INSP_RESULT 即時計算。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">INSP_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>巡檢單號（IN 前綴）</td></tr>
+<tr><td class="n">INSP_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>巡檢日期時間（預設當下，可調整）</td></tr>
+<tr><td class="n">INSP_BY</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>實際填寫人工號，參照 IM_ACCT_USER.USER_ID（切換身分時為切換前的本人）</td></tr>
+<tr><td class="n">INSP_BY_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c">Y</td><td></td><td>實際填寫人顯示名快照</td></tr>
+<tr><td class="n">ACT_AS_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>代理身分工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">ACT_AS_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>代理身分顯示名快照</td></tr>
+<tr><td class="n">SIGN_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>送出（簽章結案）時間＝系統時間</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_INSP（INSP_ID）；IND_IM_INSP_01（INSP_DATE）。</li>
+<li>參照：INSP_BY、ACT_AS_ID → IM_ACCT_USER.USER_ID（圖 A，跨圖不畫線）；被 IM_INSP_RESULT.INSP_ID 參照。</li>
+</ul>
+
+<h3 id="t-IM_INSP_RESULT">19. IM_INSP_RESULT 巡檢結果明細 <a class="top" href="#toc">回目錄</a></h3>
+<p>巡檢結果明細。每張巡檢單每個啟用中項目一筆，項目與大類名稱存送出當下快照；異常項目可標記已處理。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">INSP_ID</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td class="pk">PK</td><td>巡檢單號，參照 IM_INSP.INSP_ID</td></tr>
+<tr><td class="n">INSP_ITEM_ID</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td class="pk">PK</td><td>巡檢項目代碼，參照 IM_INSP_ITEM.INSP_ITEM_ID</td></tr>
+<tr><td class="n">ITEM_NAME_SNAP</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c">Y</td><td></td><td>送出當下的項目名稱快照；畫面顯示以此為準</td></tr>
+<tr><td class="n">SECT_NAME_SNAP</td><td class="n">VARCHAR2(50 CHAR)</td><td class="c">Y</td><td></td><td>送出當下的大類名稱快照</td></tr>
+<tr><td class="n">RESULT_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>巡檢結果：NORMAL＝正常、EXCPT＝異常</td></tr>
+<tr><td class="n">EXCPT_DESCR</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>異常說明（EXCPT 必填）</td></tr>
+<tr><td class="n">IS_FIXED</td><td class="n">NUMBER(1)</td><td class="c">Y</td><td></td><td>已標記處理：1＝已處理、0＝未處理；NORMAL 固定 0。default 0</td></tr>
+<tr><td class="n">FIX_DESCR</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>處理方式與結果</td></tr>
+<tr><td class="n">FIX_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>實際處理人工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">FIX_BY_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>實際處理人顯示名快照</td></tr>
+<tr><td class="n">FIX_ACT_AS_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>處理時的代理身分工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">FIX_ACT_AS_NAME</td><td class="n">VARCHAR2(100 CHAR)</td><td class="c"></td><td></td><td>處理時的代理身分顯示名快照</td></tr>
+<tr><td class="n">FIX_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>標記處理時間</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_INSP_RESULT（INSP_ID, INSP_ITEM_ID）；IND_IM_INSP_RESULT_01（RESULT_CODE, IS_FIXED）。</li>
+<li>參照：INSP_ID → IM_INSP.INSP_ID；INSP_ITEM_ID → IM_INSP_ITEM.INSP_ITEM_ID；FIX_BY、FIX_ACT_AS_ID → IM_ACCT_USER.USER_ID（跨圖不畫線）。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1</li>
+</ul>
+
+<h3 id="t-IM_ACCT_NOTIFY_LOG">20. IM_ACCT_NOTIFY_LOG 通知紀錄 <a class="top" href="#toc">回目錄</a></h3>
+<p>通知紀錄。每位收件人每封信一筆；排程類通知以 EVENT_CODE＋REF_ID＋RCPT_USER_ID 判斷是否已寄過。主鍵取號序列 SEQ_IM_ACCT_NOTIFY_LOG。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">NOTIFY_ID</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td class="pk">PK</td><td>通知流水號</td></tr>
+<tr><td class="n">EVENT_CODE</td><td class="n">VARCHAR2(20)</td><td class="c">Y</td><td></td><td>通知事件：SUBMIT＝申請送出、RESUB＝重新送出、NEXT_STAGE＝進入下一關（關卡 2～4 核准）、TO_EXEC＝待執行（關卡 5 核准）、REJECT＝退件、EXEC_DONE＝回報執行完畢、VERIFY_REJECT＝複驗退回、EXPIRY_7D＝到期前 7 天、EXPIRED＝轉為已逾期、WEEKLY_SUMMARY＝每週一彙總、JOB_FAIL＝排程失敗</td></tr>
+<tr><td class="n">REF_TYPE_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>參照類型：REQ＝申請單、ACCT＝帳號、WEEK＝週彙總、JOB＝排程</td></tr>
+<tr><td class="n">REF_ID</td><td class="n">VARCHAR2(40)</td><td class="c">Y</td><td></td><td>參照鍵：REQ＝REQ_ID；ACCT＝ACCT_ID_到期日yyyymmdd（到期日改變即視為新的一輪）；WEEK＝該週一 yyyymmdd；JOB＝RUN_ID</td></tr>
+<tr><td class="n">RCPT_USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>收件人工號，參照 IM_ACCT_USER.USER_ID</td></tr>
+<tr><td class="n">RCPT_EMAIL</td><td class="n">VARCHAR2(100)</td><td class="c"></td><td></td><td>寄出當下的 Email；SKIP 時為空</td></tr>
+<tr><td class="n">SEND_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>寄送（嘗試）時間</td></tr>
+<tr><td class="n">RESULT_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>寄送結果：SUCCESS＝已寄出、FAIL＝寄送失敗、SKIP＝收件人無 Email 略過</td></tr>
+<tr><td class="n">ERR_MSG</td><td class="n">VARCHAR2(500 CHAR)</td><td class="c"></td><td></td><td>失敗原因（不含帳密）</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_NOTIFY_LOG（NOTIFY_ID）；IND_IM_ACCT_NOTIFY_LOG_01（EVENT_CODE, REF_ID, RCPT_USER_ID）。</li>
+<li>參照：RCPT_USER_ID → IM_ACCT_USER.USER_ID；REF_ID 依 REF_TYPE_CODE 多型參照：REQ → IM_ACCT_REQ.REQ_ID、ACCT → IM_ACCT.ACCT_ID（加到期日後綴）、JOB → IM_ACCT_JOB_RUN.RUN_ID、WEEK 不參照表。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1；CREATE_BY＝建立人員工號（系統排程寫 SYSTEM）。</li>
+</ul>
+
+<h3 id="t-IM_ACCT_JOB_RUN">21. IM_ACCT_JOB_RUN 排程執行紀錄 <a class="top" href="#toc">回目錄</a></h3>
+<p>排程執行紀錄。每次排程或手動觸發一筆。主鍵取號序列 SEQ_IM_ACCT_JOB_RUN。</p>
+<div class="tbl-wrap"><table>
+<tr><th>欄名</th><th>型別</th><th>必填</th><th>PK</th><th>中文說明</th></tr>
+<tr><td class="n">RUN_ID</td><td class="n">NUMBER(12)</td><td class="c">Y</td><td class="pk">PK</td><td>執行流水號</td></tr>
+<tr><td class="n">JOB_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>排程代碼：J01＝到期處理、J02＝每週彙總；J03、J04 第二階段預留</td></tr>
+<tr><td class="n">RUN_BY</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>手動觸發者工號，參照 IM_ACCT_USER.USER_ID；排程觸發為空</td></tr>
+<tr><td class="n">BASE_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>本次執行採用的「今天」（手動指定基準日時記指定值）</td></tr>
+<tr><td class="n">START_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>開始時間</td></tr>
+<tr><td class="n">END_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>結束時間</td></tr>
+<tr><td class="n">RESULT_CODE</td><td class="n">VARCHAR2(10)</td><td class="c">Y</td><td></td><td>執行結果：RUNNING＝執行中、SUCCESS＝成功、PARTIAL＝部分失敗、FAIL＝失敗</td></tr>
+<tr><td class="n">AFFECTED_CNT</td><td class="n">NUMBER(6)</td><td class="c">Y</td><td></td><td>處理筆數（J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數；J02＝彙總列出的帳號數，本週已寄過則為 0）。default 0</td></tr>
+<tr><td class="n">ERR_MSG</td><td class="n">VARCHAR2(1000 CHAR)</td><td class="c"></td><td></td><td>錯誤摘要（失敗筆的帳號與例外類別）</td></tr>
+</table></div>
+<ul class="ref">
+<li>索引：PK_IM_ACCT_JOB_RUN（RUN_ID）；IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。</li>
+<li>參照：RUN_BY → IM_ACCT_USER.USER_ID（跨圖不畫線）；被 IM_ACCT_NOTIFY_LOG.REF_ID（REF_TYPE_CODE＝JOB）參照。</li>
+<li>共用欄差異：STATUS＝資料狀態：固定 1。default 1；CREATE_BY＝建立人員工號（排程觸發寫 SYSTEM）。</li>
+</ul>
+
+</main>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: 'loose',
+    theme: 'dark',
+    er: { useMaxWidth: false },
+    themeVariables: { fontFamily: '"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif' }
+  });
+</script>
+</body>
+</html>

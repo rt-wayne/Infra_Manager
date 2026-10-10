@@ -1,0 +1,156 @@
+package com.mpx.im_acct_insp.dao;
+
+// ============================================================
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-07
+// 變更說明: 新增：SQL 常數與代碼常數掃描（取代 ExistingUserTableSqlTest；spec v2.0 §1.5、§3、Table v0.2 第 11 節）
+//           所有 DAO 的 SQL 常數：不得引用既有模組 IM_USER 或任何 RD_USER. 限定名稱、不得用 SYSDATE（業務時間由 Clock 綁定）、
+//           不得出現已廢除的代碼（EXTEND、VOID、CONFIRM、NA、TO_EXEC、EXTEND_DONE、FLAG_CLEAR、IMPORT）與已刪欄位
+//           （ORIG_REQ_ID、ORIG_ACCT_ID、NEW_ACCT_ID、IMPORT_ID、DISABLE_TYPE_CODE、REVIEW_BASIS_CODE、IS_DIRECT、IS_SHOW、
+//           APPLY_TEL_NO、APPLY_EMAIL、INSP_STATE_CODE 欄位寫入）；AcctConst 的字串常數也不得含已廢除代碼；
+//           Controller 除 POST /auth/login 外每個 API 方法都宣告 Identity（＝都驗 token）
+// ============================================================
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import com.mpx.im_acct_insp.common.AcctConst;
+import com.mpx.im_acct_insp.common.Identity;
+import com.mpx.im_acct_insp.controller.AccountController;
+import com.mpx.im_acct_insp.controller.AttachmentController;
+import com.mpx.im_acct_insp.controller.AuthController;
+import com.mpx.im_acct_insp.controller.HomeController;
+import com.mpx.im_acct_insp.controller.InspectionController;
+import com.mpx.im_acct_insp.controller.JobController;
+import com.mpx.im_acct_insp.controller.RequestController;
+
+class SqlConstantScanTest {
+
+	static final List<Class<?>> DAOS = List.of(AcctDao.class, AcctHistDao.class, AcctReqDao.class, AdminLogDao.class,
+			AttachDao.class, CodeDao.class, DocSeqDao.class, HomeDao.class, InspDao.class, JobRunDao.class, LoginTokenDao.class,
+			NotifyLogDao.class, PermDao.class, UserDao.class);
+
+	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AttachmentController.class, AuthController.class,
+			HomeController.class, InspectionController.class, JobController.class, RequestController.class);
+
+	/** 既有模組使用者表（IM_ACCT_USER 不算） */
+	static final Pattern IM_USER = Pattern.compile("(?<![\\w])IM_USER\\b");
+	static final Pattern RD_USER = Pattern.compile("\\bRD_USER\\.");
+	static final Pattern SYSDATE = Pattern.compile("\\bSYSDATE\\b");
+	static final Pattern ABOLISHED_CODE = Pattern.compile("'(EXTEND|VOID|CONFIRM|NA|TO_EXEC|EXTEND_DONE|FLAG_CLEAR|IMPORT\\w*)'");
+	static final Pattern ABOLISHED_COLUMN = Pattern.compile(
+			"\\b(ORIG_REQ_ID|ORIG_ACCT_ID|NEW_ACCT_ID|IMPORT_ID|DISABLE_TYPE_CODE|REVIEW_BASIS_CODE|IS_DIRECT|IS_SHOW|APPLY_TEL_NO|APPLY_EMAIL|EXCPT_CNT\\s*,\\s*INSP_STATE_CODE)\\b");
+
+	static Map<String, String> constants(List<Class<?>> classes) throws IllegalAccessException {
+		Map<String, String> m = new LinkedHashMap<>();
+		for (Class<?> c : classes) {
+			for (Field f : c.getDeclaredFields()) {
+				if (Modifier.isStatic(f.getModifiers()) && Modifier.isFinal(f.getModifiers()) && f.getType() == String.class) {
+					f.setAccessible(true);
+					m.put(c.getSimpleName() + "." + f.getName(), (String) f.get(null));
+				}
+			}
+		}
+		return m;
+	}
+
+	@Test
+	void DAO_SQL常數_不引用既有模組使用者表_不用SYSDATE_無已廢除代碼與欄位() throws Exception {
+		Map<String, String> sqls = constants(DAOS);
+		assertThat(sqls).hasSizeGreaterThan(60);
+		List<String> bad = new ArrayList<>();
+		for (Map.Entry<String, String> e : sqls.entrySet()) {
+			String s = e.getValue();
+			if (IM_USER.matcher(s).find()) {
+				bad.add(e.getKey() + " 引用 IM_USER");
+			}
+			if (RD_USER.matcher(s).find()) {
+				bad.add(e.getKey() + " 使用 RD_USER. 限定名稱");
+			}
+			if (SYSDATE.matcher(s).find()) {
+				bad.add(e.getKey() + " 使用 SYSDATE");
+			}
+			if (ABOLISHED_CODE.matcher(s).find()) {
+				bad.add(e.getKey() + " 含已廢除代碼");
+			}
+			if (ABOLISHED_COLUMN.matcher(s).find()) {
+				bad.add(e.getKey() + " 含已刪欄位");
+			}
+		}
+		assertThat(bad).isEmpty();
+	}
+
+	@Test
+	void 人員姓名一律取IM_ACCT_USER或快照() {
+		assertThat(AcctReqDao.FIND_BY_ID).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = R.APPLY_BY");
+		assertThat(AcctHistDao.FIND_BY_ACCT).contains("H.ACT_BY_NAME").doesNotContain("IM_ACCT_USER");
+		assertThat(InspDao.INSP_SUMMARY).contains("I.INSP_BY_NAME").doesNotContain("IM_ACCT_USER");
+	}
+
+	@Test
+	void 樂觀鎖_狀態轉移都帶版本與預期狀態並遞增版本() {
+		for (String sql : List.of(AcctReqDao.UPDATE_APPROVE, AcctReqDao.UPDATE_REJECT, AcctReqDao.UPDATE_EXEC_DONE,
+				AcctReqDao.UPDATE_VERIFY_OK, AcctReqDao.UPDATE_VERIFY_REJECT, AcctReqDao.UPDATE_RESUBMIT)) {
+			assertThat(sql).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
+					.contains("REQ_STATE_CODE =").contains("CURR_STAGE_ID");
+		}
+		assertThat(AcctReqDao.UPDATE_EXEC_DONE).contains("EFFECT_DATE = NVL(EFFECT_DATE, :now)");
+		assertThat(AcctReqDao.UPDATE_REJECT).contains("REJECT_CNT = REJECT_CNT + 1");
+		assertThat(AcctReqDao.UPDATE_VERIFY_REJECT).contains("VERIFY_REJECT_CNT = VERIFY_REJECT_CNT + 1");
+		assertThat(AcctReqDao.UPDATE_RESUBMIT).doesNotContain("APPLY_DATE");
+	}
+
+	@Test
+	void 代碼常數_無已廢除值() throws Exception {
+		List<String> abolished = List.of("EXTEND", "VOID", "CONFIRM", "NA", "EXTEND_DONE", "FLAG_CLEAR", "AC", "AI",
+				"EM", "RD_USER.IM_USER");
+		for (Map.Entry<String, String> e : constants(List.of(AcctConst.class)).entrySet()) {
+			assertThat(abolished).as(e.getKey()).doesNotContain(e.getValue());
+		}
+		assertThat(AcctConst.REQ_TYPES).containsExactly("ADD", "MODIFY", "DISABLE", "ENABLE", "DELETE");
+		assertThat(AcctConst.REQ_STATES).containsExactly("REVIEW", "EXEC", "VERIFY", "APPROVED", "REJECTED");
+		assertThat(AcctConst.ACCT_STATES).containsExactly("REVIEW", "APPROVED", "EXPIRED", "DISABLED", "REJECTED", "DELETED");
+		assertThat(AcctConst.RESULT_CODES).containsExactly("NORMAL", "EXCPT");
+		assertThat(AcctConst.STAGE_EXEC).isEqualTo(6);
+		assertThat(AcctConst.STAGE_VERIFY).isEqualTo(7);
+	}
+
+	@Test
+	void Controller_除登入外每個API都宣告Identity() {
+		List<String> missing = new ArrayList<>();
+		int apis = 0;
+		for (Class<?> c : CONTROLLERS) {
+			for (Method m : c.getDeclaredMethods()) {
+				boolean api = m.isAnnotationPresent(GetMapping.class) || m.isAnnotationPresent(PostMapping.class)
+						|| m.isAnnotationPresent(PutMapping.class) || m.isAnnotationPresent(DeleteMapping.class)
+						|| m.isAnnotationPresent(RequestMapping.class);
+				if (!api) {
+					continue;
+				}
+				apis++;
+				boolean login = c == AuthController.class && m.getName().equals("login");
+				boolean hasId = List.of(m.getParameterTypes()).contains(Identity.class);
+				if (login == hasId) {
+					missing.add(c.getSimpleName() + "." + m.getName());
+				}
+			}
+		}
+		assertThat(apis).isEqualTo(32);
+		assertThat(missing).isEmpty();
+	}
+}
