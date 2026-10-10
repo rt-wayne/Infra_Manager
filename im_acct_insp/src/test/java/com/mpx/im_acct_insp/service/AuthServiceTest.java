@@ -2,9 +2,10 @@ package com.mpx.im_acct_insp.service;
 
 // ============================================================
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
-// 修改日期: 2026-10-07
+// 修改日期: 2026-10-10
 // 變更說明: 新增：登入、token 時效、切換身分單元測試（spec v2.0 §2.1、§2.5、§6.2；驗收 T01、T02、T13）
 //           登入：工號不存在／停用仍做雜湊計算後 A01、鎖定 A02（即使密碼正確）、密碼錯累加失敗次數、成功發 token（DB 只存 SHA-256）；
+//           修改：查詢後才被鎖定（成功或失敗計數 UPDATE 影響 0 筆）→ A02、不發 token、不補 dummyHash；
 //           token：未帶／亂碼／已登出／閒置超過 30 分／登入超過 8 小時／使用者停用皆 401 A03，LAST_ACCESS_DATE 每 60 秒最多寫一次，
 //           代理身分停用自動切回；切換身分：無 SYS_IMPERSONATE 403 並寫 DENY、不可切自己、切換與軌跡同一交易、
 //           切換中仍以實際使用者權限判斷可改切別人；切回未切換中 409 E20；/me 回 telNo、email（有效身分）
@@ -80,6 +81,8 @@ class AuthServiceTest {
 			when(fx.permDao.findExecCatgs(u)).thenReturn(TestFixture.USER_EXEC.getOrDefault(u, List.of()));
 		}
 		when(tokenDao.setActAs(anyString(), any(), anyString(), any())).thenReturn(1);
+		when(userDao.loginOk(anyString(), any())).thenReturn(1);
+		when(userDao.loginFail(anyString(), org.mockito.ArgumentMatchers.anyInt(), any())).thenReturn(1);
 	}
 
 	// ------------------------------------------------------------
@@ -126,9 +129,29 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void 登入_查詢時未鎖定但成功更新影響0筆_A02且不發token() {
+		when(hasher.verify(any(), eq("PBKDF2$h"))).thenReturn(true);
+		when(userDao.loginOk(KEVIN, NOW)).thenReturn(0);
+		assertStatus(() -> auth.login(login(KEVIN, "pw")), HttpStatus.UNAUTHORIZED, AcctMsg.A02);
+		verify(tokenDao, never()).insert(any(), any(), any(), any());
+		// 已做過一次真雜湊，不得再補 dummyHash（耗時會與其他路徑不同）
+		verify(hasher, never()).dummyHash(any());
+	}
+
+	@Test
+	void 登入_查詢時未鎖定但密碼錯且失敗計數影響0筆_A02() {
+		when(hasher.verify(any(), any())).thenReturn(false);
+		when(userDao.loginFail(KEVIN, AcctConst.LOGIN_MAX_FAIL, NOW)).thenReturn(0);
+		assertStatus(() -> auth.login(login(KEVIN, "bad")), HttpStatus.UNAUTHORIZED, AcctMsg.A02);
+		verify(hasher, never()).dummyHash(any());
+		verify(userDao, never()).loginOk(any(), any());
+	}
+
+	@Test
 	void 登入失敗計數與鎖定_同句UPDATE() {
 		assertThat(UserDao.UPDATE_LOGIN_FAIL).contains("LOGIN_FAIL_CNT = LOGIN_FAIL_CNT + 1")
 				.contains("CASE WHEN LOGIN_FAIL_CNT + 1 >= :maxFail THEN :now ELSE LOCK_DATE END").contains("LOCK_DATE IS NULL");
+		assertThat(UserDao.UPDATE_LOGIN_OK).contains("LOCK_DATE IS NULL");
 		assertThat(AcctConst.LOGIN_MAX_FAIL).isEqualTo(5);
 	}
 

@@ -2,7 +2,7 @@ package com.mpx.im_acct_insp.service;
 
 // ============================================================
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
-// 修改日期: 2026-10-07
+// 修改日期: 2026-10-10
 // 變更說明: 新增：登入、登出、/me、切換身分名單、切換身分／切回（spec v2.0 §2.1、§2.5、§6.2）
 //           登入：工號不存在、停用、無 PWD_HASH → 仍做一次 dummyHash 後回 401 A01（回應時間不洩漏帳號是否存在）；
 //           LOCK_DATE 非空 → 401 A02（即使密碼正確）；密碼錯 → LOGIN_FAIL_CNT＋1、達 5 次同句寫 LOCK_DATE，回 A01；
@@ -10,6 +10,8 @@ package com.mpx.im_acct_insp.service;
 //           切換身分：實際使用者需 SYS_IMPERSONATE（無權限 403 並寫 ADMIN_LOG DENY）；對象須 STATUS＝1 且不是自己；
 //           UPDATE token 列與 INSERT 管理軌跡同一交易（spec §5）；切回未切換中 409 E20。
 //           log 不記密碼、token、雜湊值
+//           修改：登入成功或失敗計數的 UPDATE 影響 0 筆（查詢後才被鎖定）→ 401 A02、不發 token，
+//           鎖定後不論密碼對錯一律 A02（避免並發猜密碼時以 A01／A02 判斷密碼是否正確）
 // ============================================================
 
 import java.time.Clock;
@@ -96,11 +98,20 @@ public class AuthService {
 			}
 			LocalDateTime now = LocalDateTime.now(clock);
 			if (!passwordHasher.verify(pwd, u.getPwdHash())) {
-				userDao.loginFail(userId, AcctConst.LOGIN_MAX_FAIL, now);
+				// 查詢後才被鎖定 → 影響 0 筆，回 A02；與密碼正確時同代號，鎖定後回應不洩漏密碼對錯
+				if (userDao.loginFail(userId, AcctConst.LOGIN_MAX_FAIL, now) != 1) {
+					log.info("登入被拒（密碼錯誤，驗證期間帳號已鎖定）userId={}", userId);
+					throw ApiException.unauthorized(AcctMsg.A02);
+				}
 				log.info("登入失敗（密碼錯誤）userId={}", userId);
 				throw ApiException.unauthorized(AcctMsg.A01);
 			}
-			userDao.loginOk(userId, now);
+			// 查詢後到此之間被其他請求鎖定（LOCK_DATE 已寫入）→ 影響 0 筆，不發 token
+			if (userDao.loginOk(userId, now) != 1) {
+				// log 註明密碼正確：回應與密碼錯時相同，但內部要能追查鎖定瞬間是否有人猜中
+				log.info("登入被拒（密碼正確，驗證期間帳號已鎖定）userId={}", userId);
+				throw ApiException.unauthorized(AcctMsg.A02);
+			}
 			String token = tokenCodec.newToken();
 			String hash = TokenCodec.sha256Hex(token);
 			tokenDao.insert(hash, userId, now.plusHours(AcctConst.TOKEN_MAX_HOURS), now);

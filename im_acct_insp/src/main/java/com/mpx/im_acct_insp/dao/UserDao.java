@@ -2,11 +2,12 @@ package com.mpx.im_acct_insp.dao;
 
 // ============================================================
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
-// 修改日期: 2026-10-07
+// 修改日期: 2026-10-10
 // 變更說明: 新增：使用者 IM_ACCT_USER 存取（spec v2.0 §2.1、§6.2；取代既有模組使用者表的引用）
 //           登入失敗計數與鎖定合成單句 UPDATE（達上限時同句寫 LOCK_DATE；已鎖定者不再累加）；
 //           登入成功歸 0 並寫 LAST_LOGIN_DATE；切換身分名單＝STATUS＝1、不含自己，附啟用中的角色。
 //           單句更新不需交易（spec §5 末段）；時間一律綁定 :now
+//           修改：登入成功的 UPDATE 加 LOCK_DATE IS NULL，查詢後到更新前被鎖定者影響 0 筆，由呼叫端回 A02
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -44,6 +45,7 @@ public class UserDao {
 			UPDATE IM_ACCT_USER
 			   SET LOGIN_FAIL_CNT = 0, LAST_LOGIN_DATE = :now, UPDATE_DATE = :now, UPDATE_BY = :userId
 			 WHERE USER_ID = :userId
+			   AND LOCK_DATE IS NULL
 			""";
 
 	public static final String FIND_ACTIVE_WITH_ROLES = """
