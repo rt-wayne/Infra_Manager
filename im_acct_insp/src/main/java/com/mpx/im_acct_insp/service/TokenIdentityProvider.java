@@ -11,6 +11,9 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：閒置上限改 480 分鐘（AcctConst.TOKEN_IDLE_MINUTES，本類別程式未改）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：Identity 帶入有效身分的 DEPT_NAME
 // ============================================================
 
 import java.time.Clock;
@@ -82,7 +85,8 @@ public class TokenIdentityProvider implements IdentityProvider {
 		boolean impersonating = !real.getUserId().equals(effective.getUserId());
 		PermissionService.Grants g = permissionService.load(effective.getUserId());
 		return new Identity(tokenHash, real.getUserId(), displayName(real), effective.getUserId(), displayName(effective),
-				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail(), effective.getTelNo());
+				impersonating, g.permissions(), g.roleIds(), g.execCatgIds(), effective.getEmail(), effective.getTelNo(),
+				effective.getDeptName());
 	}
 
 	public static String displayName(AcctUser u) {

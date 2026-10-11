@@ -31,6 +31,13 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-10
   變更說明: 新增申請退件重送也鎖定帳號類別（catgLocked；原只鎖異動單），提示改「不可變更申請類型與帳號類別」
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-11
+  變更說明: BACKLOG 第 40 項：基本資料拿掉申請單號（重送單號已在上方提示列）；排法改為 申請人｜申請日期、申請人分機｜申請單位、
+            申請人 Email 獨佔一行；分機、Email 依有效身分的使用者資料（/me）帶入並唯讀（外觀同申請日期，拿掉範例灰底），
+            仍不送出；新單申請單位帶 /me 的 deptName 並唯讀，部門空白才開放手填（刻意偏離 SA v0.5 第 381 行「新開申請一律空白」）；
+            重送申請單位保留原單的值並唯讀（原值空白才開放手填）；唯讀與否在載入時決定一次（deptLocked）；
+            「同申請人」只取表單分機／Email，拿掉 me 的後備（欄位已由 me 帶入，後備只會在全空白時誤蓋手填值）
 -->
 <template>
   <main>
@@ -39,18 +46,20 @@
     <section class="form-section">
       <h3>{{ secTitle('basic') }}</h3>
       <div class="grid2">
-        <div class="field"><label for="reqNo">申請單號</label><input id="reqNo" type="text" :value="resubmitId || '（送出後產生）'" disabled /></div>
-        <div class="field"><label for="applyDate">申請日期</label><input id="applyDate" type="text" :value="applyDateText" disabled /></div>
         <div class="field"><label for="applicant">申請人</label><input id="applicant" type="text" :value="userName" disabled /></div>
-        <div class="field"><label for="applyDept">申請單位</label><input id="applyDept" v-model="form.applyDept" type="text" placeholder="請填寫申請單位" /></div>
+        <div class="field"><label for="applyDate">申請日期</label><input id="applyDate" type="text" :value="applyDateText" disabled /></div>
         <div class="field">
           <label for="applyTelNo">申請人分機</label>
-          <input id="applyTelNo" v-model="form.applyTelNo" class="sample" type="text" placeholder="例：1234" />
+          <input id="applyTelNo" v-model="form.applyTelNo" type="text" placeholder="例：1234" disabled />
         </div>
         <div class="field">
-          <label for="applyEmail">申請人 Email</label>
-          <input id="applyEmail" v-model="form.applyEmail" class="sample" type="text" placeholder="例：name@pxmart.com.tw" />
+          <label for="applyDept">申請單位</label>
+          <input id="applyDept" v-model="form.applyDept" type="text" placeholder="請填寫申請單位" :disabled="deptLocked" />
         </div>
+      </div>
+      <div class="field">
+        <label for="applyEmail">申請人 Email</label>
+        <input id="applyEmail" v-model="form.applyEmail" type="text" placeholder="例：name@pxmart.com.tw" disabled />
       </div>
       <div class="hint apply-contact-hint">ⓘ 申請人分機與 Email 僅供下方「同申請人」帶入使用，不會隨申請單送出或儲存。</div>
     </section>
@@ -319,6 +328,8 @@ const docReadFailed = ref(false)
 const origApplyDate = ref('')
 const versionNo = ref(0)
 const oldDocs = ref<Attachment[]>([])
+/** 申請單位唯讀：載入時決定一次（新單帶到使用者部門、重送原單有值），之後不隨輸入變動 */
+const deptLocked = ref(false)
 
 function q(name: string): string {
   const v = route.query[name]
@@ -415,13 +426,22 @@ watch(
   }
 )
 
+/** 依有效身分的使用者資料帶入申請人分機、Email；新單另帶申請單位（重送保留原單的值） */
+function fillApplicant(): void {
+  form.applyTelNo = (me.value?.telNo ?? '').trim()
+  form.applyEmail = (me.value?.email ?? '').trim()
+  // 重送保留原單值；原值空白（僅 DB 被手改時）開放手填，避免必填卡死
+  if (!resubmitId) form.applyDept = (me.value?.deptName ?? '').trim()
+  deptLocked.value = form.applyDept.trim() !== ''
+}
+
 /** 「同申請人」（spec 8.3） */
 function copyApplicant(): void {
   form.holderName = userName.value
   if (isDoor.value) {
-    form.holderEmail = form.applyEmail.trim() || (me.value?.email ?? '') || form.holderEmail
+    form.holderEmail = form.applyEmail.trim() || form.holderEmail
   } else {
-    form.holderCntct = form.applyTelNo.trim() || form.applyEmail.trim() || (me.value?.telNo ?? '') || form.holderCntct
+    form.holderCntct = form.applyTelNo.trim() || form.applyEmail.trim() || form.holderCntct
   }
   // 只有所屬單位空白時才帶入申請單位，避免覆蓋已手動填寫的不同值
   if (!form.holderDept.trim() && form.applyDept.trim()) form.holderDept = form.applyDept.trim()
@@ -533,6 +553,7 @@ onMounted(async () => {
     } else {
       Object.assign(form, emptyForm(firstCatg))
     }
+    fillApplicant()
     ready.value = true
   } catch (e) {
     // 帶入資料失敗：不讓使用者對空白內容送出
@@ -547,7 +568,6 @@ onMounted(async () => {
 .door-fields .hint { margin-top: 4px; }
 .btn-link.inline { font-size: 17px; min-height: 0; padding: 0 4px; }
 option.direct { color: #b5691a; font-weight: 700; }
-input.sample { background: #f1f5f9; color: var(--gray); }
 .apply-contact-hint { margin-top: 0; }
 .delete-warn { margin: 0 0 12px; font-weight: 700; }
 .doc-read-fail { margin: 4px 0 0; }

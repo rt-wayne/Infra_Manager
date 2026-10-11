@@ -13,6 +13,9 @@
 //           驗證依類型的必填表，文案改 E01～E04（E02 一次列出缺的欄位名，以頓號分隔）；到期日早於今天擋下（E04）；
 //           停用／刪除只需申請單位與原因、不做到期日檢查；申請人分機／Email 只留在表單（「同申請人」來源），不進本文；
 //           刪除展延與附件檔名；空的代碼欄（assetClassId、doorScopeCode、expiryDate）送 null
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：formFromAccount 註解補「申請單位由呼叫端依使用者資料帶入」（邏輯不變）
 // ============================================================
 import type { AccountLookupDetail, ReqTypeCode } from '../types/account'
 import type { RequestDetail, RequestPayload } from '../types/request'
@@ -95,7 +98,7 @@ export function reasonFieldName(t: ReqTypeCode): string {
   return '申請原因'
 }
 
-/** 對既有帳號發起異動：帶入 /accounts/lookup/{id} 的主表當下內容；申請單位、原因清空 */
+/** 對既有帳號發起異動：帶入 /accounts/lookup/{id} 的主表當下內容；申請單位、原因清空（申請單位由呼叫端依使用者資料帶入） */
 export function formFromAccount(acct: AccountLookupDetail, reqTypeCode: ReqTypeCode): RequestForm {
   const isDoor = acct.catgId === DOOR_CATG_ID
   return {

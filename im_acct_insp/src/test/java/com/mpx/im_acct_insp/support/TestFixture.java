@@ -16,6 +16,9 @@ package com.mpx.im_acct_insp.support;
 //           impersonate(實際, 代理) 組出切換中身分；關卡 1～7、類別 IS_ENABLED、資產分類 IS_REVIEW_TRIGGER／IS_SELECTABLE 照 Table 第 6、8 節；
 //           IM_ACCT_REQ 以 req 模擬單筆申請單：狀態轉移依 VERSION_NO／狀態／關卡條件判斷影響 1 或 0 筆並 VERSION_NO＋1；
 //           IM_ACCT_HIST 寫入收集在 hists；交易以 RecordingTxManager 記錄 commit／rollback；時鐘固定 2026-10-07 10:30（Asia/Taipei）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：Identity 建構子多一個 deptName 參數（此處給 null）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -157,19 +160,19 @@ public class TestFixture {
 
 	public static Identity id(String userId) {
 		return new Identity("hash-" + userId, userId, NAMES.get(userId), userId, NAMES.get(userId), false, permsOf(userId),
-				USER_ROLES.getOrDefault(userId, List.of()), USER_EXEC.getOrDefault(userId, List.of()), null, null);
+				USER_ROLES.getOrDefault(userId, List.of()), USER_EXEC.getOrDefault(userId, List.of()), null, null, null);
 	}
 
 	/** 實際使用者 real 切換為 actAs */
 	public static Identity impersonate(String real, String actAs) {
 		return new Identity("hash-" + real, real, NAMES.get(real), actAs, NAMES.get(actAs), true, permsOf(actAs),
-				USER_ROLES.getOrDefault(actAs, List.of()), USER_EXEC.getOrDefault(actAs, List.of()), null, null);
+				USER_ROLES.getOrDefault(actAs, List.of()), USER_EXEC.getOrDefault(actAs, List.of()), null, null, null);
 	}
 
 	/** 自訂權限的身分（名單變更情境用） */
 	public static Identity idWith(String userId, Set<String> perms, List<String> execCatgs) {
 		return new Identity("hash-" + userId, userId, NAMES.get(userId), userId, NAMES.get(userId), false, perms, List.of(),
-				execCatgs, null, null);
+				execCatgs, null, null, null);
 	}
 
 	// ------------------------------------------------------------

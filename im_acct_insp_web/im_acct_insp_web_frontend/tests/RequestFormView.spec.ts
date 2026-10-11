@@ -18,6 +18,11 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #2：「卡號無法在申請時預先填寫」提示只在門禁卡新增時出現，修改門禁卡時不出現
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：無申請單號欄、基本資料欄位順序；分機／申請單位／Email 依 /me 帶入並唯讀，部門空白才可填；
+//           重送保留原單申請單位並唯讀（原值空白可填、輸入後不鎖回）；停用單有部門時帶入並唯讀；
+//           使用者資料全空白時「同申請人」不覆蓋手填值。分機與 Email 欄已唯讀，「同申請人」改以 me 的資料驅動（不對停用欄 setValue）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -75,6 +80,16 @@ const ACCT: AccountLookupDetail = {
   acctId: 'AR20261001-001', catgId: 'DB', catgName: '資料庫帳號', acctName: 'sa', sysName: '財務 Oracle', doorScopeCode: null,
   assetClassId: 'H01', isPriv: 1, holderName: '王小明', holderDept: '資訊處', holderCntct: '1234', holderEmail: null,
   accessLevelCode: 'ADMIN', accessTarget: 'FINDB', expiryTypeCode: 'DATE', expiryDate: '2020-01-01', acctStateCode: 'APPROVED'
+}
+
+/** 被退件的新增單（重送測試用） */
+const REJECTED_REQ: RequestDetail = {
+  reqId: 'AR20261005-002', acctId: 'AR20261005-002', reqTypeCode: 'ADD', reqStateCode: 'REJECTED', currStageId: null,
+  applyBy: '0000001', applyDept: '資訊處', applyDate: '2026-10-05 10:00:00', catgId: 'HOST', acctName: 'svc_a', sysName: '主機 A',
+  doorScopeCode: null, assetClassId: null, isPriv: 0, holderName: '王小明', holderDept: '資訊處', holderCntct: null, holderEmail: null,
+  accessLevelCode: 'RO', accessTarget: null, applyReason: '原因', expiryTypeCode: 'PERM', expiryDate: null,
+  submitDate: '2026-10-05 10:00:00', rejectReason: '名稱不符', versionNo: 2,
+  attachments: [{ attachId: 5, attachTypeCode: 'DOC', fileName: '舊公文.pdf', fileSize: 2048, createDate: '2026-10-05 10:00:00' }]
 }
 
 async function mountForm(path = '/requests/new'): Promise<VueWrapper> {
@@ -184,42 +199,102 @@ describe('RequestFormView', () => {
     expect((w.find('#applyDate').element as HTMLInputElement).disabled).toBe(true)
     expect((w.find('#applyDate').element as HTMLInputElement).value).toBe(fmtDate(new Date()))
     expect((w.find('#applyDept').element as HTMLInputElement).value).toBe('')
+    expect((w.find('#applyDept').element as HTMLInputElement).disabled).toBe(false)
     expect(w.findAll('input[name=reqType]').map(i => i.attributes('value'))).toEqual(['ADD', 'MODIFY', 'DISABLE', 'ENABLE', 'DELETE'])
     expect(w.text()).not.toContain('展延')
     w.unmount()
   })
 
-  it('「同申請人」：使用人＝登入者、聯絡方式＝分機→Email→使用者資料、所屬單位空白才帶申請單位；分機與 Email 不送出', async () => {
+  it('新增：無申請單號欄；分機、申請單位、Email 自動帶入使用者資料且唯讀；欄位順序 申請人｜申請日期｜分機｜申請單位｜Email', async () => {
+    useSession().me.value = makeMe({ telNo: ' 5566 ', email: 'kevin@example.com', deptName: '資訊處' })
     const w = await mountForm()
-    await w.find('#applyDept').setValue('資訊處')
+    expect(w.find('#reqNo').exists()).toBe(false)
+    expect(w.text()).not.toContain('申請單號')
+    const input = (id: string): HTMLInputElement => w.find(`#${id}`).element as HTMLInputElement
+    expect(input('applyTelNo').value).toBe('5566')
+    expect(input('applyDept').value).toBe('資訊處')
+    expect(input('applyEmail').value).toBe('kevin@example.com')
+    for (const id of ['applicant', 'applyDate', 'applyTelNo', 'applyDept', 'applyEmail']) {
+      expect(input(id).disabled).toBe(true)
+    }
+    const basic = w.findAll('section.form-section')[0]
+    const order = basic.findAll('input').map(i => i.attributes('id'))
+    expect(order).toEqual(['applicant', 'applyDate', 'applyTelNo', 'applyDept', 'applyEmail'])
+    // Email 獨立一行：不在兩欄格線內
+    expect(basic.find('.grid2 #applyEmail').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('新增：使用者資料無部門 → 申請單位空白可填；無分機與 Email → 唯讀空白', async () => {
+    useSession().me.value = makeMe({ telNo: null, email: null, deptName: '  ' })
+    const w = await mountForm()
+    const dept = w.find('#applyDept').element as HTMLInputElement
+    expect(dept.value).toBe('')
+    expect(dept.disabled).toBe(false)
+    expect((w.find('#applyTelNo').element as HTMLInputElement).value).toBe('')
+    expect((w.find('#applyEmail').element as HTMLInputElement).value).toBe('')
+    await w.find('#applyDept').setValue('營運處')
+    expect(dept.value).toBe('營運處')
+    w.unmount()
+  })
+
+  it('「同申請人」：使用人＝登入者、聯絡方式＝分機，所屬單位空白才帶申請單位；分機與 Email 不送出', async () => {
+    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '資訊處' })
+    const w = await mountForm()
     await w.find('.same-as').trigger('click')
     expect((w.find('#holderName').element as HTMLInputElement).value).toBe('Kevin (李凱鈞)')
     expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('5566')
     expect((w.find('#holderDept').element as HTMLInputElement).value).toBe('資訊處')
 
-    await w.find('#applyEmail').setValue('me@example.com')
     await w.find('#holderDept').setValue('營運處')
     await w.find('.same-as').trigger('click')
-    expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('me@example.com')
     expect((w.find('#holderDept').element as HTMLInputElement).value).toBe('營運處')
 
-    await w.find('#applyTelNo').setValue('1234')
-    await w.find('.same-as').trigger('click')
-    expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('1234')
+    await w.find('#isUniqueConf').setValue(true)
+    await w.find('#acctName').setValue('svc_backup')
+    await w.find('#sysName').setValue('備份主機')
+    await w.find('#applyReason').setValue('新進人員')
+    await clickSubmit(w)
+    const payload = submitMock.mock.calls[0][0]
+    expect(payload.applyDept).toBe('資訊處')
+    expect(payload).not.toHaveProperty('applyTelNo')
+    expect(payload).not.toHaveProperty('applyEmail')
+    w.unmount()
+  })
 
-    // 門禁卡：使用人 Email＝表單 Email
+  it('「同申請人」：無分機時聯絡方式＝Email；門禁卡使用人 Email＝申請人 Email', async () => {
+    useSession().me.value = makeMe({ telNo: '', email: 'me@example.com' })
+    const w = await mountForm()
+    await w.find('.same-as').trigger('click')
+    expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('me@example.com')
+
     await w.find('#catgId').setValue('DOOR')
     await flushPromises()
     await w.find('.same-as').trigger('click')
     expect((w.find('#holderEmail').element as HTMLInputElement).value).toBe('me@example.com')
 
     await w.find('#isUniqueConf').setValue(true)
+    await w.find('#applyDept').setValue('資訊處')
     await w.find('#applyReason').setValue('新進人員')
     await clickSubmit(w)
     const payload = submitMock.mock.calls[0][0]
-    expect(payload).not.toHaveProperty('applyTelNo')
     expect(payload).not.toHaveProperty('applyEmail')
     expect(payload.holderEmail).toBe('me@example.com')
+    w.unmount()
+  })
+
+  it('「同申請人」：使用者資料分機／Email 全空白 → 不覆蓋已手填的聯絡方式與使用人 Email', async () => {
+    useSession().me.value = makeMe({ telNo: '  ', email: '  ' })
+    const w = await mountForm()
+    await w.find('#holderCntct').setValue('#9999')
+    await w.find('.same-as').trigger('click')
+    expect((w.find('#holderCntct').element as HTMLInputElement).value).toBe('#9999')
+
+    await w.find('#catgId').setValue('DOOR')
+    await flushPromises()
+    await w.find('#holderEmail').setValue('holder@example.com')
+    await w.find('.same-as').trigger('click')
+    expect((w.find('#holderEmail').element as HTMLInputElement).value).toBe('holder@example.com')
     w.unmount()
   })
 
@@ -340,6 +415,21 @@ describe('RequestFormView', () => {
     w.unmount()
   })
 
+  it('停用（使用者有部門）：申請單位帶入使用者部門並唯讀，送出帶該部門', async () => {
+    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '資訊處' })
+    lookupDetailMock.mockResolvedValue(ACCT)
+    const w = await mountForm('/requests/new?reqType=DISABLE&acctId=AR20261001-001&acctName=sa')
+    const dept = w.find('#applyDept').element as HTMLInputElement
+    expect(dept.value).toBe('資訊處')
+    expect(dept.disabled).toBe(true)
+    await w.find('#isUniqueConf').setValue(true)
+    await w.find('#applyReason').setValue('離職')
+    await clickSubmit(w)
+    expect(submitMock).toHaveBeenCalledTimes(1)
+    expect(submitMock.mock.calls[0][0]).toMatchObject({ reqTypeCode: 'DISABLE', applyDept: '資訊處' })
+    w.unmount()
+  })
+
   it('刪除：顯示 U03 警示、原因欄名「刪除原因」、隱藏期限欄', async () => {
     lookupDetailMock.mockResolvedValue({ ...ACCT, acctStateCode: 'DISABLED' })
     const w = await mountForm('/requests/new?reqType=DELETE&acctId=AR20261001-001&acctName=sa')
@@ -413,18 +503,16 @@ describe('RequestFormView', () => {
   })
 
   it('退件重送：帶入原內容、保留申請單位、顯示原申請日期，送出帶 versionNo', async () => {
-    const req: RequestDetail = {
-      reqId: 'AR20261005-002', acctId: 'AR20261005-002', reqTypeCode: 'ADD', reqStateCode: 'REJECTED', currStageId: null,
-      applyBy: '0000001', applyDept: '資訊處', applyDate: '2026-10-05 10:00:00', catgId: 'HOST', acctName: 'svc_a', sysName: '主機 A',
-      doorScopeCode: null, assetClassId: null, isPriv: 0, holderName: '王小明', holderDept: '資訊處', holderCntct: null, holderEmail: null,
-      accessLevelCode: 'RO', accessTarget: null, applyReason: '原因', expiryTypeCode: 'PERM', expiryDate: null,
-      submitDate: '2026-10-05 10:00:00', rejectReason: '名稱不符', versionNo: 2,
-      attachments: [{ attachId: 5, attachTypeCode: 'DOC', fileName: '舊公文.pdf', fileSize: 2048, createDate: '2026-10-05 10:00:00' }]
-    }
-    requestMock.mockResolvedValue(req)
+    requestMock.mockResolvedValue(REJECTED_REQ)
+    // 使用者目前部門與原單不同：重送仍保留原單申請單位、唯讀；分機與 Email 照常帶入
+    useSession().me.value = makeMe({ telNo: '5566', email: 'kevin@example.com', deptName: '營運處' })
     const w = await mountForm('/requests/new?resubmit=AR20261005-002')
     expect((w.find('#acctName').element as HTMLInputElement).value).toBe('svc_a')
     expect((w.find('#applyDept').element as HTMLInputElement).value).toBe('資訊處')
+    expect((w.find('#applyDept').element as HTMLInputElement).disabled).toBe(true)
+    expect((w.find('#applyTelNo').element as HTMLInputElement).value).toBe('5566')
+    expect((w.find('#applyEmail').element as HTMLInputElement).value).toBe('kevin@example.com')
+    expect(w.text()).toContain('單號：AR20261005-002')
     expect((w.find('#applyDate').element as HTMLInputElement).value).toBe('2026-10-05')
     expect(w.find('.old-doc').text()).toContain('舊公文.pdf')
     expect(w.text()).toContain('名稱不符')
@@ -438,6 +526,22 @@ describe('RequestFormView', () => {
     expect(id).toBe('AR20261005-002')
     expect(payload).toMatchObject({ versionNo: 2, acctName: 'svc_b', applyDept: '資訊處' })
     expect(file).toBeNull()
+    w.unmount()
+  })
+
+  it('退件重送：原單申請單位空白 → 開放手填，輸入後不會被鎖回', async () => {
+    requestMock.mockResolvedValue({ ...REJECTED_REQ, applyDept: '' })
+    useSession().me.value = makeMe({ deptName: '營運處' })
+    const w = await mountForm('/requests/new?resubmit=AR20261005-002')
+    const dept = w.find('#applyDept').element as HTMLInputElement
+    expect(dept.value).toBe('')
+    expect(dept.disabled).toBe(false)
+    await w.find('#applyDept').setValue('資訊')
+    expect(dept.disabled).toBe(false)
+    await w.find('#applyDept').setValue('資訊處')
+    await w.find('#isUniqueConf').setValue(true)
+    await clickSubmit(w)
+    expect(resubmitMock.mock.calls[0][1]).toMatchObject({ applyDept: '資訊處' })
     w.unmount()
   })
 })

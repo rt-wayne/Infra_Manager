@@ -12,6 +12,9 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：閒置上限改 480 分，邊界測試由 30／31 分改 480／481 分、resolve 閒置案例由 40 分改 481 分
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：/me 另回 deptName（有效身分），切換身分案例一併斷言
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -233,6 +236,7 @@ class AuthServiceTest {
 		assertThat(me.getCanImpersonate()).isFalse();
 		assertThat(me.getEmail()).isEqualTo(GARY + "@example.com");
 		assertThat(me.getTelNo()).isEqualTo("#" + GARY);
+		assertThat(me.getDeptName()).isEqualTo("部門" + GARY);
 	}
 
 	@Test
@@ -276,6 +280,7 @@ class AuthServiceTest {
 		u.setUserName(full.substring(full.indexOf('(') + 1, full.length() - 1));
 		u.setEmail(id + "@example.com");
 		u.setTelNo("#" + id);
+		u.setDeptName("部門" + id);
 		u.setPwdHash("PBKDF2$h");
 		u.setStatus(status);
 		return u;

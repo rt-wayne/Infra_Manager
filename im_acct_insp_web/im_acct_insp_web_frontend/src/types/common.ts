@@ -10,6 +10,9 @@
 //           Me 改為實際使用者／有效身分／permissions[]；新增 LoginResult；UserInfo 去掉 execCatgIds；
 //           Category 加 enabled／suggestExpiry；AssetClass 改 reviewTrigger／selectable；Stage 改 permId；
 //           ExpiringItem 加 catgId／acctStateCode；Todo 加 source／title／versionNo／verifyRejectCnt／verifyRejectReason 等
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：Me 加 deptName（有效身分的部門名稱，新增申請帶入申請單位）
 // ============================================================
 
 /** 後端錯誤回應本文：{ message } */
@@ -42,6 +45,8 @@ export interface Me {
   telNo?: string | null
   /** 使用者資料的 Email（門禁卡「同申請人」的後備來源；/me 未回傳時為 undefined） */
   email?: string | null
+  /** 使用者資料的部門名稱（新增申請帶入申請單位；/me 未回傳時為 undefined） */
+  deptName?: string | null
 }
 
 /** POST /auth/login 回傳 */

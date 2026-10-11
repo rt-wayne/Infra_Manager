@@ -9,6 +9,9 @@ package com.mpx.im_acct_insp.model;
 // 變更說明: v2.0（spec_im_acct_insp_v2.0.md §6.2）：改為有效身分 userId／userName＋實際使用者 realUserId／realUserName、impersonating、
 //           canImpersonate、permissions[]、roleIds[]、execCatgIds[]；另加 telNo、email（有效身分的 IM_ACCT_USER.TEL_NO、EMAIL，
 //           供前端 §8.3「同申請人」帶入；主對話 2026-10-07 補需求）；刪 canAcctList、canInsp
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：加 deptName（有效身分的 IM_ACCT_USER.DEPT_NAME，供新增申請帶入申請單位）
 // ============================================================
 
 import java.util.List;
@@ -26,6 +29,7 @@ public class MeInfo {
 	private List<String> execCatgIds;
 	private String telNo;
 	private String email;
+	private String deptName;
 
 	public String getUserId() {
 		return userId;
@@ -113,5 +117,13 @@ public class MeInfo {
 
 	public void setEmail(String email) {
 		this.email = email;
+	}
+
+	public String getDeptName() {
+		return deptName;
+	}
+
+	public void setDeptName(String deptName) {
+		this.deptName = deptName;
 	}
 }

@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp.common;
 //           以及有效身分當下的權限碼（含 GENERAL）、角色、執行人類別。
 //           權限與資料範圍一律用有效身分；稽核欄位（ACT_BY、INSP_BY、FIX_BY、CREATE_BY、UPDATE_BY）用實際使用者，
 //           代理身分記在 ACT_AS_*。由 IdentityProvider 每次請求自 DB 建立，不跨請求快取（spec §2.3）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：加 deptName（有效身分的 IM_ACCT_USER.DEPT_NAME，供 /me 給新增申請帶入申請單位）
 // ============================================================
 
 import java.util.List;
@@ -25,10 +28,11 @@ public class Identity {
 	private final List<String> execCatgIds;
 	private final String email;
 	private final String telNo;
+	private final String deptName;
 
 	public Identity(String tokenHash, String realUserId, String realUserName, String userId, String userName,
 			boolean impersonating, Set<String> permissions, List<String> roleIds, List<String> execCatgIds, String email,
-			String telNo) {
+			String telNo, String deptName) {
 		this.tokenHash = tokenHash;
 		this.realUserId = realUserId;
 		this.realUserName = realUserName;
@@ -40,6 +44,7 @@ public class Identity {
 		this.execCatgIds = execCatgIds == null ? List.of() : List.copyOf(execCatgIds);
 		this.email = email;
 		this.telNo = telNo;
+		this.deptName = deptName;
 	}
 
 	/** 登入 token 的 SHA-256（登出、切換身分用；不是 token 本身） */
@@ -86,6 +91,10 @@ public class Identity {
 
 	public String getTelNo() {
 		return telNo;
+	}
+
+	public String getDeptName() {
+		return deptName;
 	}
 
 	/** 寫入 ACT_AS_ID 的值：切換中為有效身分，否則 null */

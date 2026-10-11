@@ -12,6 +12,9 @@ package com.mpx.im_acct_insp.service;
 //           log 不記密碼、token、雜湊值
 //           修改：登入成功或失敗計數的 UPDATE 影響 0 筆（查詢後才被鎖定）→ 401 A02、不發 token，
 //           鎖定後不論密碼對錯一律 A02（避免並發猜密碼時以 A01／A02 判斷密碼是否正確）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 40 項：/me 另回 deptName（有效身分的 DEPT_NAME，供新增申請帶入申請單位）
 // ============================================================
 
 import java.time.Clock;
@@ -147,6 +150,7 @@ public class AuthService {
 		me.setExecCatgIds(id.getExecCatgIds());
 		me.setTelNo(id.getTelNo());
 		me.setEmail(id.getEmail());
+		me.setDeptName(id.getDeptName());
 		return me;
 	}
 
