@@ -14,10 +14,11 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 27 | 通知信改 HTML（比照 Infra_Manager_Java 版面）＋信末「前往系統」連結。裁示（2026-10-11）：① 程式內組 HTML、`HtmlUtils` 跳脫所有填入值，不加 Thymeleaf；② 只寄 HTML；③ 加頁尾「系統自動發送，請勿直接回覆＋發送時間」；④ 新增 `im.acct.insp.mail.site-url`（留空不顯示連結），依信件類型連：待審核／待執行／待複驗／複驗退回 → `#/todo`，退件 → `#/requests`，到期／逾期／週彙總／排程失敗 → 首頁；⑤ 實寄驗證：J02 基準日 2026-10-11（週鍵 20261005，若已有紀錄先停下問）＋ 2410305 送一張新增申請（帳號名稱 `HTML測試<b>粗體</b>`）再由 2410305 退件；本機 environment.properties 加 site-url＝`http://localhost:8787/im_acct_insp_web/`（使用者同意由我改） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動：
+- 下一步：實作 NotificationService HTML 本文與連結、SmtpMailSender 改 HTML、測試；過 code-reviewer／test-runner 後重打包重啟後端、實寄驗證、commit＋三檔
+- 已改動：（無，動工前快照）
 - 卡住／待確認：
 
 ## 已拍板待實作
@@ -25,7 +26,6 @@
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
 | 26 | 測試 DB 補兩句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
-| 27 | 通知信改 HTML（比照 Infra_Manager_Java `MailDispatcher.java:98` 的 `setText(html, true)`）：四種本文（申請單通知、到期提醒與逾期、週彙總、排程失敗）改寫成 HTML、週彙總用表格，使用者填的欄位值要先 HTML 跳脫；目前本文是 `NotificationService.java:143-234` 組的純文字、`SmtpMailSender` 以純文字送出。動工前先列出四種信的版面與要跳脫的欄位給使用者確認 | 中 | — |
 
 ## 僅記錄未拍板
 
