@@ -8,6 +8,10 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 39 項：無 ACC_LIST_FULL 在申請單列表頁只反白「帳號申請單列表」、點「帳號列表」仍導向申請單列表；
+//           有 ACC_LIST_FULL 在帳號列表頁照常反白；切換中在申請單列表頁切回無 ACC_LIST_FULL 的本人後不反白
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -114,6 +118,54 @@ describe('AppLayout', () => {
     expect(w.find('.nav-accounts').attributes('href')).toBe('/accounts')
     expect(w.find('.nav-insp').exists()).toBe(true)
     expect(w.find('.nav-insp-new').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('無 ACC_LIST_FULL 在申請單列表頁：只反白「帳號申請單列表」；點「帳號列表」仍導向申請單列表', async () => {
+    const { w, router } = await mountLayout(makeMe(), '/requests')
+    const acc = w.find('.nav-accounts')
+    const req = w.find('.nav-requests')
+    expect(req.classes()).toContain('router-link-exact-active')
+    expect(req.attributes('aria-current')).toBe('page')
+    expect(acc.classes()).not.toContain('router-link-exact-active')
+    expect(acc.attributes('aria-current')).toBeUndefined()
+    await router.push('/')
+    await flushPromises()
+    await w.find('.nav-accounts').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/requests')
+    w.unmount()
+  })
+
+  it('有 ACC_LIST_FULL 在帳號列表頁：「帳號列表」照常反白', async () => {
+    const { w } = await mountLayout(makeMe({ permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL'] }), '/accounts')
+    const acc = w.find('.nav-accounts')
+    expect(acc.classes()).toContain('router-link-exact-active')
+    expect(acc.attributes('aria-current')).toBe('page')
+    expect(w.find('.nav-requests').classes()).not.toContain('router-link-exact-active')
+    w.unmount()
+  })
+
+  it('切換中（有 ACC_LIST_FULL）在申請單列表頁切回無 ACC_LIST_FULL 的本人：「帳號列表」改指向申請單列表但不反白', async () => {
+    const gary = makeMe({
+      userId: '0000010', userName: 'Gary (許永成)', realUserId: '0000011', realUserName: 'Hank (黃志翰)',
+      impersonating: true, permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL']
+    })
+    const { w, router } = await mountLayout(gary, '/requests')
+    expect(w.find('.nav-accounts').attributes('href')).toBe('/accounts')
+
+    vi.mocked(endImpersonate).mockResolvedValue(makeMe({
+      userId: '0000011', userName: 'Hank (黃志翰)', realUserId: '0000011', realUserName: 'Hank (黃志翰)', canImpersonate: true,
+      permissions: [...GENERAL_PERMS, 'SYS_IMPERSONATE']
+    }))
+    await w.find('.imp-end').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/requests')
+    const acc = w.find('.nav-accounts')
+    expect(acc.attributes('href')).toBe('/requests')
+    expect(acc.classes()).not.toContain('router-link-exact-active')
+    expect(acc.attributes('aria-current')).toBeUndefined()
+    expect(w.find('.nav-requests').classes()).toContain('router-link-exact-active')
     w.unmount()
   })
 

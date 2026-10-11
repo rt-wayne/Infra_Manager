@@ -16,6 +16,10 @@
             切換／切回後目前頁無權限時導向首頁；導覽依 permissions[]：無 ACC_LIST_FULL 者「帳號列表」改指向帳號申請單列表，
             機房巡檢區有 INSP_VIEW 才顯示、新增巡檢有 INSP_CREATE 才顯示；
             鈴鐺含已逾期，點擊一筆：有 ACC_LIST_FULL → 帳號列表（到期篩選），否則開該筆唯讀明細
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-11
+  變更說明: BACKLOG 第 39 項：無 ACC_LIST_FULL 時「帳號列表」仍指向申請單列表，但不反白、不帶 aria-current，
+            在申請單列表頁只反白「帳號申請單列表」（原本兩項同時反白）
 -->
 <template>
   <div class="app">
@@ -26,7 +30,13 @@
         <span>✅ 待辦簽核</span><span v-if="todoCount !== null" class="nav-badge">{{ todoCount }}</span>
       </RouterLink>
       <div class="nav-title">帳號權限管理</div>
-      <RouterLink class="nav-item nav-accounts" :to="can('ACC_LIST_FULL') ? '/accounts' : '/requests'">📋 帳號列表</RouterLink>
+      <!-- 無 ACC_LIST_FULL 時指向申請單列表，但不反白、不標目前頁（由下一項「帳號申請單列表」反白）。
+           custom 模式不自動套 class，此處只手動輸出 router-link-exact-active（app.css 只用這個），不輸出 router-link-active -->
+      <RouterLink v-slot="{ href, navigate, isExactActive }" custom :to="hasFullList ? '/accounts' : '/requests'">
+        <a :href="href" class="nav-item nav-accounts"
+          :class="{ 'router-link-exact-active': isExactActive && hasFullList }"
+          :aria-current="isExactActive && hasFullList ? 'page' : undefined" @click="navigate">📋 帳號列表</a>
+      </RouterLink>
       <RouterLink v-if="can('ACC_SELF_SERVICE')" class="nav-item nav-requests" to="/requests">📄 帳號申請單列表</RouterLink>
       <RouterLink v-if="can('ACC_APPLY')" class="nav-item" to="/requests/new">＋ 新增申請</RouterLink>
       <RouterLink class="nav-item" to="/assets">📖 資產分類說明</RouterLink>
@@ -103,6 +113,8 @@ const switching = ref(false)
 const bellAcctId = ref('')
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
+/** 有完整帳號列表權限：決定「帳號列表」連到哪、要不要反白 */
+const hasFullList = computed(() => can('ACC_LIST_FULL'))
 
 /** 目前身分是否有目前頁需要的權限（meta.need） */
 function hasAccess(): boolean {
