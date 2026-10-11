@@ -17,6 +17,10 @@ package com.mpx.im_acct_insp.service;
 //           收件角色依 SA 7.3 改為程式常數（到期／逾期／每週彙總 → AcctConst.MAIL_ROLE_EXPIRY＝GOV，
 //           排程失敗 → AcctConst.MAIL_ROLE_JOB_FAIL＝SYS_ADMIN），成員於寄信當下以 PermDao.findUsersInRoles 查
 //           IM_ACCT_ROLE_USER（STATUS＝1）＋IM_ACCT_USER（STATUS＝1）；無 Email 者照 §4.12 記 SKIP
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 25 項：sendAll 加寄送名單（MailAllowList）——有 Email 但不在名單者不寄、記 SKIP，
+//           ERR_MSG「不在寄送名單」；無 Email 仍先判斷、照舊記 SKIP 且 ERR_MSG 留空。兩種 SKIP 都不存 Email
 // ============================================================
 
 import java.time.Clock;
@@ -52,21 +56,25 @@ public class NotificationService {
 	static final int ERR_MSG_MAX = 500;
 	/** J02 0 筆時的本文（spec §4.15 U13） */
 	static final String U13 = "目前沒有已逾期未處理的帳號";
+	/** 不在寄送名單的 SKIP 寫入 ERR_MSG 的文字 */
+	static final String NOT_IN_ALLOW_LIST = "不在寄送名單";
 
 	private final PermDao permDao;
 	private final AcctReqDao acctReqDao;
 	private final CodeService codeService;
 	private final NotifyLogDao notifyLogDao;
 	private final MailSender mailSender;
+	private final MailAllowList allowList;
 	private final Clock clock;
 
 	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, CodeService codeService, NotifyLogDao notifyLogDao,
-			MailSender mailSender, Clock clock) {
+			MailSender mailSender, MailAllowList allowList, Clock clock) {
 		this.permDao = permDao;
 		this.acctReqDao = acctReqDao;
 		this.codeService = codeService;
 		this.notifyLogDao = notifyLogDao;
 		this.mailSender = mailSender;
+		this.allowList = allowList;
 		this.clock = clock;
 	}
 
@@ -254,6 +262,10 @@ public class NotificationService {
 			String err = null;
 			if (email == null) {
 				result = AcctConst.NR_SKIP;
+				skip++;
+			} else if (!allowList.allows(r.getUserId())) {
+				result = AcctConst.NR_SKIP;
+				err = NOT_IN_ALLOW_LIST;
 				skip++;
 			} else {
 				try {

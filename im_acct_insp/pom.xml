@@ -11,6 +11,8 @@
 	          （webmvc、restclient〔RestTemplateBuilder 所在模組〕、jdbc、test）；
 	          ojdbc8 → ojdbc17，orai18n 改 com.oracle.database.nls 同版號，版號只定義在 properties 一處；
 	          mssql-jdbc 仍交 Boot BOM 管理（實際解析 13.4.0.jre11）
+	          2026-10-11 BACKLOG 第 25 項（Claude Opus 5.5）：加 spring-boot-starter-mail（通知信經 SMTP 實際寄出，
+	          寄法同 Infra_Manager_Java），版本由 Boot BOM 管理
 	============================================================
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -46,6 +48,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-jdbc</artifactId>
+		</dependency>
+		<!-- 通知信 SMTP 寄送（JavaMailSender；spring.mail.host 與寄件人都有值時 MailConfig 才選用實際寄出）；版本由 BOM 管理 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>com.oracle.database.jdbc</groupId>

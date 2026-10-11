@@ -10,6 +10,9 @@
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 ### 修改日期: 2026-10-07
 ### 變更說明: 變更單 #3：附件根目錄未設定或不是絕對路徑時後端啟動失敗（取代原本記 WARN），補 Windows 路徑寫法提醒
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-11
+### 變更說明: BACKLOG 第 25 項：新增通知信寄件人與寄送名單（im.acct.insp.mail.*）
 ### 首次建置：複製本檔為 environment.properties 後填值（environment.properties 不進 git）
 ###################################
 
@@ -32,3 +35,14 @@ im.acct.insp.job.j01.cron=0 10 0 * * *
 im.acct.insp.job.j02.cron=0 0 8 * * *
 ### 測試環境設 true 才能以 baseDate 手動執行（否則 400「此環境不允許指定基準日」）；預設 false
 im.acct.insp.job.allow-base-date=false
+
+###################################
+###     通知信（SMTP 連線在 application.properties 的 spring.mail.*）
+###################################
+### 寄件人；留空時不實際寄出、只寫 log
+im.acct.insp.mail.from=Infra-Manager@pxmart.com.tw
+### 寄送名單：逗號分隔的工號（半形「,」或全形「，」皆可），只有名單內的人會收到信；名單外的人通知紀錄記 SKIP、ERR_MSG「不在寄送名單」
+### 留空＝誰都不寄（測試 DB 有同事的真實 Email，預設刻意不寄）；例：2410305
+im.acct.insp.mail.allow-list=
+### true＝忽略寄送名單、寄給所有收件人（正式環境才設）；預設 false
+im.acct.insp.mail.send-to-all=false

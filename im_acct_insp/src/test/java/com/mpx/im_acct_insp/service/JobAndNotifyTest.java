@@ -12,6 +12,10 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #2：NotificationService 不再接收角色 properties（移除角色清單解析測試）；
 //           到期、每週彙總、排程失敗的角色收件人改為 mock PermDao.findUsersInRoles（GOV／SYS_ADMIN 常數）驗證
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 25 項：寄送名單——名單外記 SKIP「不在寄送名單」且不存 Email、無 Email 照舊（ERR_MSG 空）、
+//           名單留空誰都不寄、寄給所有人忽略名單；既有通知測試改傳「寄給所有人」
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -50,6 +54,9 @@ import com.mpx.im_acct_insp.model.Recipient;
 import com.mpx.im_acct_insp.support.TestFixture;
 
 class JobAndNotifyTest {
+
+	/** 寄給所有收件人（既有通知測試不受寄送名單影響） */
+	static final MailAllowList SEND_ALL = new MailAllowList("", true);
 
 	TestFixture fx;
 	JobService job;
@@ -202,7 +209,7 @@ class JobAndNotifyTest {
 	void 通知_收件人去重_無Email略過_寄送例外記FAIL_紀錄失敗不外拋() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				fx.clock);
+				SEND_ALL, fx.clock);
 		Recipient a = rcpt("0000001", "a@example.com");
 		Recipient dup = rcpt("0000001", "a@example.com");
 		Recipient noMail = rcpt("0000002", " ");
@@ -227,7 +234,7 @@ class JobAndNotifyTest {
 	void 通知_到期收件人含申請人執行人角色成員_參照鍵與主旨() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				fx.clock);
+				SEND_ALL, fx.clock);
 		Acct a = fx.acct("AR20261001-001", "DB", AcctConst.AS_EXPIRED);
 		a.setExpiryDate(LocalDate.of(2026, 10, 6).atStartOfDay());
 		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
@@ -247,7 +254,7 @@ class JobAndNotifyTest {
 	void 通知_每週彙總與排程失敗收件人為角色成員_角色碼為常數() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				fx.clock);
+				SEND_ALL, fx.clock);
 		when(fx.permDao.findUsersInRoles(List.of("GOV")))
 				.thenReturn(List.of(rcpt("0000003", "c@example.com"), rcpt("0000005", null)));
 		when(fx.permDao.findUsersInRoles(List.of("SYS_ADMIN"))).thenReturn(List.of(rcpt("0000009", "s@example.com")));
@@ -272,10 +279,52 @@ class JobAndNotifyTest {
 	@Test
 	void 通知_業務事件例外不外拋() {
 		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao,
-				mock(MailSender.class), fx.clock);
+				mock(MailSender.class), SEND_ALL, fx.clock);
 		when(fx.acctReqDao.findById("AR")).thenThrow(new IllegalStateException("db"));
 		n.requestEvent(AcctConst.EV_SUBMIT, "AR", KEVIN);
 		assertThat(fx.txm.rollbacks).isZero();
+	}
+
+	@Test
+	void 通知_寄送名單外記SKIP不在寄送名單_不存Email_無Email仍照舊記SKIP() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
+				new MailAllowList(" 0000001 , ,0000002", false), fx.clock);
+		Recipient listed = rcpt("0000001", "a@example.com");
+		Recipient listedNoMail = rcpt("0000002", null);
+		Recipient outside = rcpt("0000003", "c@example.com");
+		Recipient outsideNoMail = rcpt("0000004", "");
+		assertThat(n.sendAll("SUBMIT", "REQ", "R1", List.of(listed, listedNoMail, outside, outsideNoMail), "主旨", "本文", KEVIN))
+				.isEqualTo(4);
+		verify(sender, times(1)).send(any(), any(), any());
+		verify(sender).send(eq("a@example.com"), eq("主旨"), eq("本文"));
+		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("R1"), eq("0000001"), eq("a@example.com"), eq("SUCCESS"),
+				isNull(), any(), eq(KEVIN));
+		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("R1"), eq("0000002"), isNull(), eq("SKIP"), isNull(), any(),
+				eq(KEVIN));
+		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("R1"), eq("0000003"), isNull(), eq("SKIP"), eq("不在寄送名單"),
+				any(), eq(KEVIN));
+		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("R1"), eq("0000004"), isNull(), eq("SKIP"), isNull(), any(),
+				eq(KEVIN));
+	}
+
+	@Test
+	void 寄送名單_留空誰都不寄_寄給所有人忽略名單() {
+		MailAllowList empty = new MailAllowList("", false);
+		assertThat(empty.allows("0000001")).isFalse();
+		assertThat(empty.size()).isZero();
+		assertThat(new MailAllowList(null, false).allows("0000001")).isFalse();
+		MailAllowList listed = new MailAllowList("2410305", false);
+		assertThat(listed.allows("2410305")).isTrue();
+		assertThat(listed.allows("2410306")).isFalse();
+		assertThat(listed.allows(null)).isFalse();
+		assertThat(new MailAllowList("", true).allows("0000001")).isTrue();
+		assertThat(new MailAllowList("2410305", true).allows("0000001")).isTrue();
+		// 全形逗號也當分隔符
+		MailAllowList fullWidth = new MailAllowList("2410305，0000001", false);
+		assertThat(fullWidth.size()).isEqualTo(2);
+		assertThat(fullWidth.allows("2410305")).isTrue();
+		assertThat(fullWidth.allows("0000001")).isTrue();
 	}
 
 	@Test

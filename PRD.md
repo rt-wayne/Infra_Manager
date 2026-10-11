@@ -34,7 +34,7 @@
 |---|---|
 | 維護畫面 | 角色指派、執行人對照、使用者（含重設密碼、解鎖）、巡檢項目、資產分類、帳號類別開關：一律 DB 直接維護，無 API、無畫面、不寫管理軌跡（步驟見 `SETUP.md`） |
 | 帳號匯入、既有帳號轉入 | 無（IM_ACCT.SOURCE_CODE＝MIGRATE 為預留值，程式不寫入） |
-| 其他 | 改密碼、AD 登入、代理人、人員離職處理、系統管理軌跡查詢畫面（以 DB 查）、實際寄出 Email |
+| 其他 | 改密碼、AD 登入、代理人、人員離職處理、系統管理軌跡查詢畫面（以 DB 查）、寄信重試與發件匣 |
 | 展延 | 無；要延長就重新提新增申請，或以「修改」調整已核准帳號的到期日（見 `BACKLOG.md` 已拍板不做） |
 
 ---
@@ -357,7 +357,7 @@
 3. 到期前 7 天信：已核准、指定日、今天 ≤ 到期日 ≤ 今天＋7，且通知紀錄沒有（EXPIRY_7D、參照鍵）任何一筆者，寄 EXPIRY_7D。
 
 - 參照鍵＝`ACCT_ID_到期日yyyymmdd`，修改到期日即視為新的一輪。該鍵已有任何紀錄（成功、失敗、略過）就不再寄；失敗不自動重寄。漏跑幾天也會補轉、補寄。
-- 處理筆數＝轉逾期筆數＋「本次有寫入通知紀錄」的帳號數（第 2、3 步各自計；收件人無 Email 而記 SKIP 也算寫入）（`JobService.java:199-210`）。
+- 處理筆數＝轉逾期筆數＋「本次有寫入通知紀錄」的帳號數（第 2、3 步各自計；收件人無 Email 或不在寄送名單而記 SKIP 也算寫入）（`JobService.java:199-210`）。
 
 **J02 每週彙總**（預設每日 08:00 觸發，每週只寄一次）
 
@@ -367,9 +367,10 @@
 
 #### 9. 通知
 
-- 寄信介面（收件 Email、主旨、本文）目前的實作**只寫 log**：逐筆記收件人工號與主旨，不記 Email、不記本文，視為成功；不實際寄出。
-- 業務動作的通知在交易提交後寄出，失敗不影響業務結果與 API 回應。
-- 每位收件人寫一筆通知紀錄；收件人無 Email → SKIP；例外 → FAIL。收件人在寄送當下計算，只含啟用中使用者，同一封信同一人去重。
+- 寄信經 SMTP 實際寄出（`mail.pxmart.com.tw`、port 25、不加密、無帳號認證；寄件人 `Infra-Manager@pxmart.com.tw`），純文字 UTF-8，一位收件人一封。SMTP 主機或寄件人未設定時只寫 log（收件人工號與主旨）、不實際寄出、視為成功。log 不記 Email、不記本文。
+- 寄送為同步、不重試：業務動作的通知在交易提交後當場寄出，失敗不影響業務結果與 API 回應。每封信各自連線，SMTP 故障時每位要寄的收件人通常讓該次回應多等約 15 秒（連線或讀取逾時），最壞情況可能更久，按人數相加；超過前端 120 秒逾時，使用者會看到錯誤，但動作其實已完成（重按會出現並行衝突）。
+- 寄送名單（設定檔的工號清單）限制誰會真的收到信：名單留空＝誰都不寄；「寄給所有人」打開時忽略名單。測試環境名單只有 2410305。
+- 每位收件人寫一筆通知紀錄，依序判斷：無 Email → SKIP（ERR_MSG 空）；不在寄送名單 → SKIP（ERR_MSG「不在寄送名單」）；寄送例外 → FAIL（ERR_MSG＝例外類別名）；否則 SUCCESS。SKIP 不存 Email。收件人在寄送當下計算，只含啟用中使用者，同一封信同一人去重。
 - 角色型收件人為程式常數：到期前 7 天、轉逾期、每週彙總 → GOV；排程失敗 → SYS_ADMIN。
 
 | 事件 | 收件人 | 主旨 |
@@ -574,7 +575,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 |---|---|
 | common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`；只轉呼叫 service，不寫權限邏輯 |
-| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`LogMailSender`（只寫 log 的寄信實作）、`JobService`、`HomeService`、`InspectionService`、`CodeService` |
+| service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService` |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
@@ -831,8 +832,8 @@ END
 | RCPT_USER_ID | VARCHAR2(30) | ✓ | 收件人 |
 | RCPT_EMAIL | VARCHAR2(100) | | 寄出當下的 Email；SKIP 時為空 |
 | SEND_DATE | DATE | ✓ | 嘗試寄送時間 |
-| RESULT_CODE | VARCHAR2(10) | ✓ | SUCCESS、FAIL、SKIP |
-| ERR_MSG | VARCHAR2(500 CHAR) | | 失敗原因（不含帳密） |
+| RESULT_CODE | VARCHAR2(10) | ✓ | SUCCESS、FAIL、SKIP（無 Email 或不在寄送名單） |
+| ERR_MSG | VARCHAR2(500 CHAR) | | 失敗或略過原因（不含帳密）：FAIL＝例外類別名；SKIP 空白＝無 Email、「不在寄送名單」＝名單外 |
 
 索引 IND_IM_ACCT_NOTIFY_LOG_01（EVENT_CODE, REF_ID, RCPT_USER_ID）。
 
@@ -1060,6 +1061,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 | | `server.port` | 後端監聽 port |
 | | `spring.servlet.multipart.max-file-size`、`spring.servlet.multipart.max-request-size` | 附件單檔與請求上限（未設定時程式預設 10MB／11MB） |
 | | `server.tomcat.max-swallow-size` | 讓超大附件能正常回 413，而不是被 Tomcat 直接斷線 |
+| | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
 | `config\database.properties` | `db.connect.itflow` | 本模組 21 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
@@ -1067,6 +1069,9 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 | | `im.acct.insp.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
 | | `im.acct.insp.job.j01.cron`、`im.acct.insp.job.j02.cron` | J01、J02 觸發時間（Spring 六欄 cron，Asia/Taipei） |
 | | `im.acct.insp.job.allow-base-date` | 是否允許手動執行時指定 baseDate（測試環境用） |
+| | `im.acct.insp.mail.from` | 寄件人；留空＝不實際寄信、只寫 log |
+| | `im.acct.insp.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
+| | `im.acct.insp.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
 
 `environment.properties` 不存在時後端仍可啟動、缺 key 用程式預設值（附件根目錄除外）。
 

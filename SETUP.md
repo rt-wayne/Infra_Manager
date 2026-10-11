@@ -23,15 +23,20 @@ copy src\main\resources\config\host.properties.example src\main\resources\config
 
 | 範本 | 複製成 | 必填重點 |
 |---|---|---|
-| `im_acct_insp\src\main\resources\application.properties.example` | `application.properties` | `server.port` |
+| `im_acct_insp\src\main\resources\application.properties.example` | `application.properties` | `server.port`；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
 | `im_acct_insp\src\main\resources\config\host.properties.example` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
 | `im_acct_insp\src\main\resources\config\database.properties.example` | `config\database.properties` | 取消 `db.connect.itflow` 的註解並填入 DB 別名 |
-| `im_acct_insp\src\main\resources\config\environment.properties.example` | `config\environment.properties` | `im.acct.insp.attach.dir` 填附件根目錄絕對路徑 |
+| `im_acct_insp\src\main\resources\config\environment.properties.example` | `config\environment.properties` | `im.acct.insp.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
 | `im_acct_insp_web\im_acct_insp_web\src\main\resources\application.properties.example` | `application.properties` | `server.port`；`spring.servlet.multipart.enabled` 保持關閉 |
 | `im_acct_insp_web\im_acct_insp_web\src\main\resources\config\host.properties.example` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留 |
 
 - 附件根目錄在 Windows 要用 `/` 或 `\\`（例 `D:/home/im_acct_insp/attach`）；寫成單一 `\` 會被當跳脫字元，變成相對路徑而啟動失敗。目錄須讓執行帳號可讀寫。
 - 測試環境若要用 baseDate 手動跑排程，把 `im.acct.insp.job.allow-base-date` 設為 true；正式環境保持 false。
+- 寄信：
+  - `application.properties` 的 `spring.mail.host` 與 `environment.properties` 的 `im.acct.insp.mail.from` 都有值才會實際寄出，否則只寫 log。
+  - 誰收得到信由 `im.acct.insp.mail.allow-list`（逗號分隔工號，半形或全形逗號皆可）決定，留空＝誰都不寄。測試環境填 `2410305`，因為測試 DB 有同事的真實 Email。
+  - 正式環境才設 `im.acct.insp.mail.send-to-all=true`，寄給所有收件人。
+  - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
 
 ## 3. 後端建置與啟動
 
@@ -206,6 +211,22 @@ UPDATE IM_ASSET_CLASS
  WHERE ASSET_CLASS_ID = '【資產分類代碼】';
 ```
 
+**10. 讓排程信重寄**（J01、J02 只要通知紀錄裡有任何一筆就不再寄，連寄送失敗、收件人沒有 Email、不在寄送名單而略過的也算；修好 SMTP 或改了寄送名單後要重測，先刪掉那一輪的紀錄，再依第 7 節觸發排程。紀錄刪了就查不回來，先用第一句確認要刪的筆數）
+
+```sql
+-- 事件代碼：J02 每週彙總＝WEEKLY_SUMMARY（參照鍵＝該週週一，例 20261005）；
+--           J01 逾期信＝EXPIRED、到期前 7 天信＝EXPIRY_7D（參照鍵＝帳號單號_到期日，中間無空格，例 AR20261001-001_20261006）
+SELECT RCPT_USER_ID, SEND_DATE, RESULT_CODE, ERR_MSG
+  FROM IM_ACCT_NOTIFY_LOG
+ WHERE EVENT_CODE = '【事件代碼】' AND REF_ID = '【參照鍵】';
+
+DELETE FROM IM_ACCT_NOTIFY_LOG
+ WHERE EVENT_CODE = '【事件代碼】' AND REF_ID = '【參照鍵】';
+-- 影響筆數與上一句相同再 COMMIT
+```
+
+- J01 刪了紀錄後，帳號要仍符合條件才會重寄：逾期信要帳號仍是已逾期；7 天提醒要仍是已核准、且到期日落在基準日到基準日＋7 天之間（可用第 7 節的 baseDate 調整基準日，但先看該處的粗體警告：帶未來日期會把帳號轉成逾期，且無法復原）。不符合時觸發排程也不會寄，不代表 SMTP 有問題。
+
 **未列出的操作**（例如改使用者的 Email、部門、分機電話）：UPDATE 一律一併設 `UPDATE_DATE = SYSDATE`、`UPDATE_BY = '【操作人工號】'`，WHERE 用該表主鍵，確認影響 1 筆再 COMMIT。新增代碼（帳號類別、巡檢項目、資產分類）可能牽動程式邏輯，先找開發人員，不要直接 INSERT。
 
 ### 產生密碼雜湊（PwdHashTool）
@@ -260,20 +281,22 @@ echo "$RESP" | tail -n 1
 curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J01/run \
   -H "Authorization: Bearer $TOKEN"
 
-# J02：每週逾期帳號彙總信，同一週只寄一次（本週寄送失敗或收件人沒有 Email 也算已寄，同週不會重寄）
+# J02：每週逾期帳號彙總信，同一週只寄一次（本週寄送失敗、收件人沒有 Email 或不在寄送名單也算已寄，同週不會重寄）
 curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J02/run \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 - 成功回 200，JSON 為 `runId`（執行紀錄序號）、`resultCode`（`SUCCESS`／`PARTIAL`／`FAIL`）、`affectedCnt`。
-- `affectedCnt` 的意思：J01＝轉逾期的帳號數，加上本次有寫逾期信或 7 天提醒通知紀錄的帳號數（每個帳號算 1，不論收件人幾位；寄失敗、收件人都沒 Email 而略過的也算；同一帳號可能被算兩次）；J02＝彙總信列出的逾期帳號數，不是寄出封數。兩者回 `SUCCESS` 都不代表信已寄達。
-- J02 回 `SUCCESS` 且 0 筆有三種可能：本週已有彙總紀錄（不再寄，含本週寄送失敗或收件人沒有 Email 的情況）；目前沒有逾期帳號（照常寄給每位收件人一封「0 筆」彙總）；或沒有逾期帳號、也沒有任何收件人（什麼都不寄、不留紀錄，下次執行會再試）。要確認寄送結果請查（週一日期＝基準日所在週的週一，例 `20261005`；`RESULT_CODE` 為寄送結果）：
+- `affectedCnt` 的意思：J01＝轉逾期的帳號數，加上本次有寫逾期信或 7 天提醒通知紀錄的帳號數（每個帳號算 1，不論收件人幾位；寄失敗、收件人都沒 Email 或不在寄送名單而略過的也算；同一帳號可能被算兩次）；J02＝彙總信列出的逾期帳號數，不是寄出封數。兩者回 `SUCCESS` 都不代表信已寄達。
+- J02 回 `SUCCESS` 且 0 筆有三種可能：本週已有彙總紀錄（不再寄，含本週寄送失敗、收件人沒有 Email 或不在寄送名單的情況）；目前沒有逾期帳號（照常寄給每位收件人一封「0 筆」彙總）；或沒有逾期帳號、也沒有任何收件人（什麼都不寄、不留紀錄，下次執行會再試）。要確認寄送結果請查（週一日期＝基準日所在週的週一，例 `20261005`；`RESULT_CODE` 為寄送結果）：
 
 ```sql
 SELECT RCPT_USER_ID, RCPT_EMAIL, SEND_DATE, RESULT_CODE, ERR_MSG
   FROM IM_ACCT_NOTIFY_LOG
  WHERE EVENT_CODE = 'WEEKLY_SUMMARY' AND REF_ID = '【該週週一 yyyymmdd】';
 ```
+
+- 同一週要重寄（例如修好 SMTP 後重測）：先依第 6 節第 10 段刪掉該週紀錄。
 
 - 錯誤：
   - 401「登入已逾時，請重新登入」＝token 已失效：變數 `TOKEN` 是空的（登入沒成功）或少了 `Bearer `、閒置超過 30 分鐘、登入已滿 8 小時、已登出，或登入者已被停用。重新登入取 token；重新登入回「帳號或密碼錯誤」而密碼確定沒錯時，查該工號的 STATUS（第 6 節查代碼的第三句）。
