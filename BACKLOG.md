@@ -14,17 +14,17 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 30 | 殼 jar 所有回應加安全標頭：CSP `default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'`（前端建置產物已確認無行內程式、無 data: 網址、無 eval、無外站資源，附件下載用 blob 不受限）、nosniff、Referrer-Policy、Permissions-Policy；動工後瀏覽器實測各畫面。使用者裁示 ②B（2026-10-11）：**允許任何網站嵌入**，不加 X-Frame-Options／frame-ancestors，誘騙點擊風險寫進 PRD 已知限制。HTTPS 另立第 34 項。改：殼 jar 新增 Filter＋測試、PRD、SETUP | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動：
-- 卡住／待確認：
+- 下一步：寫殼 jar 的安全標頭 Filter 與測試
+- 已改動：（無）
+- 卡住／待確認：（無）
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 30 | 殼 jar 所有回應加安全標頭：CSP（只准本站程式與樣式，前端已確認無行內程式、無外站資源，附件下載用 blob 不受限）、nosniff、Referrer-Policy、Permissions-Policy；動工後瀏覽器實測各畫面。使用者回「所有網站都可以嵌入」（2026-10-11），X-Frame-Options／frame-ancestors 待確認是「要允許任何網站嵌入」還是描述現況。HTTPS 另立第 34 項。改：殼 jar 新增 Filter＋測試、PRD、SETUP | 高 | — |
 | 7 | 排程開頭／收尾出錯也要通知（`JobService.java` `run()` 第 153-167 行，寫 RUNNING 與寫結束紀錄在 J01／J02 的 try 之外）。使用者裁示（2026-10-11）：③A 結束紀錄寫入失敗但排程成功也寄 JOB_FAIL、信中註明「結束紀錄寫入失敗」；④A 寫 RUNNING 失敗時不跑、記 log 並嘗試寄 JOB_FAIL（DB 全斷時信也寄不出，只剩 log）；⑤A 下次同一排程開跑時把它舊的 RUNNING 紀錄改 FAIL 並寄信（前提：同時只有一個後端在跑，鎖只在本 JVM）；⑥A 第 22 項不併做。改：`JobService.java`、`JobRunDao`（可能加方法）、`JobServiceTest`、PRD | 高 | — |
 
 ## 僅記錄未拍板
