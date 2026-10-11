@@ -4,6 +4,9 @@
 // 變更說明: 新增：登入守衛與權限碼守衛測試（開發文件 spec_im_acct_insp_v2.0.md 第 8.1、8.3 節）
 //           沒有 token → 登入頁（帶 redirect）；已登入開登入頁 → 原路由或首頁；meta.need 權限碼不符 → /no-access；
 //           /me 回 401 → 登入頁；任何 API 401 → 導回登入頁並記下後端 message
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -61,7 +64,7 @@ const meMock = vi.mocked(getMe)
 
 describe('全域路由守衛', () => {
   beforeEach(() => {
-    sessionStorage.clear()
+    localStorage.clear()
     resetSession()
     useSession().loginNotice.value = ''
     meMock.mockReset().mockResolvedValue(makeMe())

@@ -12,11 +12,15 @@
 //           移除工號選擇（users／userId／switchUser）；改為 token 登入：login／logout，/me 只在有 token 時載入；
 //           can(權限碼) 依 /me 的 permissions[]；切換身分 impersonate／切回 endImpersonate（回傳 me 即更新），
 //           之後以 canStay 判斷目前頁可否留下；loginNotice 存 401 時要在登入頁顯示的後端訊息
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：token 改各分頁共用（tokenStore 改 localStorage）；切換身分／切回後 notifyOtherTabs，
+//           讓其他分頁重新整理成新身分（登入、登出換掉或清掉 token，其他分頁自然會收到）
 // ============================================================
 import { computed, ref } from 'vue'
 import { endImpersonate as apiEndImpersonate, getMe, impersonate as apiImpersonate, login as apiLogin, logout as apiLogout } from '../api/auth'
 import { getCodes, listExpiring, listTodos } from '../api/common'
-import { clearToken, getToken, setToken } from '../api/tokenStore'
+import { clearToken, getToken, notifyOtherTabs, setToken } from '../api/tokenStore'
 import type { Codes, ExpiringItem, Me } from '../types/common'
 import { hasPerm } from '../utils/perms'
 import type { PermCode } from '../utils/perms'
@@ -85,6 +89,8 @@ async function logout(): Promise<void> {
 
 /** 套用切換／切回後的 me，再以 canStay 判斷目前頁能否留下；可留下才遞增 viewKey 重建畫面 */
 function applyMe(next: Me, canStay: () => boolean): boolean {
+  // 身分記在後端 token 上，各分頁共用同一 token：其他分頁要重新整理才會一致
+  notifyOtherTabs()
   me.value = next
   meFailed.value = false
   bellOpen.value = false

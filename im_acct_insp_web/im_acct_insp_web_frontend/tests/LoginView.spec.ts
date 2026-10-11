@@ -3,6 +3,9 @@
 // 修改日期: 2026-10-07
 // 變更說明: 新增：登入頁測試（開發文件 spec_im_acct_insp_v2.0.md 第 2.1、8.3 節）
 //           成功存 token 並回 redirect；失敗顯示後端 message（A01、A02）且不存 token；被 401 導回時顯示當時訊息
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -32,7 +35,7 @@ async function mountLogin(path = '/login') {
 
 describe('LoginView', () => {
   beforeEach(() => {
-    sessionStorage.clear()
+    localStorage.clear()
     resetSession()
     useSession().loginNotice.value = ''
     loginMock.mockReset()

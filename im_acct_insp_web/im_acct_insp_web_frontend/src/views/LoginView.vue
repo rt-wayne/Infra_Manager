@@ -5,6 +5,10 @@
             工號、密碼、登入鈕；POST /auth/login 成功存 token（sessionStorage）後回原路由（query redirect），否則首頁
             錯誤顯示後端 message（A01、A02）；被 401 導回時顯示當時的後端 message（例 A03）
             已登入者由路由守衛導向首頁；密碼不留在畫面狀態以外的地方
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-11
+  變更說明: BACKLOG 第 28 項：token 改存 localStorage（各分頁共用，本檔程式未改）；
+            登入頁開著時其他分頁登入成功，本頁會整頁重新整理並由路由守衛帶往原路由
 -->
 <template>
   <main class="login-page">

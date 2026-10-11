@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp.service;
 //           現在 − LAST_ACCESS_DATE ≤ 30 分鐘、實際使用者 STATUS＝1；任一不符 401 A03。
 //           通過後 LAST_ACCESS_DATE 節流為每 60 秒最多寫一次；代理身分 STATUS 變 0 時自動視為切回（清 ACT_AS_USER_ID，不寫軌跡）。
 //           權限、角色、執行人類別每次請求自 DB 載入（不快取）。日後換共用登入只換此類別
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：閒置上限改 480 分鐘（AcctConst.TOKEN_IDLE_MINUTES，本類別程式未改）
 // ============================================================
 
 import java.time.Clock;

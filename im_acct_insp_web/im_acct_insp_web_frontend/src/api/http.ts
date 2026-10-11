@@ -13,6 +13,9 @@
 // 變更說明: v2.0（開發文件 spec_im_acct_insp_v2.0.md 第 2.1、8.1 節）：移除 X-User-Id；
 //           每個請求帶 Authorization: Bearer <sessionStorage 的 token>；
 //           回 401（登入、登出 API 本身除外）→ 清 token，交給 setUnauthorizedHandler 註冊的處理（router 導回登入頁並顯示後端 message）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：token 改存 localStorage（各分頁共用，本檔程式未改）；401 清 token 時其他分頁也會跟著回登入頁
 // ============================================================
 import axios from 'axios'
 import { errorMessage } from './errors'

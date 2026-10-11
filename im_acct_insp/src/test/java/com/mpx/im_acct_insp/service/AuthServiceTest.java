@@ -9,6 +9,9 @@ package com.mpx.im_acct_insp.service;
 //           token：未帶／亂碼／已登出／閒置超過 30 分／登入超過 8 小時／使用者停用皆 401 A03，LAST_ACCESS_DATE 每 60 秒最多寫一次，
 //           代理身分停用自動切回；切換身分：無 SYS_IMPERSONATE 403 並寫 DENY、不可切自己、切換與軌跡同一交易、
 //           切換中仍以實際使用者權限判斷可改切別人；切回未切換中 409 E20；/me 回 telNo、email（有效身分）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：閒置上限改 480 分，邊界測試由 30／31 分改 480／481 分、resolve 閒置案例由 40 分改 481 分
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -161,8 +164,8 @@ class AuthServiceTest {
 
 	@Test
 	void token有效條件() {
-		assertThat(TokenIdentityProvider.isValid(token(NOW.minusMinutes(30), NOW.plusHours(1), null, 1), NOW)).isTrue();
-		assertThat(TokenIdentityProvider.isValid(token(NOW.minusMinutes(31), NOW.plusHours(1), null, 1), NOW)).isFalse();
+		assertThat(TokenIdentityProvider.isValid(token(NOW.minusMinutes(480), NOW.plusHours(1), null, 1), NOW)).isTrue();
+		assertThat(TokenIdentityProvider.isValid(token(NOW.minusMinutes(481), NOW.plusHours(1), null, 1), NOW)).isFalse();
 		assertThat(TokenIdentityProvider.isValid(token(NOW, NOW, null, 1), NOW)).isFalse();
 		assertThat(TokenIdentityProvider.isValid(token(NOW, NOW.plusHours(1), NOW.minusMinutes(1), 1), NOW)).isFalse();
 		assertThat(TokenIdentityProvider.isValid(token(NOW, NOW.plusHours(1), null, 0), NOW)).isFalse();
@@ -173,7 +176,7 @@ class AuthServiceTest {
 	void resolve_未帶亂碼查無皆401_A03() {
 		assertStatus(() -> provider.resolve(null), HttpStatus.UNAUTHORIZED, AcctMsg.A03);
 		assertStatus(() -> provider.resolve("Bearer garbage"), HttpStatus.UNAUTHORIZED, AcctMsg.A03);
-		when(tokenDao.find(TokenCodec.sha256Hex("tok"))).thenReturn(token(NOW.minusMinutes(40), NOW.plusHours(1), null, 1));
+		when(tokenDao.find(TokenCodec.sha256Hex("tok"))).thenReturn(token(NOW.minusMinutes(481), NOW.plusHours(1), null, 1));
 		assertStatus(() -> provider.resolve("Bearer tok"), HttpStatus.UNAUTHORIZED, AcctMsg.A03);
 	}
 

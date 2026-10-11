@@ -17,6 +17,10 @@ package com.mpx.im_acct_insp.common;
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #2：新增通知收件角色常數 MAIL_ROLE_EXPIRY（GOV）、MAIL_ROLE_JOB_FAIL（SYS_ADMIN），
 //           取代 properties key（依 SA 7.3 固定）；只用來查收件人，不用於權限判斷
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：TOKEN_IDLE_MINUTES 由 30 改為 TOKEN_MAX_HOURS * 60（480 分，實際只剩登入滿 8 小時失效；
+//           前端 token 改跨分頁共用，一天登入一次）。閒置檢查保留，日後要縮短只改此值
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -187,8 +191,9 @@ public final class AcctConst {
 
 	// 登入（spec §2.1；程式常數，spec §9.4）
 	public static final int LOGIN_MAX_FAIL = 5;
-	public static final int TOKEN_IDLE_MINUTES = 30;
 	public static final int TOKEN_MAX_HOURS = 8;
+	/** 閒置上限；與 TOKEN_MAX_HOURS 同長，等於不另設閒置限制（BACKLOG 第 28 項）；要縮短時改成分鐘數字 */
+	public static final int TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60;
 	/** LAST_ACCESS_DATE 節流：距上次寫入達此秒數才更新 */
 	public static final int TOKEN_TOUCH_SECONDS = 60;
 	public static final int TOKEN_BYTES = 32;

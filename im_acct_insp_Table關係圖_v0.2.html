@@ -508,7 +508,7 @@ erDiagram
 <tr><td class="n">USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c">Y</td><td></td><td>登入的實際使用者工號，參照 IM_ACCT_USER.USER_ID</td></tr>
 <tr><td class="n">ACT_AS_USER_ID</td><td class="n">VARCHAR2(30)</td><td class="c"></td><td></td><td>切換身分中的代理身分工號，參照 IM_ACCT_USER.USER_ID；空＝未切換</td></tr>
 <tr><td class="n">EXPIRE_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最長時效到期時間（登入時間＋8 小時）</td></tr>
-<tr><td class="n">LAST_ACCESS_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最後使用時間；超過 30 分鐘未使用即失效</td></tr>
+<tr><td class="n">LAST_ACCESS_DATE</td><td class="n">DATE</td><td class="c">Y</td><td></td><td>最後使用時間；超過 480 分鐘（8 小時）未使用即失效</td></tr>
 <tr><td class="n">LOGOUT_DATE</td><td class="n">DATE</td><td class="c"></td><td></td><td>登出時間；非空＝已作廢</td></tr>
 </table></div>
 <ul class="ref">

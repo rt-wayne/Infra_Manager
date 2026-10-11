@@ -2,11 +2,17 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-05
 // 變更說明: 新增：前端範本進入點（規格 v4）；jdk25 階段 3：改 TypeScript
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：啟動時 watchOtherTabs，其他分頁登入／登出／切換身分時本分頁整頁重新整理
 // ============================================================
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
+import { watchOtherTabs } from './api/tokenStore'
 import './assets/main.css'
+
+watchOtherTabs()
 
 const app = createApp(App)
 app.use(router)

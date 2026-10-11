@@ -5,6 +5,9 @@
 //           導覽依 permissions[]（無 ACC_LIST_FULL 時「帳號列表」指向申請單列表、巡檢區依 INSP_VIEW／INSP_CREATE）；
 //           canImpersonate 才顯示「切換身分」；切換中固定顯示 U01＋切回；切回後目前頁無權限導向首頁；
 //           鈴鐺：無 ACC_LIST_FULL 點一筆開唯讀明細；登出清 token 回登入頁
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -78,7 +81,7 @@ async function mountLayout(me: Me, path = '/'): Promise<{ w: VueWrapper; router:
 describe('AppLayout', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    sessionStorage.clear()
+    localStorage.clear()
     resetSession()
     setToken('tok')
     vi.mocked(getMe).mockReset()
