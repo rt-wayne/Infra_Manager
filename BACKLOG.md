@@ -24,7 +24,6 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 26 | 測試 DB 補三句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的），及第 636 行 IM_ACCT_LOGIN_TOKEN.LAST_ACCESS_DATE（第 28 項改的，30 分鐘 → 480 分鐘）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
 
 ## 僅記錄未拍板
 
