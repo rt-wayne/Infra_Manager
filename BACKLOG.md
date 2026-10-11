@@ -14,18 +14,18 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 25 | 通知信改為實際寄出（SMTP，同 Infra_Manager_Java 寄法）；以寄送名單限制收件人，測試期間只寄 2410305 | [backlog/25-smtp-mail.md](backlog/25-smtp-mail.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：等使用者裁示「通知信改 HTML 與否」及第三輪審查 2 項低優先措辭建議，之後 commit＋push，再更新 PRD／CHANGELOG／BACKLOG 三檔。第二輪 ①～⑤ 已做（等待時間改「通常約 15 秒」、SETUP 重寄 SQL 補範例與條件、MailConfig 名單空 WARN、第 26 項、第 23 項更新），175 項全過，第三輪審查 0 阻擋；執行中的後端 jar 尚未含 WARN 那行（只差一行 log）
-- 已改動：第一輪審查 7 項全修（bean 改名 notifyMailSender、host 空白改用 log 版、刪 ssl.trust、全形逗號、等待時間文件、PRD:360、SETUP 第 6 節第 10 段重寄 SQL、新增 MailConfigContextTest）。後端 175 項、前端 76 項測試全過；兩個 jar 重新建置並已啟動（後端 8989、殼 jar 8787）；後端 log「寄信：SMTP 實際寄出；寄送名單 1 人」。測試 DB 已為 2410305 加 6 個角色、8 筆執行人；J02 baseDate=2026-09-30 實寄 2410305 成功（週鍵 20260928，其他 4 位 GOV 記 SKIP 不在寄送名單）。未 commit
-- 卡住／待確認：通知信目前是純文字，Infra_Manager_Java 是 HTML（`MailDispatcher.java:98`），使用者問為何不是 HTML，待裁示；測試 DB 補 COMMENT 見第 26 項
+- 下一步：
+- 已改動：
+- 卡住／待確認：
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
 | 26 | 測試 DB 補兩句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
+| 27 | 通知信改 HTML（比照 Infra_Manager_Java `MailDispatcher.java:98` 的 `setText(html, true)`）：四種本文（申請單通知、到期提醒與逾期、週彙總、排程失敗）改寫成 HTML、週彙總用表格，使用者填的欄位值要先 HTML 跳脫；目前本文是 `NotificationService.java:143-234` 組的純文字、`SmtpMailSender` 以純文字送出。動工前先列出四種信的版面與要跳脫的欄位給使用者確認 | 中 | — |
 
 ## 僅記錄未拍板
 
