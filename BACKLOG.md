@@ -14,17 +14,17 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 7 | 排程開頭／收尾出錯也要通知（`JobService.java` `run()`，寫 RUNNING 與寫結束紀錄在 J01／J02 的 try 之外）。使用者裁示（2026-10-11）：③A 結束紀錄寫入失敗但排程成功也寄 JOB_FAIL、信中註明「結束紀錄寫入失敗」；④A 寫 RUNNING 失敗時不跑、記 log 並嘗試寄 JOB_FAIL（DB 全斷時信也寄不出，只剩 log）；⑤A 下次同一排程開跑時把它舊的 RUNNING 紀錄改 FAIL 並寄信（前提：同時只有一個後端在跑，鎖只在本 JVM）；⑥A 第 22 項不併做。動工前細節裁示（2026-10-11，全部依建議）：①A 寫 RUNNING 失敗時手動 API 回 500、不給 runId；②A 取號失敗時通知紀錄 REF_ID 填 0、信中執行序號顯示「（未取得）」；③A 只有結束紀錄寫失敗時主旨「【排程失敗】{代碼} 結束紀錄寫入失敗」；④A 補記時該 runId 已有 JOB_FAIL 通知紀錄就不再寄；⑤A 同一排程所有 RUNNING 全補記、每筆各寄一封（測試 DB 動工前查 RUNNING 0 筆）。假設：補記的 END_DATE＝補記當下、ERR_MSG「上次執行未正常結束（下次開跑時補記）」；補記本身失敗只記 log、照常往下跑。改：`JobService.java`、`JobRunDao.java`、`NotificationService.java`、`JobAndNotifyTest.java`、PRD | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動：
-- 卡住／待確認：
+- 下一步：改 JobRunDao（查 RUNNING、補記 FAIL）→ NotificationService.jobFail（可空 runId、結束紀錄寫入失敗主旨）→ JobService.run 流程 → 測試 → 審查
+- 已改動：無（動工前快照）
+- 卡住／待確認：無
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 7 | 排程開頭／收尾出錯也要通知（`JobService.java` `run()` 第 153-167 行，寫 RUNNING 與寫結束紀錄在 J01／J02 的 try 之外）。使用者裁示（2026-10-11）：③A 結束紀錄寫入失敗但排程成功也寄 JOB_FAIL、信中註明「結束紀錄寫入失敗」；④A 寫 RUNNING 失敗時不跑、記 log 並嘗試寄 JOB_FAIL（DB 全斷時信也寄不出，只剩 log）；⑤A 下次同一排程開跑時把它舊的 RUNNING 紀錄改 FAIL 並寄信（前提：同時只有一個後端在跑，鎖只在本 JVM）；⑥A 第 22 項不併做。改：`JobService.java`、`JobRunDao`（可能加方法）、`JobServiceTest`、PRD | 高 | — |
 
 ## 僅記錄未拍板
 
