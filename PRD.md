@@ -572,6 +572,12 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**` 回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
+- **安全標頭**：殼 jar `/im_acct_insp_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'`（只准載入本站的程式、樣式、圖片與連線）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/im_acct_insp_web` 未加斜線時的 302 轉址、`/im_acct_insp_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、行內樣式或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
+- **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
+  - 與本系統同站的網站嵌入時，框內沿用使用者原本的登入，可直接誘騙使用者在框內點擊（例如簽核按鈕）。同站範圍依開系統的網址而定：用 IP 或單段主機名開時，是同一台主機的其他服務（含其他 port）；用完整網域名（如 `xxx.pxmart.com.tw`）開時，是同協定、同屬 `pxmart.com.tw` 的網站。
+  - 不同站的網站嵌入時，框內拿不到原本的登入；但外站仍可誘導使用者在框內重新登入，之後 token 留在「外站那一份」，8 小時內再造訪該外站時框內仍是登入狀態，可接著誘騙點擊，門檻較高。
+  - 舊版瀏覽器或被企業政策關閉分開存放時，任何網站嵌入都能沿用原本的登入。
+  - 本段為依瀏覽器行為推論，瀏覽器版本未查證，未實測。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
 - **log**：後端寫 `/home/tomcat/log/im_acct_insp/`、殼 jar 寫 `/home/tomcat/log/im_acct_insp_web/`（Windows 為啟動所在磁碟的同路徑），保留 30 天。
 - **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
@@ -588,7 +594,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 **前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/im_acct_insp_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
 
-**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder。
+**殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
 **各模組交易內容**
 
