@@ -21,6 +21,11 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 25 項：sendAll 加寄送名單（MailAllowList）——有 Email 但不在名單者不寄、記 SKIP，
 //           ERR_MSG「不在寄送名單」；無 Email 仍先判斷、照舊記 SKIP 且 ERR_MSG 留空。兩種 SKIP 都不存 Email
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 27 項：本文由純文字改為 HTML（MailHtml 組版面、跳脫所有填入值），欄位內容不變。
+//           信末「前往系統」連結依事件：待審核／待執行／待複驗／複驗退回 → 待辦簽核，退件 → 申請單列表，
+//           到期／逾期／每週彙總／排程失敗 → 首頁（部分收件人沒有帳號列表權限）
 // ============================================================
 
 import java.time.Clock;
@@ -65,16 +70,18 @@ public class NotificationService {
 	private final NotifyLogDao notifyLogDao;
 	private final MailSender mailSender;
 	private final MailAllowList allowList;
+	private final MailHtml html;
 	private final Clock clock;
 
 	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, CodeService codeService, NotifyLogDao notifyLogDao,
-			MailSender mailSender, MailAllowList allowList, Clock clock) {
+			MailSender mailSender, MailAllowList allowList, MailHtml html, Clock clock) {
 		this.permDao = permDao;
 		this.acctReqDao = acctReqDao;
 		this.codeService = codeService;
 		this.notifyLogDao = notifyLogDao;
 		this.mailSender = mailSender;
 		this.allowList = allowList;
+		this.html = html;
 		this.clock = clock;
 	}
 
@@ -133,28 +140,31 @@ public class NotificationService {
 			}
 			default -> throw new IllegalArgumentException("未知的通知事件 " + event);
 			}
-			sendAll(event, AcctConst.REF_REQ, id, rcpts, subject, requestBody(event, r, stages), createBy);
+			String path = AcctConst.EV_REJECT.equals(event) ? MailHtml.PATH_REQUESTS : MailHtml.PATH_TODO;
+			sendAll(event, AcctConst.REF_REQ, id, rcpts, subject, html.page(subject, requestBody(event, r, stages), path),
+					createBy);
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} reqId={} 例外={}", event, reqId, e.getClass().getSimpleName());
 		}
 	}
 
+	/** 申請單類本文的兩欄表（HTML 片段，值已跳脫） */
 	static String requestBody(String event, AcctReq r, Map<Integer, ApprStage> stages) {
-		StringBuilder b = new StringBuilder();
-		b.append("單號：").append(r.getReqId()).append('\n');
-		b.append("申請類型：").append(AcctConst.reqTypeName(r.getReqTypeCode())).append('\n');
-		b.append("帳號類別：").append(nvl(r.getCatgName(), r.getCatgId())).append('\n');
-		b.append("帳號名稱：").append(acctNameText(r.getCatgId(), r.getAcctName())).append('\n');
-		b.append("申請人：").append(nvl(r.getApplyByName(), r.getApplyBy())).append('\n');
-		b.append("目前關卡：").append(r.getCurrStageId() == null ? "—" : CodeService.stageName(stages, r.getCurrStageId()))
-				.append('\n');
+		List<String[]> rows = new ArrayList<>();
+		rows.add(new String[] { "單號", r.getReqId() });
+		rows.add(new String[] { "申請類型", AcctConst.reqTypeName(r.getReqTypeCode()) });
+		rows.add(new String[] { "帳號類別", nvl(r.getCatgName(), r.getCatgId()) });
+		rows.add(new String[] { "帳號名稱", acctNameText(r.getCatgId(), r.getAcctName()) });
+		rows.add(new String[] { "申請人", nvl(r.getApplyByName(), r.getApplyBy()) });
+		rows.add(new String[] { "目前關卡",
+				r.getCurrStageId() == null ? "—" : CodeService.stageName(stages, r.getCurrStageId()) });
 		if (AcctConst.EV_REJECT.equals(event)) {
-			b.append("退件原因：").append(nvl(r.getRejectReason(), "")).append('\n');
+			rows.add(new String[] { "退件原因", nvl(r.getRejectReason(), "") });
 		}
 		if (AcctConst.EV_VERIFY_REJECT.equals(event)) {
-			b.append("退回原因：").append(nvl(r.getVerifyRejectReason(), "")).append('\n');
+			rows.add(new String[] { "退回原因", nvl(r.getVerifyRejectReason(), "") });
 		}
-		return b.toString();
+		return MailHtml.table(rows);
 	}
 
 	// ------------------------------------------------------------
@@ -179,17 +189,17 @@ public class NotificationService {
 			String expText = exp == null ? "" : exp.format(DATE);
 			String subject = AcctConst.EV_EXPIRED.equals(event) ? "【帳號到期】" + name + " 已逾期"
 					: "【帳號到期】" + name + " 將於 " + expText + " 到期";
-			StringBuilder b = new StringBuilder();
-			b.append("單號：").append(a.getAcctId()).append('\n');
-			b.append("帳號類別：").append(nvl(a.getCatgName(), a.getCatgId())).append('\n');
-			b.append("帳號名稱：").append(name).append('\n');
-			b.append("使用人：").append(nvl(a.getHolderName(), "")).append('\n');
-			b.append("到期日：").append(expText).append('\n');
+			List<String[]> rows = new ArrayList<>();
+			rows.add(new String[] { "單號", a.getAcctId() });
+			rows.add(new String[] { "帳號類別", nvl(a.getCatgName(), a.getCatgId()) });
+			rows.add(new String[] { "帳號名稱", name });
+			rows.add(new String[] { "使用人", nvl(a.getHolderName(), "") });
+			rows.add(new String[] { "到期日", expText });
 			if (exp != null && AcctConst.EV_EXPIRED.equals(event)) {
-				b.append("逾期天數：").append(ChronoUnit.DAYS.between(exp, today)).append('\n');
+				rows.add(new String[] { "逾期天數", String.valueOf(ChronoUnit.DAYS.between(exp, today)) });
 			}
-			return sendAll(event, AcctConst.REF_ACCT, acctRefId(a.getAcctId(), exp), rcpts, subject, b.toString(),
-					AcctConst.SYSTEM_USER);
+			return sendAll(event, AcctConst.REF_ACCT, acctRefId(a.getAcctId(), exp), rcpts, subject,
+					html.page(subject, MailHtml.table(rows), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER);
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} acctId={} 例外={}", event, a.getAcctId(), e.getClass().getSimpleName());
 			return 0;
@@ -203,35 +213,36 @@ public class NotificationService {
 			blocks.add(expiredBlock(expired, today));
 			String subject = "【帳號到期】本週已逾期未處理帳號彙總（" + expired.size() + " 筆）";
 			return sendAll(AcctConst.EV_WEEKLY_SUMMARY, AcctConst.REF_WEEK, weekKey, inRole(AcctConst.MAIL_ROLE_EXPIRY), subject,
-					String.join("\n", blocks), AcctConst.SYSTEM_USER);
+					html.page(subject, String.join("", blocks), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER);
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} week={} 例外={}", AcctConst.EV_WEEKLY_SUMMARY, weekKey, e.getClass().getSimpleName());
 			return 0;
 		}
 	}
 
+	/** 已逾期區塊（HTML 片段）：區塊標題＋多欄表；0 筆顯示 U13 */
 	static String expiredBlock(List<Acct> expired, LocalDate today) {
-		StringBuilder b = new StringBuilder("■ 已逾期未處理帳號\n");
+		String head = MailHtml.heading("■ 已逾期未處理帳號");
 		if (expired.isEmpty()) {
-			return b.append(U13).append('\n').toString();
+			return head + MailHtml.para(U13);
 		}
-		b.append("單號｜類別｜帳號名稱｜使用人｜到期日｜逾期天數\n");
+		List<List<String>> rows = new ArrayList<>();
 		for (Acct a : expired) {
 			LocalDate exp = a.getExpiryDate() == null ? null : a.getExpiryDate().toLocalDate();
-			b.append(a.getAcctId()).append('｜').append(nvl(a.getCatgName(), a.getCatgId())).append('｜')
-					.append(acctNameText(a.getCatgId(), a.getAcctName())).append('｜').append(nvl(a.getHolderName(), ""))
-					.append('｜').append(exp == null ? "" : exp.format(DATE)).append('｜')
-					.append(exp == null ? "" : String.valueOf(ChronoUnit.DAYS.between(exp, today))).append('\n');
+			rows.add(List.of(nvl(a.getAcctId(), ""), nvl(nvl(a.getCatgName(), a.getCatgId()), ""),
+					acctNameText(a.getCatgId(), a.getAcctName()), nvl(a.getHolderName(), ""),
+					exp == null ? "" : exp.format(DATE), exp == null ? "" : String.valueOf(ChronoUnit.DAYS.between(exp, today))));
 		}
-		return b.toString();
+		return head + MailHtml.rowsTable(List.of("單號", "類別", "帳號名稱", "使用人", "到期日", "逾期天數"), rows);
 	}
 
 	public void jobFail(String jobCode, long runId, String resultCode, String errMsg) {
 		try {
 			String part = AcctConst.JR_PARTIAL.equals(resultCode) ? "部分" : "";
 			String subject = "【排程失敗】" + jobCode + " 執行" + part + "失敗";
-			String body = "排程代碼：" + jobCode + "\n執行序號：" + runId + "\n結果：" + resultCode + "\n錯誤摘要："
-					+ nvl(errMsg, "") + "\n";
+			String body = html.page(subject, MailHtml.table(List.of(new String[] { "排程代碼", jobCode },
+					new String[] { "執行序號", String.valueOf(runId) }, new String[] { "結果", resultCode },
+					new String[] { "錯誤摘要", nvl(errMsg, "") })), MailHtml.PATH_HOME);
 			sendAll(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, String.valueOf(runId), inRole(AcctConst.MAIL_ROLE_JOB_FAIL), subject, body,
 					AcctConst.SYSTEM_USER);
 		} catch (RuntimeException e) {

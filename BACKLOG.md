@@ -17,15 +17,19 @@
 | 27 | 通知信改 HTML（比照 Infra_Manager_Java 版面）＋信末「前往系統」連結。裁示（2026-10-11）：① 程式內組 HTML、`HtmlUtils` 跳脫所有填入值，不加 Thymeleaf；② 只寄 HTML；③ 加頁尾「系統自動發送，請勿直接回覆＋發送時間」；④ 新增 `im.acct.insp.mail.site-url`（留空不顯示連結），依信件類型連：待審核／待執行／待複驗／複驗退回 → `#/todo`，退件 → `#/requests`，到期／逾期／週彙總／排程失敗 → 首頁；⑤ 實寄驗證：J02 基準日 2026-10-11（週鍵 20261005，若已有紀錄先停下問）＋ 2410305 送一張新增申請（帳號名稱 `HTML測試<b>粗體</b>`）再由 2410305 退件；本機 environment.properties 加 site-url＝`http://localhost:8787/im_acct_insp_web/`（使用者同意由我改） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：實作 NotificationService HTML 本文與連結、SmtpMailSender 改 HTML、測試；過 code-reviewer／test-runner 後重打包重啟後端、實寄驗證、commit＋三檔
-- 已改動：（無，動工前快照）
-- 卡住／待確認：
+- 下一步：等使用者看週彙總信（多欄表、表格字型、首頁連結、頁尾）；通過 → code-reviewer（含字型修正）→ test-runner → commit＋三檔
+- J02 實寄（2026-10-11 12:29，由我以 2410305 登入觸發後登出）：baseDate=2026-09-21，runId 16、SUCCESS、逾期帳號 1 筆；週鍵 20260921 寫 5 筆，2410305 SUCCESS、其餘 SKIP「不在寄送名單」
+- 裁示（2026-10-11）：J02 改用空週 2026-09-21；跳脫不再實寄、接受單元測試；表格欄位補字型（已改，179 測試通過，後端 12:22 以新 jar 重啟，PID 20648）。使用者已確認「待您審核」信連結可開、頁尾正確
+- 實寄結果（2026-10-11）：申請單 AR20261011-001（帳號名稱實際填 TEST，跳脫未實寄驗證）送出→兩次進下一關→退件→重送→退件，2410305 六封皆 SUCCESS、其他人 SKIP；退件信截圖版面、多行原因、「前往申請單列表」連結正確，表格內值在 Outlook 顯示為襯線字
+- 已改動：實作與測試完成（MailHtml 新檔、NotificationService、SmtpMailSender、MailSender、environment.properties.example、JobAndNotifyTest、SmtpMailSenderTest），PRD 第 9 節＋設定表、SETUP、im_acct_insp/README 已同步；本機 environment.properties 已加 site-url；首審四項建議已修（7 種事件連結測試、網址容錯、PRD 設定表、註解／Locale）；複審兩項建議已修（WARN／文件措辭、網址邊角＋測試斷言）；全套 179 測試通過；後端已用新 jar 重啟（2026-10-11 12:05，8989）
+- 卡住／待確認：WEEKLY_SUMMARY 已有紀錄的週鍵為 20260928（5 筆，10-11 10:46，新 jar 上線前）、20261005、20261012、20261019，帶這幾週的基準日 J02 都不會寄；20260921 是空的；登入需 2410305 密碼，J02 的 curl 須使用者執行
 
 ## 已拍板待實作
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
 | 26 | 測試 DB 補兩句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
+| 28 | 一天只登入一次：點信裡「前往系統」連結每次都要重新登入（token 存 sessionStorage、每分頁一份，`tokenStore.ts`；閒置 30 分 `AcctConst.TOKEN_IDLE_MINUTES`、絕對 8 小時 `TOKEN_MAX_HOURS`）。裁示（2026-10-11）：分頁間共用登入＋閒置放寬到 8 小時（絕對 8 小時不變）；動工前先定共用做法（localStorage 或 BroadcastChannel，影響「關瀏覽器是否等於登出」）並更新 PRD 與規格偏離說明；第 27 項提交後動工 | 中 | — |
 
 ## 僅記錄未拍板
 

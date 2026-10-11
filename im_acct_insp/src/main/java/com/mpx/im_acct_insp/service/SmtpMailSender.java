@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp.service;
 //           組信失敗包成 MailPreparationException，SMTP 失敗由 JavaMailSender 丟 MailException，
 //           都是 RuntimeException，由 NotificationService 記 FAIL（ERR_MSG＝例外類別名）。
 //           不記 log（收件人工號與結果由 NotificationService 記，Email 與本文都不記）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 27 項：本文改以 HTML 寄出（同 Infra_Manager_Java 的 setText(html, true)），只寄 HTML、不附純文字
 // ============================================================
 
 import org.springframework.mail.MailPreparationException;
@@ -35,7 +38,7 @@ public class SmtpMailSender implements MailSender {
 			helper.setFrom(from);
 			helper.setTo(toEmail);
 			helper.setSubject(subject);
-			helper.setText(body, false);
+			helper.setText(body, true);
 		} catch (MessagingException e) {
 			throw new MailPreparationException("組信失敗", e);
 		}

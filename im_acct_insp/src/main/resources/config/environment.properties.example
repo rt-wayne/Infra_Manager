@@ -13,6 +13,9 @@
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 ### 修改日期: 2026-10-11
 ### 變更說明: BACKLOG 第 25 項：新增通知信寄件人與寄送名單（im.acct.insp.mail.*）
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-11
+### 變更說明: BACKLOG 第 27 項：新增 im.acct.insp.mail.site-url（信末「前往系統」連結）
 ### 首次建置：複製本檔為 environment.properties 後填值（environment.properties 不進 git）
 ###################################
 
@@ -46,3 +49,7 @@ im.acct.insp.mail.from=Infra-Manager@pxmart.com.tw
 im.acct.insp.mail.allow-list=
 ### true＝忽略寄送名單、寄給所有收件人（正式環境才設）；預設 false
 im.acct.insp.mail.send-to-all=false
+### 系統網址（使用者在瀏覽器開的前端網址，含 context），信末放「前往系統」連結：待審核類連待辦簽核、退件連申請單列表、其餘連首頁
+### 留空＝信裡不放連結；須 http:// 或 https:// 開頭、有主機名稱、不含空白與雙引號等不合法字元，否則視同留空並記 WARN；例：http://主機:8787/im_acct_insp_web/
+### 可直接貼瀏覽器網址列（# 之後、結尾的 index.html 與斜線會自動去掉）
+im.acct.insp.mail.site-url=

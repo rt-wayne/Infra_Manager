@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp.service;
 //           寄件人、收件人、主旨、純文字 UTF-8 本文；SMTP 失敗原例外外拋（NotificationService 記 FAIL）；
 //           MailConfig：沒有 JavaMailSender、主機空白或寄件人空白 → LogMailSender，三者齊全 → SmtpMailSender
 //           （載入 Boot 自動設定的版本見 common.MailConfigContextTest）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 27 項：本文改驗 text/html UTF-8
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,10 +38,11 @@ class SmtpMailSenderTest {
 	static final String HOST = "mail.example.com";
 
 	@Test
-	void 寄出_寄件人收件人主旨_純文字UTF8() throws Exception {
+	void 寄出_寄件人收件人主旨_HTML_UTF8() throws Exception {
 		JavaMailSender js = mock(JavaMailSender.class);
 		when(js.createMimeMessage()).thenReturn(new MimeMessage((Session) null));
-		new SmtpMailSender(js, FROM).send("a@example.com", "【帳號申請】AR20261011-001 待您審核", "單號：AR20261011-001\n");
+		String html = "<html><body><p>單號：AR20261011-001</p></body></html>";
+		new SmtpMailSender(js, FROM).send("a@example.com", "【帳號申請】AR20261011-001 待您審核", html);
 
 		ArgumentCaptor<MimeMessage> cap = ArgumentCaptor.forClass(MimeMessage.class);
 		verify(js).send(cap.capture());
@@ -47,8 +51,8 @@ class SmtpMailSenderTest {
 		assertThat(m.getRecipients(Message.RecipientType.TO)).extracting(Object::toString).containsExactly("a@example.com");
 		assertThat(m.getSubject()).isEqualTo("【帳號申請】AR20261011-001 待您審核");
 		m.saveChanges();
-		assertThat(m.getContentType()).startsWith("text/plain").containsIgnoringCase("charset=UTF-8");
-		assertThat(m.getContent()).isEqualTo("單號：AR20261011-001\n");
+		assertThat(m.getContentType()).startsWith("text/html").containsIgnoringCase("charset=UTF-8");
+		assertThat(m.getContent()).isEqualTo(html);
 	}
 
 	@Test

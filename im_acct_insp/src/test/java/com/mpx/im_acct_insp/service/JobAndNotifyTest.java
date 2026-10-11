@@ -16,6 +16,13 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 25 項：寄送名單——名單外記 SKIP「不在寄送名單」且不存 Email、無 Email 照舊（ERR_MSG 空）、
 //           名單留空誰都不寄、寄給所有人忽略名單；既有通知測試改傳「寄給所有人」
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 27 項：NotificationService 建構子加 MailHtml；新增 HTML 本文測試——值（含主旨裡的帳號名稱、
+//           原因）一律跳脫、換行轉 <br>、連結依事件（待審核類→待辦簽核、退件→申請單列表、到期／週彙總／排程失敗→首頁）、
+//           七種申請單事件逐一驗連結、複驗退回原因跳脫換行；頁尾含發送時間；
+//           系統網址留空、非 http(s) 開頭或無主機不放連結，去 #／結尾 index.html／斜線，href 也跳脫；
+//           兩欄表與多欄表每個欄位自帶字型與字級
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -37,18 +44,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
 import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.ApiException;
 import com.mpx.im_acct_insp.model.Acct;
+import com.mpx.im_acct_insp.model.AcctReqDetail;
 import com.mpx.im_acct_insp.model.JobRunResult;
 import com.mpx.im_acct_insp.model.Recipient;
 import com.mpx.im_acct_insp.support.TestFixture;
@@ -57,6 +68,11 @@ class JobAndNotifyTest {
 
 	/** 寄給所有收件人（既有通知測試不受寄送名單影響） */
 	static final MailAllowList SEND_ALL = new MailAllowList("", true);
+	/** 信末連結的系統網址（尾端斜線會被去掉） */
+	static final String SITE = "http://h/ctx/";
+	static final String FOOTER = "本信件由「機房與帳號權限管理系統」自動發送，請勿直接回覆。發送時間：2026-10-07 10:30";
+	/** 沒有自帶字型與字級的表格欄位（Outlook 表格不繼承外層樣式） */
+	static final String CELL_WITHOUT_FONT = "<t[dh](?![^>]*font-family[^>]*font-size)";
 
 	TestFixture fx;
 	JobService job;
@@ -208,8 +224,7 @@ class JobAndNotifyTest {
 	@Test
 	void 通知_收件人去重_無Email略過_寄送例外記FAIL_紀錄失敗不外拋() {
 		MailSender sender = mock(MailSender.class);
-		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				SEND_ALL, fx.clock);
+		NotificationService n = notifier(sender, SEND_ALL);
 		Recipient a = rcpt("0000001", "a@example.com");
 		Recipient dup = rcpt("0000001", "a@example.com");
 		Recipient noMail = rcpt("0000002", " ");
@@ -233,8 +248,7 @@ class JobAndNotifyTest {
 	@Test
 	void 通知_到期收件人含申請人執行人角色成員_參照鍵與主旨() {
 		MailSender sender = mock(MailSender.class);
-		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				SEND_ALL, fx.clock);
+		NotificationService n = notifier(sender, SEND_ALL);
 		Acct a = fx.acct("AR20261001-001", "DB", AcctConst.AS_EXPIRED);
 		a.setExpiryDate(LocalDate.of(2026, 10, 6).atStartOfDay());
 		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
@@ -253,8 +267,7 @@ class JobAndNotifyTest {
 	@Test
 	void 通知_每週彙總與排程失敗收件人為角色成員_角色碼為常數() {
 		MailSender sender = mock(MailSender.class);
-		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				SEND_ALL, fx.clock);
+		NotificationService n = notifier(sender, SEND_ALL);
 		when(fx.permDao.findUsersInRoles(List.of("GOV")))
 				.thenReturn(List.of(rcpt("0000003", "c@example.com"), rcpt("0000005", null)));
 		when(fx.permDao.findUsersInRoles(List.of("SYS_ADMIN"))).thenReturn(List.of(rcpt("0000009", "s@example.com")));
@@ -278,8 +291,7 @@ class JobAndNotifyTest {
 
 	@Test
 	void 通知_業務事件例外不外拋() {
-		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao,
-				mock(MailSender.class), SEND_ALL, fx.clock);
+		NotificationService n = notifier(mock(MailSender.class), SEND_ALL);
 		when(fx.acctReqDao.findById("AR")).thenThrow(new IllegalStateException("db"));
 		n.requestEvent(AcctConst.EV_SUBMIT, "AR", KEVIN);
 		assertThat(fx.txm.rollbacks).isZero();
@@ -288,8 +300,7 @@ class JobAndNotifyTest {
 	@Test
 	void 通知_寄送名單外記SKIP不在寄送名單_不存Email_無Email仍照舊記SKIP() {
 		MailSender sender = mock(MailSender.class);
-		NotificationService n = new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender,
-				new MailAllowList(" 0000001 , ,0000002", false), fx.clock);
+		NotificationService n = notifier(sender, new MailAllowList(" 0000001 , ,0000002", false));
 		Recipient listed = rcpt("0000001", "a@example.com");
 		Recipient listedNoMail = rcpt("0000002", null);
 		Recipient outside = rcpt("0000003", "c@example.com");
@@ -336,6 +347,157 @@ class JobAndNotifyTest {
 		var s2 = JobService.class.getMethod("scheduledJ02").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
 		assertThat(s2.cron()).isEqualTo("${im.acct.insp.job.j02.cron:0 0 8 * * *}");
 		assertThat(new ApiException(HttpStatus.CONFLICT, AcctMsg.E16).getStatus()).isEqualTo(HttpStatus.CONFLICT);
+	}
+
+	// ------------------------------------------------------------
+	// 通知信 HTML（BACKLOG 第 27 項）
+	// ------------------------------------------------------------
+
+	@Test
+	void HTML_申請單值跳脫_送審連待辦_退件原因換行轉br且連申請單列表() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		AcctReqDetail r = htmlReq();
+		when(fx.permDao.findUsersWithPerm(anyString())).thenReturn(List.of(rcpt("0000001", "a@example.com")));
+
+		n.requestEvent(AcctConst.EV_SUBMIT, "AR20261011-001", KEVIN);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("a@example.com"), anyString(), body.capture());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				.contains("HTML測試&lt;b&gt;粗體&lt;/b&gt;")
+				.contains("凱文 &amp; &quot;&lt;i&gt;&quot;")
+				.doesNotContain("<b>", "<i>")
+				.contains("<a href=\"http://h/ctx/#/todo\"", "前往「待辦簽核」", FOOTER);
+
+		r.setReqStateCode("REJECTED");
+		r.setCurrStageId(null);
+		r.setRejectReason("第一行\r\n<script>x</script>");
+		fx.req = r;
+		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
+		n.requestEvent(AcctConst.EV_REJECT, "AR20261011-001", KEVIN);
+		ArgumentCaptor<String> rej = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("k@example.com"), eq("【帳號申請】AR20261011-001 已退件"), rej.capture());
+		assertThat(rej.getValue()).contains("第一行<br>&lt;script&gt;x&lt;/script&gt;")
+				.doesNotContain("<script>")
+				.contains("<a href=\"http://h/ctx/#/requests\"", "前往「申請單列表」", "退件原因");
+	}
+
+	@Test
+	void HTML_七種申請單事件連結_退件連申請單列表其餘連待辦_複驗退回原因跳脫換行() {
+		AcctReqDetail r = htmlReq();
+		r.setCurrStageId(3);
+		r.setExecBy("0000004");
+		r.setVerifyRejectReason("第一行\n<i>重做</i>");
+		Recipient a = rcpt("0000001", "a@example.com");
+		when(fx.permDao.findUsersWithPerm(anyString())).thenReturn(List.of(a));
+		when(fx.permDao.findExecUsers(any())).thenReturn(List.of(a));
+		when(fx.permDao.findActiveUser(anyString())).thenReturn(a);
+		Map<String, String> paths = new LinkedHashMap<>();
+		paths.put(AcctConst.EV_SUBMIT, "#/todo");
+		paths.put(AcctConst.EV_RESUB, "#/todo");
+		paths.put(AcctConst.EV_NEXT_STAGE, "#/todo");
+		paths.put(AcctConst.EV_TO_EXEC, "#/todo");
+		paths.put(AcctConst.EV_EXEC_DONE, "#/todo");
+		paths.put(AcctConst.EV_VERIFY_REJECT, "#/todo");
+		paths.put(AcctConst.EV_REJECT, "#/requests");
+
+		for (Map.Entry<String, String> e : paths.entrySet()) {
+			MailSender sender = mock(MailSender.class);
+			notifier(sender, SEND_ALL).requestEvent(e.getKey(), r.getReqId(), KEVIN);
+			ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+			verify(sender).send(eq("a@example.com"), anyString(), body.capture());
+			assertThat(body.getValue()).as(e.getKey()).contains("<a href=\"http://h/ctx/" + e.getValue() + "\"");
+			if (AcctConst.EV_VERIFY_REJECT.equals(e.getKey())) {
+				assertThat(body.getValue()).contains("退回原因", "第一行<br>&lt;i&gt;重做&lt;/i&gt;").doesNotContain("<i>");
+			}
+		}
+	}
+
+	@Test
+	void HTML_到期信標題跳脫帳號名稱_週彙總多欄表_排程失敗_都連首頁() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		Acct a = fx.acct("AR20261001-001", "DB", AcctConst.AS_EXPIRED);
+		a.setAcctName("<b>x</b>");
+		a.setExpiryDate(LocalDate.of(2026, 10, 6).atStartOfDay());
+		when(fx.permDao.findUsersInRoles(any())).thenReturn(List.of(rcpt("0000003", "c@example.com")));
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+
+		n.expiryEvent(AcctConst.EV_EXPIRED, a, TODAY);
+		verify(sender).send(eq("c@example.com"), eq("【帳號到期】<b>x</b> 已逾期"), body.capture());
+		assertThat(body.getValue()).contains("<title>【帳號到期】&lt;b&gt;x&lt;/b&gt; 已逾期</title>")
+				.contains(">【帳號到期】&lt;b&gt;x&lt;/b&gt; 已逾期</h2>")
+				.doesNotContain("<b>")
+				.contains("<a href=\"http://h/ctx/#/\"", "前往「機房與帳號權限管理系統」", "逾期天數", FOOTER)
+				.doesNotContainPattern(CELL_WITHOUT_FONT);
+
+		n.weeklySummary("20261005", List.of(a), TODAY);
+		verify(sender).send(eq("c@example.com"), eq("【帳號到期】本週已逾期未處理帳號彙總（1 筆）"), body.capture());
+		assertThat(body.getValue()).contains("■ 已逾期未處理帳號", "<th", ">單號</th>", ">逾期天數</th>",
+				">AR20261001-001</td>", ">&lt;b&gt;x&lt;/b&gt;</td>", ">2026-10-06</td>", ">1</td>", "<a href=\"http://h/ctx/#/\"")
+				.doesNotContain("<b>")
+				.doesNotContainPattern(CELL_WITHOUT_FONT);
+
+		n.jobFail("J01", 77L, AcctConst.JR_FAIL, "Illegal<State>");
+		verify(sender).send(eq("c@example.com"), eq("【排程失敗】J01 執行失敗"), body.capture());
+		assertThat(body.getValue()).contains("Illegal&lt;State&gt;", "<a href=\"http://h/ctx/#/\"", FOOTER)
+				.doesNotContainPattern(CELL_WITHOUT_FONT);
+	}
+
+	@Test
+	void HTML_系統網址留空非http開頭或無主機不放連結_去井號indexhtml尾端斜線_href跳脫() {
+		assertThat(MailHtml.normalize(null)).isEmpty();
+		assertThat(MailHtml.normalize("  ")).isEmpty();
+		assertThat(MailHtml.normalize("#/")).isEmpty();
+		assertThat(MailHtml.normalize("javascript:alert(1)")).isEmpty();
+		assertThat(MailHtml.normalize("ftp://h/x")).isEmpty();
+		assertThat(MailHtml.normalize("localhost:8787/ctx")).isEmpty();
+		assertThat(MailHtml.normalize("http://")).isEmpty();
+		assertThat(MailHtml.normalize("http:///ctx")).isEmpty();
+		assertThat(MailHtml.normalize("http://h/\"onmouseover=x")).isEmpty();
+		assertThat(MailHtml.normalize("http://h/my app/")).isEmpty();
+		assertThat(MailHtml.normalize(" https://h/ctx// ")).isEqualTo("https://h/ctx");
+		assertThat(MailHtml.normalize("HTTP://H/ctx")).isEqualTo("HTTP://H/ctx");
+		// 從瀏覽器網址列整串貼上
+		assertThat(MailHtml.normalize("http://h:8787/im_acct_insp_web/#/")).isEqualTo("http://h:8787/im_acct_insp_web");
+		assertThat(MailHtml.normalize("http://h/ctx/#/requests?x=1")).isEqualTo("http://h/ctx");
+		assertThat(MailHtml.normalize("http://h/ctx/index.html")).isEqualTo("http://h/ctx");
+		assertThat(MailHtml.normalize("http://h/ctx/INDEX.HTML#/todo")).isEqualTo("http://h/ctx");
+		assertThat(MailHtml.normalize("http://h/ctx/ #/")).isEqualTo("http://h/ctx");
+		assertThat(MailHtml.normalize("http://h/ctx/index.html/")).isEqualTo("http://h/ctx");
+		// 主機名剛好叫 index.html 時不去掉
+		assertThat(MailHtml.normalize("http://index.html")).isEqualTo("http://index.html");
+		// 主機名含底線仍接受
+		assertThat(MailHtml.normalize("http://my_host:8787/ctx/")).isEqualTo("http://my_host:8787/ctx");
+
+		for (String site : new String[] { "", "javascript:alert(1)", "http://" }) {
+			assertThat(new MailHtml(site, fx.clock).page("t", "", MailHtml.PATH_TODO)).doesNotContain("<a ").contains(FOOTER);
+		}
+		assertThat(new MailHtml(SITE, fx.clock).page("t", "", null)).doesNotContain("<a ");
+		assertThat(new MailHtml("http://h/R&D/", fx.clock).page("t", "", MailHtml.PATH_HOME))
+				.contains("href=\"http://h/R&amp;D/#/\"");
+		assertThat(MailHtml.para("a\rb\nc")).isEqualTo("<p>a<br>b<br>c</p>");
+		assertThat(MailHtml.esc(null)).isEmpty();
+	}
+
+	/** 帳號名稱與申請人姓名含 HTML 特殊字元的申請單（目前關卡＝第一關），並放進模擬的申請單表 */
+	AcctReqDetail htmlReq() {
+		AcctReqDetail r = new AcctReqDetail();
+		r.setReqId("AR20261011-001");
+		r.setReqTypeCode(AcctConst.REQ_ADD);
+		r.setCatgId("DB");
+		r.setCatgName("資料庫");
+		r.setAcctName("HTML測試<b>粗體</b>");
+		r.setApplyBy(KEVIN);
+		r.setApplyByName("凱文 & \"<i>\"");
+		r.setCurrStageId(AcctConst.STAGE_FIRST_APPR);
+		fx.req = r;
+		return r;
+	}
+
+	NotificationService notifier(MailSender sender, MailAllowList allowList) {
+		return new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender, allowList,
+				new MailHtml(SITE, fx.clock), fx.clock);
 	}
 
 	static Recipient rcpt(String id, String email) {

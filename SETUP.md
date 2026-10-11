@@ -36,6 +36,7 @@ copy src\main\resources\config\host.properties.example src\main\resources\config
   - `application.properties` 的 `spring.mail.host` 與 `environment.properties` 的 `im.acct.insp.mail.from` 都有值才會實際寄出，否則只寫 log。
   - 誰收得到信由 `im.acct.insp.mail.allow-list`（逗號分隔工號，半形或全形逗號皆可）決定，留空＝誰都不寄。測試環境填 `2410305`，因為測試 DB 有同事的真實 Email。
   - 正式環境才設 `im.acct.insp.mail.send-to-all=true`，寄給所有收件人。
+  - `im.acct.insp.mail.site-url` 填使用者在瀏覽器開的前端網址（含 context），信末才會有「前往系統」連結，例 `http://主機:8787/im_acct_insp_web/`。直接從瀏覽器網址列複製也可以（`#` 之後、結尾的 `index.html` 會自動去掉）。留空＝不放連結；不是 `http://` 或 `https://` 開頭、沒有主機名稱，或網址含空白、雙引號等不合法字元，也視同留空，啟動 log 會有 WARN。
   - 改完要重啟後端。啟動 log 會有一行「寄信：SMTP 實際寄出；寄送名單 N 人」或「寄信：SMTP 未設定…只寫 log」，可據此確認。若出現 WARN「SMTP 已啟用但寄送名單是空的…」，代表名單空又沒開 `send-to-all`，所有通知都不會寄出。
 
 ## 3. 後端建置與啟動
