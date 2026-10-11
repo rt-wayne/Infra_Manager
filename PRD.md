@@ -191,7 +191,7 @@
 | CERT＝憑證/金鑰 | 0 | 1 | Alex、Alan |
 | DOOR＝機房門禁卡 | 1 | 0 | Alex、Alan |
 
-- 開放開關（IS_ENABLED）只管「新增」：新增表單類別下拉只列 IS_ENABLED＝1 且 STATUS＝1；既有帳號照常可異動；帳號列表 8 個類別頁籤始終顯示。測試 DB 現值與初始資料不同，見 BACKLOG 第 9 項。
+- 開放開關（IS_ENABLED）只管「新增」：新增表單類別下拉只列 IS_ENABLED＝1 且 STATUS＝1；既有帳號照常可異動；帳號列表 8 個類別頁籤始終顯示。
 - 改 DB 的 IS_ENABLED 不需重新部署：後端每個請求都讀 DB，立即生效；前端的代碼表（`/codes`）在同一個登入期間有快取（`useSession.ts:108-127`），使用者要重新整理頁面或重新登入才看到新的下拉選項。在此之前若送出已關閉的類別，後端回 400 E05。
 - 退件重送新增申請時帳號類別鎖定（見「退件重送」）；若原類別已被關閉，送出後後端回 400 E05，且無法改選其他類別、系統也沒有撤回功能，該單停在已退件，申請人須另提新申請。
 - 「特權」是疊加在任一類別上的勾選欄位（IS_PRIV），不是第 9 類。
@@ -609,7 +609,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 ### 資料結構
 
-21 張表、42 個索引（PK 21＋一般 21）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。以下已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，與測試 DB 的 1 不同，見 BACKLOG 第 9 項），兩檔自測試 DB 反向產出並逐句比對一致。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+21 張表、42 個索引（PK 21＋一般 21）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。以下已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），兩檔自測試 DB 反向產出並逐句比對一致。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 

@@ -24,14 +24,14 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
+| 30 | 殼 jar 所有回應加安全標頭：CSP（只准本站程式與樣式，前端已確認無行內程式、無外站資源，附件下載用 blob 不受限）、nosniff、Referrer-Policy、Permissions-Policy；動工後瀏覽器實測各畫面。使用者回「所有網站都可以嵌入」（2026-10-11），X-Frame-Options／frame-ancestors 待確認是「要允許任何網站嵌入」還是描述現況。HTTPS 另立第 34 項。改：殼 jar 新增 Filter＋測試、PRD、SETUP | 高 | — |
+| 7 | 排程開頭／收尾出錯也要通知（`JobService.java` `run()` 第 153-167 行，寫 RUNNING 與寫結束紀錄在 J01／J02 的 try 之外）。使用者裁示（2026-10-11）：③A 結束紀錄寫入失敗但排程成功也寄 JOB_FAIL、信中註明「結束紀錄寫入失敗」；④A 寫 RUNNING 失敗時不跑、記 log 並嘗試寄 JOB_FAIL（DB 全斷時信也寄不出，只剩 log）；⑤A 下次同一排程開跑時把它舊的 RUNNING 紀錄改 FAIL 並寄信（前提：同時只有一個後端在跑，鎖只在本 JVM）；⑥A 第 22 項不併做。改：`JobService.java`、`JobRunDao`（可能加方法）、`JobServiceTest`、PRD | 高 | — |
 
 ## 僅記錄未拍板
 
 | ID | 摘要 | 提出日 | 詳情 |
 |----|------|--------|------|
-| 7 | 排程收尾失敗不會通知：`JobService.java:154-166` 寫 RUNNING 與寫結束紀錄的兩步在捕捉 J01／J02 失敗的 try 之外，這兩步自己拋例外時紀錄停在 RUNNING（或沒有紀錄）、也不寄 JOB_FAIL | 2026-10-10 | — |
 | 8 | `/me` 回 401 以外的錯誤時，需權限的頁面導向無權限頁而非顯示 U09「查詢失敗，請稍後再試」，要整頁重新整理才恢復（`useSession.ts:59-64`） | 2026-10-10 | — |
-| 9 | 測試 DB 的 IM_ACCT_CATG 中 VENDOR（廠商/委外帳號）IS_ENABLED＝1，與交接文件初始資料（0）不同；確認是測試刻意開啟或應改回 | 2026-10-10 | — |
 | 11 | IM_ACCT_ADMIN_LOG.CONTENT_JSON 宣告 VARCHAR2(2000 CHAR)，受單欄 4000 bytes 限制實際約只容 1333 個中文字；目前只存切換對象顯示名不會超過，日後寫入更多內容前須處理 | 2026-10-10 | — |
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 13 | 顯示名兩種算法不一致：`AcctReqDao.nameExpr`（第 42 行，用於第 56-58、181 行與 `AttachDao.java:43`）不 trim、無工號退回；快照用的 `Texts.displayName`（`Texts.java:35-42`）有 trim 與英文名 → 中文名 → 工號退回 | 2026-10-10 | — |
@@ -46,7 +46,7 @@
 | 23 | SETUP 第 7 節的 J01／J02 觸發 curl 尚未實跑（使用者裁示不在第 6 項實跑；登入與登出已於 2026-10-11 實跑），日後有安全的測試時機時補跑並核對回應。可用測試 DB 的測試帳號 2410305（密碼同工號；2026-10-11 已加 DC_ADMIN、INFRA_MGR、GOV、GOV_MGR、IT_HEAD、SYS_ADMIN、INSP_STAFF 七個角色與全部 8 個帳號類別的執行人，Email 為使用者本人信箱；使用者裁示這些權限不移除） | 2026-10-10 | — |
 | 24 | token 標登出（系統登出或 SETUP 第 6 節第 4 段外洩處理）COMMIT 前已通過 token 檢查的進行中請求都會照常完成（每個請求各一次）；其中正卡在更新最後存取時間的那類，程式本可依影響 0 筆擋下卻沒擋（`TokenIdentityProvider.java:57-59`）。日後補縫時不能只檢查更新回傳值，那只擋得住後面那類 | 2026-10-11 | — |
 | 29 | 切換身分再切回後在首頁按登出，會多送一個不帶 token 的 `GET /home/stats` 並回 401（第 28 項瀏覽器實測發現，3 次登出穩定重現於此路徑）；推測 `resetSession` 把 `viewKey` 歸 0 讓首頁重建。畫面無差別，只多一行 console error；401 處理會寫 `loginNotice`，之後開登入頁會不會冒出「登入已逾時」未驗證。同類：第 28 項第二、三輪實測各見一次登出瞬間 `GET /todos` 回 401（第三輪是在待辦頁登出，重跑 3 次未重現）；推測 `AppLayout.vue` 換頁時的 `watch(route.fullPath) → refreshBadges` 在「token 已清、版面未卸載」瞬間觸發，未證實 | 2026-10-11 | — |
-| 30 | 殼 jar 沒有 CSP、X-Frame-Options 等安全標頭；`SETUP.md:39` 範例網址為 `http://`（token 明文傳輸）。第 28 項 token 改存 localStorage、有效 8 小時後影響變大（第 28 項審查發現） | 2026-10-11 | — |
+| 34 | 正式環境走 HTTPS：使用者確認（2026-10-11）正式環境能用 HTTPS（公司憑證或反向代理）；目前 `SETUP.md` 範例網址為 `http://`，密碼與 token 明文傳輸。做法（殼 jar 自己掛憑證或前面放反向代理）、憑證來源未定；完成後補 HSTS 標頭（第 30 項不含） | 2026-10-11 | — |
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
 
 ## 已拍板不做
