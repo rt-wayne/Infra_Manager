@@ -14,10 +14,9 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 28 | 一天只登入一次：點信裡「前往系統」連結每次都要重新登入（token 存 sessionStorage、每分頁一份，`tokenStore.ts`；閒置 30 分 `AcctConst.TOKEN_IDLE_MINUTES`、絕對 8 小時 `TOKEN_MAX_HOURS`）。裁示（2026-10-11）：① token 改存 localStorage（跨分頁共用、關瀏覽器不等於登出；BroadcastChannel 被否決：收信時沒開著系統仍要登入）；② 切換身分／切回／登出／登入時其他分頁自動重新整理成新身分（未送出的表單會不見，使用者接受；只影響 SYS_ADMIN）；閒置常數改 480 分（＝8 小時，實際只剩登入滿 8 小時失效），檢查程式保留；PRD 刻意偏離清單加一條（原始規格 8.1 節為 sessionStorage） | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：實作 tokenStore（localStorage＋storage 事件）、useSession（跨分頁通知與重新整理）、AcctConst 480、AuthServiceTest 邊界；→ 審查 → test-runner 瀏覽器實測四情境（新分頁免登入、關瀏覽器再開仍登入、一頁登出其他頁回登入頁、一頁切換身分其他頁跟著變）
+- 下一步：
 - 已改動：
 - 卡住／待確認：
 
@@ -25,7 +24,7 @@
 
 | ID | 摘要 | 優先 | 詳情 |
 |----|------|------|------|
-| 26 | 測試 DB 補兩句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
+| 26 | 測試 DB 補三句欄位說明：`db/im_acct_insp_create_table.sql` 第 650-651 行 IM_ACCT_NOTIFY_LOG 的 RESULT_CODE、ERR_MSG `COMMENT ON COLUMN`（第 25 項改的），及第 636 行 IM_ACCT_LOGIN_TOKEN.LAST_ACCESS_DATE（第 28 項改的，30 分鐘 → 480 分鐘）；ap_user 權限不足（ORA-01031），由使用者以 RD_USER 執行，執行後告知即結案。新環境照 `db\` 建表檔建置已含新說明 | 低 | — |
 
 ## 僅記錄未拍板
 
@@ -47,6 +46,11 @@
 | 22 | J02（每週逾期彙總信）以「本週有無任何通知紀錄」判斷是否已寄，寄送失敗（FAIL）也寫紀錄，所以本週信全部寄失敗時同週不會再重寄（`JobService.java:241`、`NotificationService.java:264,271`）；J01 同一套判斷。SETUP 已註明後果，要不要改程式未拍板 | 2026-10-10 | — |
 | 23 | SETUP 第 7 節的 J01／J02 觸發 curl 尚未實跑（使用者裁示不在第 6 項實跑；登入與登出已於 2026-10-11 實跑），日後有安全的測試時機時補跑並核對回應。可用測試 DB 的測試帳號 2410305（密碼同工號；2026-10-11 已加 DC_ADMIN、INFRA_MGR、GOV、GOV_MGR、IT_HEAD、SYS_ADMIN、INSP_STAFF 七個角色與全部 8 個帳號類別的執行人，Email 為使用者本人信箱；使用者裁示這些權限不移除） | 2026-10-10 | — |
 | 24 | token 標登出（系統登出或 SETUP 第 6 節第 4 段外洩處理）COMMIT 前已通過 token 檢查的進行中請求都會照常完成（每個請求各一次）；其中正卡在更新最後存取時間的那類，程式本可依影響 0 筆擋下卻沒擋（`TokenIdentityProvider.java:57-59`）。日後補縫時不能只檢查更新回傳值，那只擋得住後面那類 | 2026-10-11 | — |
+| 29 | 切換身分再切回後在首頁按登出，會多送一個不帶 token 的 `GET /home/stats` 並回 401（第 28 項瀏覽器實測發現，3 次登出穩定重現於此路徑）；推測 `resetSession` 把 `viewKey` 歸 0 讓首頁重建。畫面無差別，只多一行 console error；401 處理會寫 `loginNotice`，之後開登入頁會不會冒出「登入已逾時」未驗證。同類：第 28 項第二、三輪實測各見一次登出瞬間 `GET /todos` 回 401（第三輪是在待辦頁登出，重跑 3 次未重現）；推測 `AppLayout.vue` 換頁時的 `watch(route.fullPath) → refreshBadges` 在「token 已清、版面未卸載」瞬間觸發，未證實 | 2026-10-11 | — |
+| 30 | 殼 jar 沒有 CSP、X-Frame-Options 等安全標頭；`SETUP.md:39` 範例網址為 `http://`（token 明文傳輸）。第 28 項 token 改存 localStorage、有效 8 小時後影響變大（第 28 項審查發現） | 2026-10-11 | — |
+| 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
+| 32 | 待使用者補事實：機房巡檢是否用共用電腦、平板或共用 Windows 帳號。第 28 項後 token 存 localStorage、關瀏覽器不登出、有效 8 小時（PRD 已寫「要結束須按登出」）。不共用 → 結案；共用 → 登入頁加「這是共用電腦」勾選，勾選時 token 改存 sessionStorage（第 28 項審查建議） | 2026-10-11 | — |
+| 33 | 待使用者補事實：正式環境 8787（同主機＋port）是否掛了其他系統。localStorage 以「協定＋主機＋port」為界，同網址的其他系統的 JS 讀得到本系統 token（第 28 項審查發現）。沒有 → 結案；有 → 正式環境給本系統獨立 port 或主機名 | 2026-10-11 | — |
 
 ## 已拍板不做
 

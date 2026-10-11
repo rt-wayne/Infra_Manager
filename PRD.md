@@ -27,6 +27,7 @@
 | 5 | J01 單筆：狀態、歷史、通知紀錄同一交易 | 狀態＋歷史同一交易；寄信與通知紀錄在交易提交後，漏寄由下次執行補上 |
 | 6 | §3.2 代理操作一律顯示「Hank（以 Gary 身分）」格式 | 帳號歷史沿用 SA 格式；**巡檢**的填寫人與處理人改顯示「{代理身分}（實際操作人：{實際操作人}）」（見「切換身分」） |
 | 7 | §4.3 權限清單 | 另加 ACC_EXPIRY_ALL（到期提醒看全部帳號）、SYS_JOB_RUN（手動觸發排程）兩個權限碼 |
+| 8 | 開發文件 v2.0 §8.1：前端 token 存 sessionStorage（每分頁一份、關分頁即失效）；閒置 30 分鐘失效 | 存 localStorage：同一瀏覽器各分頁共用、關瀏覽器不登出；閒置上限放寬到與登入時效同為 8 小時。理由：點通知信「前往系統」連結不必每次重新登入（見功能清單「1. 登入、登出」） |
 
 ### 系統不提供的功能
 
@@ -66,7 +67,9 @@
 - 判斷順序：① 工號不存在／停用／無雜湊 → A01 ② 已鎖定（LOCK_DATE 非空）→ A02，即使密碼正確 ③ 密碼錯 → 失敗次數＋1，達 5 次同一句寫入鎖定，該次仍回 A01 ④ 成功 → 失敗次數歸 0、記最後登入時間、發新 token。
 - ③、④ 的 UPDATE 都帶「未鎖定」條件：查詢時未鎖定、但驗密碼期間被其他請求鎖定者影響 0 筆，不論密碼對錯一律回 A02、不發 token（鎖定後的回應不洩漏密碼是否正確）。
 - 工號不存在、停用、無雜湊時仍做一次雜湊計算，回應時間與密碼錯相同，統一回 A01。
-- token 有效條件：未登出、登入後 8 小時內、閒置不超過 30 分鐘、使用者仍啟用；任一不符 → A03，前端清 token 並導回登入頁。
+- token 有效條件：未登出、登入後 8 小時內、閒置不超過 480 分鐘（與 8 小時同長，等於不另設閒置限制）、使用者仍啟用；任一不符 → A03，前端清 token 並導回登入頁。
+- 同一瀏覽器各分頁共用一份 token（localStorage）：已登入時開新分頁或點信中連結不必再登入；**關閉瀏覽器不會登出**，要結束須按登出或等 8 小時到期。
+- 一個分頁登入、登出、切換身分、切回，或因 401 清掉 token 時，同一瀏覽器的其他分頁自動整頁重新整理成新狀態（未送出的表單內容會不見）。從瀏覽器「上一頁快取」還原的頁面，只在 token 或身分跟離開時不同才重新整理。被連帶重新整理到登入頁的分頁不顯示逾時原因（BACKLOG 第 31 項）。
 - 同一人可同時多處登入。登出後 token 立即作廢。不提供改密碼，首次登入不強制改。
 - 解鎖、重設密碼以 DB 維護（`SETUP.md`）。
 
@@ -556,7 +559,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | DB | — | Oracle 19c，schema RD_USER | 本模組 21 張表 | — |
 
 ```
-瀏覽器（token 存 sessionStorage，每個請求帶 Authorization: Bearer）
+瀏覽器（token 存 localStorage、各分頁共用，每個請求帶 Authorization: Bearer）
   → 殼 jar /im_acct_insp_web/api/v1/...（RestTemplate 原樣轉送；連線逾時 5 秒、讀取逾時 120 秒）
   → 後端 /api/v1/...（驗 token → 權限 → 業務 → SQL）
   → Oracle RD_USER
@@ -567,7 +570,8 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **交易**：業務層以 TransactionTemplate 包多句寫入；交易管理器 `LazyDataSourceTransactionManager` 第一次開交易才取 DataSource。登入失敗計數、最後存取時間等單句更新不開交易。
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
-- **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。30 分鐘、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
+- **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
+- **API 不快取**：後端 `/api/**` 回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
 - **log**：後端寫 `/home/tomcat/log/im_acct_insp/`、殼 jar 寫 `/home/tomcat/log/im_acct_insp_web/`（Windows 為啟動所在磁碟的同路徑），保留 30 天。
 - **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
@@ -576,13 +580,13 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 | 層 | 檔案與職責 |
 |---|---|
-| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
+| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（`/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`；只轉呼叫 service，不寫權限邏輯 |
 | service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService` |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
-**前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/im_acct_insp_web/api/v1`，401 清 token）、`api\tokenStore.ts`（sessionStorage）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
+**前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/im_acct_insp_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
 
 **殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder。
 
