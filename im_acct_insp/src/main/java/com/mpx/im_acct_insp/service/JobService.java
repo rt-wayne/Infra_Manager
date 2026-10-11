@@ -15,6 +15,13 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: 變更單 #1（L5）：J02 未寫入任何通知紀錄（無收件人）時記 WARN，結果照常 SUCCESS（spec §4.13 補註）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 7 項：開頭與收尾出錯也寄 JOB_FAIL——
+//           開跑前先把同一排程停在 RUNNING 的舊紀錄補記為 FAIL，該 runId 尚無 JOB_FAIL 通知紀錄才寄（先查寄過沒再改狀態，失敗時留在 RUNNING 下次重試；補記失敗只記 log、照常往下跑；
+//           前提：同時只有一個後端在跑，鎖只在本 JVM，所以拿到鎖時的 RUNNING 都是上次沒正常結束的）；
+//           取號或寫 RUNNING 失敗 → 不跑、記 log、寄 JOB_FAIL（沒取到號時 runId 為空）、例外照拋（手動 API 回 500）；
+//           寫結束紀錄失敗 → 照常回結果，寄 JOB_FAIL 並在錯誤摘要註明「結束紀錄寫入失敗」（排程成功時結果碼仍為 SUCCESS）
 // ============================================================
 
 import java.time.Clock;
@@ -57,6 +64,9 @@ public class JobService {
 
 	static final String ZONE = "Asia/Taipei";
 	static final int ERR_MSG_MAX = 1000;
+	static final String STALE_MSG = "上次執行未正常結束（下次開跑時補記）";
+	static final String START_WRITE_FAIL = "開始紀錄寫入失敗，排程未執行";
+	static final String FINISH_WRITE_FAIL = "結束紀錄寫入失敗";
 	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
 	private static final DateTimeFormatter SHOW = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -151,8 +161,18 @@ public class JobService {
 		}
 		try {
 			String createBy = runBy == null ? AcctConst.SYSTEM_USER : runBy;
-			long runId = jobRunDao.nextId();
-			jobRunDao.insertRunning(runId, code, runBy, base, LocalDateTime.now(clock), createBy);
+			recoverStale(code, createBy);
+			Long runId = null;
+			try {
+				runId = jobRunDao.nextId();
+				jobRunDao.insertRunning(runId, code, runBy, base, LocalDateTime.now(clock), createBy);
+			} catch (RuntimeException e) {
+				// 不帶堆疊：例外照拋，由排程入口或全域錯誤處理印完整堆疊
+				log.error("排程開始紀錄寫入失敗、未執行 job={} runId={} 例外={}", code, runId, e.getClass().getSimpleName());
+				notificationService.jobFail(code, runId, AcctConst.JR_FAIL,
+						START_WRITE_FAIL + "（" + e.getClass().getSimpleName() + "）");
+				throw e;
+			}
 			Outcome o;
 			try {
 				o = AcctConst.JOB_J01.equals(code) ? j01(base) : j02(base);
@@ -161,8 +181,17 @@ public class JobService {
 				o = new Outcome(AcctConst.JR_FAIL, 0, e.getClass().getSimpleName());
 			}
 			String err = Texts.truncate(o.errMsg(), ERR_MSG_MAX);
-			jobRunDao.finish(runId, o.resultCode(), o.affected(), err, LocalDateTime.now(clock), createBy);
-			if (!AcctConst.JR_SUCCESS.equals(o.resultCode())) {
+			boolean finished = true;
+			try {
+				jobRunDao.finish(runId, o.resultCode(), o.affected(), err, LocalDateTime.now(clock), createBy);
+			} catch (RuntimeException e) {
+				finished = false;
+				log.error("排程結束紀錄寫入失敗 job={} runId={} result={} affected={} 例外={}", code, runId, o.resultCode(),
+						o.affected(), e.getClass().getSimpleName(), e);
+				String note = FINISH_WRITE_FAIL + "（" + e.getClass().getSimpleName() + "）";
+				err = Texts.truncate(err == null ? note : note + "; " + err, ERR_MSG_MAX);
+			}
+			if (!finished || !AcctConst.JR_SUCCESS.equals(o.resultCode())) {
 				notificationService.jobFail(code, runId, o.resultCode(), err);
 			}
 			JobRunResult r = new JobRunResult();
@@ -172,6 +201,35 @@ public class JobService {
 			return r;
 		} finally {
 			flag.set(false);
+		}
+	}
+
+	/**
+	 * 把同一排程停在 RUNNING 的舊紀錄補記為 FAIL；該 runId 尚未寄過 JOB_FAIL 才寄（呼叫端已持有本排程的鎖）。
+	 * 先查寄過沒、再改狀態：查詢或改狀態失敗時該筆仍是 RUNNING，下次開跑會重試，不會變成「已改 FAIL 卻沒寄信」
+	 */
+	private void recoverStale(String code, String updateBy) {
+		List<Long> ids;
+		try {
+			ids = jobRunDao.findRunningIds(code);
+		} catch (RuntimeException e) {
+			log.error("查詢未結束的排程紀錄失敗 job={} 例外={}", code, e.getClass().getSimpleName(), e);
+			return;
+		}
+		for (Long staleId : ids) {
+			try {
+				boolean notified = notifyLogDao.countByEventRef(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB,
+						String.valueOf(staleId)) > 0;
+				if (jobRunDao.markStaleFail(staleId, STALE_MSG, LocalDateTime.now(clock), updateBy) != 1) {
+					continue;
+				}
+				log.warn("補記未正常結束的排程 job={} runId={}", code, staleId);
+				if (!notified) {
+					notificationService.jobFail(code, staleId, AcctConst.JR_FAIL, STALE_MSG);
+				}
+			} catch (RuntimeException e) {
+				log.error("補記未正常結束的排程失敗 job={} runId={} 例外={}", code, staleId, e.getClass().getSimpleName(), e);
+			}
 		}
 	}
 

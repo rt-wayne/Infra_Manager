@@ -23,6 +23,11 @@ package com.mpx.im_acct_insp.service;
 //           七種申請單事件逐一驗連結、複驗退回原因跳脫換行；頁尾含發送時間；
 //           系統網址留空、非 http(s) 開頭或無主機不放連結，去 #／結尾 index.html／斜線，href 也跳脫；
 //           兩欄表與多欄表每個欄位自帶字型與字級
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 7 項：寫結束紀錄失敗（排程成功／部分失敗）仍寄 JOB_FAIL 並註明；寫 RUNNING 或取號失敗不跑、寄信、例外照拋
+//           （排程觸發不外拋）；開跑前補記舊 RUNNING 為 FAIL（先查寄過沒再改狀態）、已寄過不重寄、補記失敗照常執行；
+//           jobFail 沒有執行序號時參照鍵 0、主旨依結果碼（SUCCESS＝結束紀錄寫入失敗）
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -31,12 +36,16 @@ import static com.mpx.im_acct_insp.support.TestFixture.KEVIN;
 import static com.mpx.im_acct_insp.support.TestFixture.TODAY;
 import static com.mpx.im_acct_insp.support.TestFixture.id;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -53,6 +62,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
 
 import com.mpx.im_acct_insp.common.AcctConst;
@@ -116,7 +126,7 @@ class JobAndNotifyTest {
 		assertThat(fx.txm.commits).isEqualTo(2);
 		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J01"), eq(HANK), eq(TODAY), any(), eq(HANK));
 		verify(fx.jobRunDao).finish(eq(77L), eq("SUCCESS"), eq(3), isNull(), any(), eq(HANK));
-		verify(fx.notificationService, never()).jobFail(any(), anyLong(), any(), any());
+		verify(fx.notificationService, never()).jobFail(any(), any(), any(), any());
 	}
 
 	@Test
@@ -146,6 +156,99 @@ class JobAndNotifyTest {
 		when(fx.acctDao.findToExpire(TODAY)).thenThrow(new IllegalStateException("db down"));
 		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_FAIL);
 		verify(fx.notificationService).jobFail(eq("J01"), eq(77L), eq("FAIL"), eq("IllegalStateException"));
+	}
+
+	@Test
+	void 結束紀錄寫入失敗_排程成功_照常回結果並寄排程失敗信() {
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		JobRunResult r = job.runManual(id(HANK), "J01", null);
+		assertThat(r.getRunId()).isEqualTo(77L);
+		assertThat(r.getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		verify(fx.notificationService).jobFail("J01", 77L, "SUCCESS", "結束紀錄寫入失敗（IllegalStateException）");
+	}
+
+	@Test
+	void 結束紀錄寫入失敗_排程部分失敗_錯誤摘要兩者都有() {
+		Acct a = fx.acct("AR20261001-001", "DB", AcctConst.AS_APPROVED);
+		when(fx.acctDao.findToExpire(TODAY)).thenReturn(List.of(a));
+		doThrow(new IllegalStateException("lock")).when(fx.acctDao).expire(any(), any(), any(), any());
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_PARTIAL);
+		verify(fx.notificationService).jobFail("J01", 77L, "PARTIAL",
+				"結束紀錄寫入失敗（IllegalStateException）; AR20261001-001:IllegalStateException");
+	}
+
+	@Test
+	void 開始紀錄寫入失敗_不執行_寄排程失敗信_例外照拋() {
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		assertThatThrownBy(() -> job.runManual(id(HANK), "J01", null)).isInstanceOf(IllegalStateException.class);
+		verify(fx.acctDao, never()).findToExpire(any());
+		verify(fx.jobRunDao, never()).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		verify(fx.notificationService).jobFail("J01", 77L, "FAIL", "開始紀錄寫入失敗，排程未執行（IllegalStateException）");
+		// 鎖已釋放：下次可再跑
+		doReturn(1).when(fx.jobRunDao).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+	}
+
+	@Test
+	void 取號失敗_不執行_執行序號為空_排程觸發不外拋() {
+		when(fx.jobRunDao.nextId()).thenThrow(new IllegalStateException("seq"));
+		job.scheduledJ02();
+		verify(fx.jobRunDao, never()).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		verify(fx.notifyLogDao, never()).countByEventRef(eq(AcctConst.EV_WEEKLY_SUMMARY), any(), any());
+		verify(fx.notificationService).jobFail(eq("J02"), isNull(), eq("FAIL"), eq("開始紀錄寫入失敗，排程未執行（IllegalStateException）"));
+	}
+
+	@Test
+	void 開始紀錄寫入失敗_排程觸發不外拋() {
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		job.scheduledJ01();
+		verify(fx.acctDao, never()).findToExpire(any());
+		verify(fx.notificationService).jobFail("J01", 77L, "FAIL", "開始紀錄寫入失敗，排程未執行（IllegalStateException）");
+	}
+
+	@Test
+	void 開跑前補記舊RUNNING為FAIL_已寄過不重寄_已非RUNNING略過() {
+		when(fx.jobRunDao.findRunningIds("J01")).thenReturn(List.of(5L, 6L, 7L));
+		when(fx.jobRunDao.markStaleFail(eq(5L), any(), any(), any())).thenReturn(1);
+		when(fx.jobRunDao.markStaleFail(eq(6L), any(), any(), any())).thenReturn(1);
+		when(fx.jobRunDao.markStaleFail(eq(7L), any(), any(), any())).thenReturn(0);
+		when(fx.notifyLogDao.countByEventRef(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, "6")).thenReturn(1L);
+		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		InOrder order = inOrder(fx.notifyLogDao, fx.jobRunDao, fx.notificationService);
+		order.verify(fx.notifyLogDao).countByEventRef(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, "5");
+		order.verify(fx.jobRunDao).markStaleFail(eq(5L), eq("上次執行未正常結束（下次開跑時補記）"), any(), eq(HANK));
+		order.verify(fx.notificationService).jobFail("J01", 5L, "FAIL", "上次執行未正常結束（下次開跑時補記）");
+		order.verify(fx.jobRunDao).insertRunning(eq(77L), eq("J01"), any(), any(), any(), any());
+		// 已寄過的仍要改 FAIL，只是不重寄
+		verify(fx.jobRunDao).markStaleFail(eq(6L), any(), any(), any());
+		verify(fx.notificationService, never()).jobFail(eq("J01"), eq(6L), any(), any());
+		verify(fx.notificationService, never()).jobFail(eq("J01"), eq(7L), any(), any());
+		verify(fx.jobRunDao, never()).findRunningIds("J02");
+	}
+
+	@Test
+	void 補記失敗只記log_照常執行() {
+		when(fx.jobRunDao.findRunningIds("J01")).thenReturn(List.of(5L, 6L));
+		when(fx.jobRunDao.markStaleFail(eq(5L), any(), any(), any())).thenThrow(new IllegalStateException("db"));
+		when(fx.jobRunDao.markStaleFail(eq(6L), any(), any(), any())).thenReturn(1);
+		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		verify(fx.notificationService).jobFail("J01", 6L, "FAIL", "上次執行未正常結束（下次開跑時補記）");
+
+		when(fx.jobRunDao.findRunningIds("J02")).thenThrow(new IllegalStateException("db"));
+		assertThat(job.runManual(id(HANK), "J02", null).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		verify(fx.jobRunDao).insertRunning(anyLong(), eq("J02"), any(), any(), any(), any());
+	}
+
+	@Test
+	void 補記時查寄信紀錄失敗_不改狀態不寄信_照常執行() {
+		when(fx.jobRunDao.findRunningIds("J01")).thenReturn(List.of(5L));
+		when(fx.notifyLogDao.countByEventRef(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, "5"))
+				.thenThrow(new IllegalStateException("db"));
+		assertThat(job.runManual(id(HANK), "J01", null).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		// 仍停在 RUNNING，下次開跑會重試
+		verify(fx.jobRunDao, never()).markStaleFail(anyLong(), any(), any(), any());
+		verify(fx.notificationService, never()).jobFail(eq("J01"), eq(5L), any(), any());
 	}
 
 	@Test
@@ -283,6 +386,16 @@ class JobAndNotifyTest {
 				isNull(), any(), eq(AcctConst.SYSTEM_USER));
 		verify(fx.permDao).findUsersInRoles(List.of("GOV"));
 		verify(fx.permDao).findUsersInRoles(List.of("SYS_ADMIN"));
+
+		// 只有結束紀錄寫入失敗（結果碼 SUCCESS）
+		n.jobFail("J01", 78L, AcctConst.JR_SUCCESS, "結束紀錄寫入失敗（X）");
+		verify(sender).send(eq("s@example.com"), eq("【排程失敗】J01 結束紀錄寫入失敗"), anyString());
+		// 沒取到執行序號：參照鍵 0、信中顯示（未取得）
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		n.jobFail("J02", null, AcctConst.JR_FAIL, "開始紀錄寫入失敗");
+		verify(sender).send(eq("s@example.com"), eq("【排程失敗】J02 執行失敗"), body.capture());
+		assertThat(body.getValue()).contains("（未取得）");
+		verify(fx.notifyLogDao).insert(eq("JOB_FAIL"), eq("JOB"), eq("0"), eq("0000009"), any(), any(), any(), any(), any());
 
 		// 不再依賴 properties：建構子無字串參數
 		assertThat(NotificationService.class.getConstructors()).allSatisfy(

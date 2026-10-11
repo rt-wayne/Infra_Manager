@@ -26,6 +26,10 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 27 項：本文由純文字改為 HTML（MailHtml 組版面、跳脫所有填入值），欄位內容不變。
 //           信末「前往系統」連結依事件：待審核／待執行／待複驗／複驗退回 → 待辦簽核，退件 → 申請單列表，
 //           到期／逾期／每週彙總／排程失敗 → 首頁（部分收件人沒有帳號列表權限）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-11
+// 變更說明: BACKLOG 第 7 項：jobFail 的 runId 可為空（連執行序號都沒取到）→ 參照鍵寫 0、信中執行序號「（未取得）」；
+//           結果碼為 SUCCESS（排程做完、只有結束紀錄寫失敗）→ 主旨「【排程失敗】{代碼} 結束紀錄寫入失敗」
 // ============================================================
 
 import java.time.Clock;
@@ -236,15 +240,20 @@ public class NotificationService {
 		return head + MailHtml.rowsTable(List.of("單號", "類別", "帳號名稱", "使用人", "到期日", "逾期天數"), rows);
 	}
 
-	public void jobFail(String jobCode, long runId, String resultCode, String errMsg) {
+	/**
+	 * 排程失敗信。runId 為空＝連執行序號都沒取到（參照鍵寫 0）；
+	 * resultCode 為 SUCCESS＝排程本身做完、只有結束紀錄寫入失敗
+	 */
+	public void jobFail(String jobCode, Long runId, String resultCode, String errMsg) {
 		try {
-			String part = AcctConst.JR_PARTIAL.equals(resultCode) ? "部分" : "";
-			String subject = "【排程失敗】" + jobCode + " 執行" + part + "失敗";
+			String what = AcctConst.JR_SUCCESS.equals(resultCode) ? "結束紀錄寫入失敗"
+					: AcctConst.JR_PARTIAL.equals(resultCode) ? "執行部分失敗" : "執行失敗";
+			String subject = "【排程失敗】" + jobCode + " " + what;
 			String body = html.page(subject, MailHtml.table(List.of(new String[] { "排程代碼", jobCode },
-					new String[] { "執行序號", String.valueOf(runId) }, new String[] { "結果", resultCode },
+					new String[] { "執行序號", runId == null ? "（未取得）" : String.valueOf(runId) }, new String[] { "結果", resultCode },
 					new String[] { "錯誤摘要", nvl(errMsg, "") })), MailHtml.PATH_HOME);
-			sendAll(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, String.valueOf(runId), inRole(AcctConst.MAIL_ROLE_JOB_FAIL), subject, body,
-					AcctConst.SYSTEM_USER);
+			sendAll(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, runId == null ? "0" : String.valueOf(runId),
+					inRole(AcctConst.MAIL_ROLE_JOB_FAIL), subject, body, AcctConst.SYSTEM_USER);
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} runId={} 例外={}", AcctConst.EV_JOB_FAIL, runId, e.getClass().getSimpleName());
 		}
