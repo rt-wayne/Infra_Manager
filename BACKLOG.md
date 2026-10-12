@@ -14,11 +14,12 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 46 | 緊急存取（SA §5.11、第二階段）：送出即生效、24 小時補核准、申請人回報、主管補核准／退回、異常結案、J03 逾期通知、首頁兩卡、鈴鐺類別 3、審查異常旗標閉環；使用者裁示 17 項見詳情檔 | `backlog/46-緊急存取.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動（未 commit）：
-- 卡住／待確認：
+- 下一步：S1 DB 階段——先把欄位草案（詳情檔第 3 節）給使用者確認，並等使用者回填三句唯讀查詢結果（synonym／授權，詳情檔 3.5～3.6），再寫 `db\im_acct_insp_phase2_emg.sql`
+- 已改動（未 commit）：無程式改動（S0 只有文件：本檔、新建 `backlog/46-緊急存取.md`）
+- 卡住／待確認：等使用者：欄位草案確認、三句查詢結果；另有詳情檔第 7 節 7 項待確認
 
 ## 已拍板待實作
 
@@ -33,7 +34,7 @@
 | 11 | IM_ACCT_ADMIN_LOG.CONTENT_JSON 宣告 VARCHAR2(2000 CHAR)，受單欄 4000 bytes 限制實際約只容 1333 個中文字；目前只存切換對象顯示名不會超過，日後寫入更多內容前須處理 | 2026-10-10 | — |
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 13 | 顯示名兩種算法不一致：`AcctReqDao.nameExpr`（第 42 行，用於第 56-58、181 行與 `AttachDao.java:43`）不 trim、無工號退回；快照用的 `Texts.displayName`（`Texts.java:35-42`）有 trim 與英文名 → 中文名 → 工號退回 | 2026-10-10 | — |
-| 14 | 第二階段功能：定期審查、緊急存取、統計頁、帳號與巡檢匯出、資產分類與巡檢項目維護；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
+| 14 | 第二階段功能：定期審查、統計頁、帳號與巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `im_acct_insp_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
@@ -52,6 +53,8 @@
 | 44 | `SETUP.md` 第 71 行寫 `npm run build` 會清掉 `im_acct_insp_web\src\frontend\.gitkeep`、要用 `git checkout` 還原，且「該目錄只有 `.gitkeep` 時殼 jar 也能建置」；但使用者已確認刪除該 `.gitkeep`（第 43 項動工前快照 `83a5f62` 一併 commit），現在 git 還原不回來，新 clone 沒有該目錄時殼 jar 能否建置未驗證。`im_acct_insp_web\README.md` 第 32 行「平時只有 `.gitkeep`」同樣過時。第 43 項 test-runner 發現 | 2026-10-12 | — |
 | 45 | 處理中的按鈕沒有停用外觀：`src/assets/app.css` 第 84 行 `.btn-link` 無 `:disabled` 樣式（只有 `.btn:disabled` 半透明，第 79 行），附件檔名鈕與下載鈕在處理中停用時外觀、游標都不變，下載大檔時看不出在處理。改法一行 `.btn-link:disabled { opacity: .55; cursor: default; }`，但屬全站共用樣式，要目視確認其他畫面的停用連結鈕。第 43 項 code-reviewer 發現，使用者裁示（2026-10-12）留到下一批 | 2026-10-12 | — |
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
+| 47 | IM_ACCT_JOB_RUN 沒有清理機制；J03（每 15 分鐘）上線後每天約 96 列、一年約 3.5 萬列。第 46 項 architect 發現 | 2026-10-12 | — |
+| 48 | `db\im_acct_insp_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（只有 `database.properties.example:20` 一句「有 Public Synonym」），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
 
 ## 已拍板不做
 
