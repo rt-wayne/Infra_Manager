@@ -148,7 +148,7 @@
 | 異動表單帶入 | ACC_APPLY | 須同時帶帳號名稱且精確相符，或我「可看該帳號」；狀態同上；否則 404 |
 | 完整帳號列表 | ACC_LIST_FULL | 全部（預設不含已刪除） |
 | 帳號明細、歷史 | 登入 | 「可看帳號」者 |
-| 申請單明細、附件下載 | 登入 | 「可看申請單」者 |
+| 申請單明細、附件下載與網頁開啟 | 登入 | 「可看申請單」者 |
 | 待辦 | 登入 | 我此刻能處理的 |
 | 鈴鐺 | 登入 | 逐筆與我相關者 |
 | 首頁卡片 | 登入 | 全部，只回聚合數字 |
@@ -414,7 +414,8 @@
 | 存放 | 附件根目錄（設定值，須為絕對路徑，啟動時檢查，不符則啟動失敗）下的 `REQ_ID/uuid.副檔名`；DB 存相對路徑、原檔名、大小、依副檔名決定的 MIME |
 | 寫入順序 | 先寫檔，再在交易內寫 DB；交易回復時盡力刪除剛寫的檔（失敗記 log） |
 | 取代 | 重送附新公文、再次回報附新佐證時，同種類舊列失效（檔案保留）；明細只列有效附件 |
-| 下載 | 須「可看申請單」；已失效的附件可看該單者仍可下載；前端以 blob 取得後存檔 |
+| 下載 | 須「可看申請單」；已失效的附件可看該單者仍可下載；前端以 blob 取得後存檔（檔名為原檔名）；申請單明細每列都有「下載」鈕 |
+| 網頁開啟 | 申請單明細中 .pdf .jpg .png（不分大小寫）的檔名可點，以新分頁開啟；.doc .docx 檔名為純文字，只能下載（不轉檔）。只支援 Chrome、Edge。點擊當下先開空白分頁並顯示「載入中…」，取得檔案後導向 blob 網址，類型依副檔名決定、不採用回應的 Content-Type；新分頁被瀏覽器擋下時提示允許彈出視窗或改用下載；取檔失敗關掉空白分頁並顯示後端訊息；開啟或下載進行中只停用該列。從新分頁存檔的檔名是 blob 的亂碼（UUID），要原檔名請用「下載」鈕。blob 網址登入期間不釋放（新分頁開多久都能存檔、重新整理）；登出、逾時、登入時釋放本頁開過的全部網址，之後已開的分頁不能再存檔或重新整理、網址貼到網址列也打不開；取檔期間已關掉分頁或已登出則不建立網址。本頁重新整理或關閉時瀏覽器也會回收，已開的分頁同樣不能再存檔 |
 | 前端讀檔失敗 | 公文讀取失敗 → U07，使用者確認後不附公文送出；佐證讀取失敗 → U08 並擋下 |
 
 **機房門禁卡（DOOR）**
@@ -578,7 +579,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**` 回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
-- **安全標頭**：殼 jar `/im_acct_insp_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'`（只准載入本站的程式、樣式、圖片與連線）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/im_acct_insp_web` 未加斜線時的 302 轉址、`/im_acct_insp_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、行內樣式或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
+- **安全標頭**：殼 jar `/im_acct_insp_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；`<style>` 區塊與行內程式仍不放行）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/im_acct_insp_web` 未加斜線時的 302 轉址、`/im_acct_insp_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
 - **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
   - 與本系統同站的網站嵌入時，框內沿用使用者原本的登入，可直接誘騙使用者在框內點擊（例如簽核按鈕）。同站範圍依開系統的網址而定：用 IP 或單段主機名開時，是同一台主機的其他服務（含其他 port）；用完整網域名（如 `xxx.pxmart.com.tw`）開時，是同協定、同屬 `pxmart.com.tw` 的網站。
   - 不同站的網站嵌入時，框內拿不到原本的登入；但外站仍可誘導使用者在框內重新登入，之後 token 留在「外站那一份」，8 小時內再造訪該外站時框內仍是登入狀態，可接著誘騙點擊，門檻較高。
