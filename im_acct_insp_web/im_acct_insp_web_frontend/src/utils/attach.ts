@@ -4,6 +4,10 @@
 // 變更說明: 新增：附件前端檢查與讀檔（開發文件 spec_im_acct_insp_v2.0.md 第 4.10 節）
 //           副檔名（不分大小寫）限 .pdf .doc .docx .jpg .png（E14）、單檔 ≤ 10 MB（E15）、空檔視同未上傳；
 //           檔頭內容由後端檢查。送出前先把檔案讀進記憶體（D17：讀取失敗時由畫面提示 U07／U08）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 43 項：新增 inlineMimeOf，判斷附件能否在瀏覽器新分頁開啟（.pdf .jpg .png）並回固定 MIME；
+//           .doc .docx 瀏覽器無法顯示，回 null（只能下載）
 // ============================================================
 
 /** 允許的副檔名 */
@@ -37,6 +41,20 @@ export function checkAttachFile(file: { name: string; size: number }): string | 
 export async function readAttachFile(file: File): Promise<File> {
   const buf = await file.arrayBuffer()
   return new File([buf], file.name, { type: file.type })
+}
+
+/** 瀏覽器能直接顯示的副檔名與其 MIME；Word 檔不在內（瀏覽器無法顯示，只能下載） */
+const INLINE_MIME: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png'
+}
+
+/** 依檔名（不分大小寫）回可在新分頁開啟的 MIME；不能開啟回 null */
+export function inlineMimeOf(fileName: string): string | null {
+  const name = fileName.toLowerCase()
+  const ext = Object.keys(INLINE_MIME).find(e => name.endsWith(e))
+  return ext ? INLINE_MIME[ext] : null
 }
 
 /** 檔案大小顯示（KB／MB） */

@@ -9,6 +9,12 @@ package com.mpx.im_acct_insp_web.config;
 //           不加 X-Frame-Options／frame-ancestors：使用者裁示允許任何網站嵌入（2026-10-11），誘騙點擊風險見 PRD 已知限制
 //           不加 HSTS：正式環境改走 HTTPS 後再加（BACKLOG 第 34 項）
 //           前端日後若引入外站資源、行內程式或 data: 圖片，要同步放寬 CSP，否則畫面會被瀏覽器擋下（console 有 CSP 錯誤）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 43 項（附件在新分頁開啟）：CSP 加 style-src-attr 'unsafe-inline'（使用者裁示）。
+//           blob 網址開的分頁沿用本頁 CSP，瀏覽器內建的 PDF／圖片檢視頁靠行內 style 屬性排版：
+//           被擋時 Edge 的 PDF 只剩約 150px 高看不到內容、圖片不置中（Chrome 155、Edge 150 實測）。
+//           只放行 style 屬性，不放行 <style> 區塊與任何程式；改列雜湊會隨瀏覽器版本失效，故不採用
 // ============================================================
 
 import java.io.IOException;
@@ -26,7 +32,7 @@ import jakarta.servlet.http.HttpServletResponse;
 @Configuration
 public class SecurityHeadersConfig {
 
-	static final String CSP = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'";
+	static final String CSP = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'";
 	/** 連到外站時不帶本站網址；站內照常帶 */
 	static final String REFERRER_POLICY = "same-origin";
 	/** 本系統用不到的瀏覽器功能一律關閉 */

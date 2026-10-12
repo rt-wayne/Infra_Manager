@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp_web.config;
 //           驗：元件掃描找得到、過濾器掛在所有路徑（/*）；四個標頭的值與份數；不帶 X-Frame-Options（使用者裁示允許嵌入）；
 //           以模擬 Controller 驗回應原有標頭保留、401 也帶、回應帶同名標頭時以回應的為準（模擬後端送 Referrer-Policy）
 //           實際經 BackendForwarder 轉送、Tomcat 錯誤頁（404、後端斷線 500）由 curl 實測（2026-10-11），本測試不涵蓋
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 43 項：CSP 預期值加 style-src-attr 'unsafe-inline'（附件新分頁的瀏覽器內建檢視頁需要）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -92,7 +95,7 @@ class SecurityHeadersConfigTest {
 
 	private static void assertHeaders(MockHttpServletResponse res) {
 		assertThat(res.getHeaderValues("Content-Security-Policy"))
-				.containsExactly("default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'");
+				.containsExactly("default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'");
 		assertThat(res.getHeaderValues("X-Content-Type-Options")).containsExactly("nosniff");
 		assertThat(res.getHeaderValues("Referrer-Policy")).containsExactly("same-origin");
 		assertThat(res.getHeaderValues("Permissions-Policy"))

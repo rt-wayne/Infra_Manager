@@ -10,6 +10,10 @@
             關卡 6、7 且 verifyRejectCnt＞0 顯示 U02；附件清單（公文／執行佐證）可下載（blob，帶 Authorization）；
             停用／刪除不顯示權限範圍與期限；actions slot 傳出 req（含 versionNo、actions[]），
             呼叫端沒給按鈕時依 actions[] 顯示：RESUBMIT → 重新送出；其他簽核動作 → 前往待辦簽核
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-12
+  變更說明: BACKLOG 第 43 項：.pdf .jpg .png 的檔名可點、以新分頁開啟；.doc .docx 檔名維持文字；每列保留「下載」鈕；
+            新分頁被瀏覽器擋下時提示改用下載；開啟或下載進行中，該列檔名與下載鈕都停用（busyAttachIds 各列各自鎖定）
 -->
 <template>
   <BaseModal :title="`申請明細 — ${reqId}`" sub="簽核前的完整申請內容，作為核准／退件的判斷依據。" wide @close="emit('close')">
@@ -33,9 +37,17 @@
       <div v-if="(req.attachments ?? []).length === 0" class="hint attach-none">無附件</div>
       <div v-for="a in req.attachments ?? []" :key="a.attachId" class="attach-row" :data-attach="a.attachId">
         <span class="tag tag-cat">{{ label(ATTACH_TYPE_LABEL, a.attachTypeCode) }}</span>
-        <span class="attach-name">{{ a.fileName }}</span>
+        <button
+          v-if="inlineMimeOf(a.fileName)"
+          type="button"
+          class="btn-link attach-name attach-open"
+          title="在新分頁開啟"
+          :disabled="busyAttachIds.has(a.attachId)"
+          @click="viewAttachment(a)"
+        >{{ a.fileName }}</button>
+        <span v-else class="attach-name">{{ a.fileName }}</span>
         <span class="hint">{{ fileSizeText(a.fileSize) }}　·　{{ a.createDate }}{{ a.createByName ? `　·　${a.createByName}` : '' }}</span>
-        <button type="button" class="btn-link attach-dl" :disabled="downloading === a.attachId" @click="download(a)">下載</button>
+        <button type="button" class="btn-link attach-dl" :disabled="busyAttachIds.has(a.attachId)" @click="download(a)">下載</button>
       </div>
 
       <template v-if="req.history">
@@ -61,13 +73,13 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import BaseModal from './BaseModal.vue'
 import HistoryTable from './HistoryTable.vue'
-import { downloadAttachment } from '../api/attachment'
+import { MSG_POPUP_BLOCKED, downloadAttachment, openAttachment } from '../api/attachment'
 import { errorMessage } from '../api/errors'
 import { getRequest } from '../api/request'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { Attachment, RequestDetail } from '../types/request'
-import { fileSizeText } from '../utils/attach'
+import { fileSizeText, inlineMimeOf } from '../utils/attach'
 import { catgNameOf, describeAsset } from '../utils/codes'
 import { dateOnly } from '../utils/date'
 import {
@@ -90,7 +102,8 @@ const { codes, ensureCodes } = useSession()
 
 const req = ref<RequestDetail | null>(null)
 const loading = ref(true)
-const downloading = ref<number | null>(null)
+/** 開啟或下載進行中的附件；各列各自鎖定，一列完成不會解鎖另一列 */
+const busyAttachIds = ref(new Set<number>())
 
 const isDoor = computed(() => req.value?.catgId === DOOR_CATG_ID)
 const noScope = computed(() => (req.value ? isReasonOnly(req.value.reqTypeCode) : false))
@@ -139,13 +152,27 @@ const execText = computed(() => {
 })
 
 async function download(a: Attachment): Promise<void> {
-  downloading.value = a.attachId
+  busyAttachIds.value.add(a.attachId)
   try {
     await downloadAttachment(a.attachId, a.fileName)
   } catch (e) {
     toast(errorMessage(e, '下載失敗，請稍後再試'), 'amber')
   } finally {
-    downloading.value = null
+    busyAttachIds.value.delete(a.attachId)
+  }
+}
+
+/** 新分頁開啟；openAttachment 須在點擊當下同步呼叫（先開空白分頁），不可先 await 其他東西 */
+async function viewAttachment(a: Attachment): Promise<void> {
+  busyAttachIds.value.add(a.attachId)
+  try {
+    if (!(await openAttachment(a.attachId, a.fileName))) {
+      toast(MSG_POPUP_BLOCKED, 'amber')
+    }
+  } catch (e) {
+    toast(errorMessage(e, '開啟失敗，請稍後再試'), 'amber')
+  } finally {
+    busyAttachIds.value.delete(a.attachId)
   }
 }
 
@@ -164,6 +191,7 @@ onMounted(async () => {
 <style scoped>
 .attach-row { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .attach-name { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
+.attach-open { padding: 0; text-align: left; }
 .attach-row .hint { margin-top: 0; }
 a.btn { display: inline-flex; align-items: center; min-height: 48px; text-decoration: none; }
 </style>

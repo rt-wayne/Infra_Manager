@@ -16,9 +16,14 @@
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：token 改各分頁共用（tokenStore 改 localStorage）；切換身分／切回後 notifyOtherTabs，
 //           讓其他分頁重新整理成新身分（登入、登出換掉或清掉 token，其他分頁自然會收到）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 43 項：resetSession 一併釋放本頁以新分頁開過的附件 blob 網址（登出不整頁重新載入，
+//           不釋放的話共用電腦的下一位可從瀏覽紀錄重開；使用者裁示）
 // ============================================================
 import { computed, ref } from 'vue'
 import { endImpersonate as apiEndImpersonate, getMe, impersonate as apiImpersonate, login as apiLogin, logout as apiLogout } from '../api/auth'
+import { revokeOpenedAttachments } from '../api/attachment'
 import { getCodes, listExpiring, listTodos } from '../api/common'
 import { clearToken, getToken, notifyOtherTabs, setToken } from '../api/tokenStore'
 import type { Codes, ExpiringItem, Me } from '../types/common'
@@ -126,8 +131,9 @@ function ensureCodes(): Promise<Codes> {
   return codesPromise
 }
 
-/** 清掉模組層狀態（登出、401、測試用）；loginNotice 不在此清 */
+/** 清掉模組層狀態（登出、401、登入、測試用）；loginNotice 不在此清；一併釋放本頁開過的附件網址 */
 export function resetSession(): void {
+  revokeOpenedAttachments()
   me.value = null
   meFailed.value = false
   codes.value = null
