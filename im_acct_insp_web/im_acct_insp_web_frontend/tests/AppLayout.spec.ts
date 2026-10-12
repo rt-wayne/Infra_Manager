@@ -12,6 +12,11 @@
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 39 項：無 ACC_LIST_FULL 在申請單列表頁只反白「帳號申請單列表」、點「帳號列表」仍導向申請單列表；
 //           有 ACC_LIST_FULL 在帳號列表頁照常反白；切換中在申請單列表頁切回無 ACC_LIST_FULL 的本人後不反白
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 42 項：無 ACC_LIST_FULL 時不顯示「帳號列表」（原本指向申請單列表）；
+//           只有 GENERAL、在申請單列表頁、切回無權限本人三案改驗「帳號列表」不存在、「帳號申請單列表」反白；
+//           新增反方向：無權限本人切換成有 ACC_LIST_FULL 者後「帳號列表」出現並連 /accounts
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -20,7 +25,7 @@ import { RouterView, createMemoryHistory, createRouter } from 'vue-router'
 import type { Router } from 'vue-router'
 import { defineComponent, h } from 'vue'
 import AppLayout from '../src/layouts/AppLayout.vue'
-import { endImpersonate, getMe, logout } from '../src/api/auth'
+import { endImpersonate, getMe, impersonate, listUsers, logout } from '../src/api/auth'
 import { getAccount } from '../src/api/account'
 import { listExpiring, listTodos } from '../src/api/common'
 import { getToken, setToken } from '../src/api/tokenStore'
@@ -91,6 +96,8 @@ describe('AppLayout', () => {
     vi.mocked(getMe).mockReset()
     vi.mocked(logout).mockReset().mockResolvedValue(undefined)
     vi.mocked(endImpersonate).mockReset()
+    vi.mocked(impersonate).mockReset()
+    vi.mocked(listUsers).mockReset()
     vi.mocked(listTodos).mockReset().mockResolvedValue([])
     vi.mocked(listExpiring).mockReset().mockResolvedValue([])
     vi.mocked(getAccount).mockReset()
@@ -101,9 +108,10 @@ describe('AppLayout', () => {
     vi.useRealTimers()
   })
 
-  it('只有 GENERAL：帳號列表指向申請單列表、不顯示巡檢區與切換身分；顯示登入者與登出', async () => {
+  it('只有 GENERAL：不顯示帳號列表、巡檢區與切換身分；顯示帳號申請單列表、登入者與登出', async () => {
     const { w } = await mountLayout(makeMe())
-    expect(w.find('.nav-accounts').attributes('href')).toBe('/requests')
+    expect(w.find('.nav-accounts').exists()).toBe(false)
+    expect(w.find('.nav-requests').attributes('href')).toBe('/requests')
     expect(w.find('.nav-insp').exists()).toBe(false)
     expect(w.find('.imp-start').exists()).toBe(false)
     expect(w.find('.imp-banner').exists()).toBe(false)
@@ -121,19 +129,12 @@ describe('AppLayout', () => {
     w.unmount()
   })
 
-  it('無 ACC_LIST_FULL 在申請單列表頁：只反白「帳號申請單列表」；點「帳號列表」仍導向申請單列表', async () => {
-    const { w, router } = await mountLayout(makeMe(), '/requests')
-    const acc = w.find('.nav-accounts')
+  it('無 ACC_LIST_FULL 在申請單列表頁：沒有「帳號列表」，「帳號申請單列表」反白', async () => {
+    const { w } = await mountLayout(makeMe(), '/requests')
+    expect(w.find('.nav-accounts').exists()).toBe(false)
     const req = w.find('.nav-requests')
     expect(req.classes()).toContain('router-link-exact-active')
     expect(req.attributes('aria-current')).toBe('page')
-    expect(acc.classes()).not.toContain('router-link-exact-active')
-    expect(acc.attributes('aria-current')).toBeUndefined()
-    await router.push('/')
-    await flushPromises()
-    await w.find('.nav-accounts').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/requests')
     w.unmount()
   })
 
@@ -146,7 +147,7 @@ describe('AppLayout', () => {
     w.unmount()
   })
 
-  it('切換中（有 ACC_LIST_FULL）在申請單列表頁切回無 ACC_LIST_FULL 的本人：「帳號列表」改指向申請單列表但不反白', async () => {
+  it('切換中（有 ACC_LIST_FULL）在申請單列表頁切回無 ACC_LIST_FULL 的本人：「帳號列表」消失、「帳號申請單列表」反白', async () => {
     const gary = makeMe({
       userId: '0000010', userName: 'Gary (許永成)', realUserId: '0000011', realUserName: 'Hank (黃志翰)',
       impersonating: true, permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL']
@@ -161,11 +162,31 @@ describe('AppLayout', () => {
     await w.find('.imp-end').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/requests')
-    const acc = w.find('.nav-accounts')
-    expect(acc.attributes('href')).toBe('/requests')
-    expect(acc.classes()).not.toContain('router-link-exact-active')
-    expect(acc.attributes('aria-current')).toBeUndefined()
+    expect(w.find('.nav-accounts').exists()).toBe(false)
     expect(w.find('.nav-requests').classes()).toContain('router-link-exact-active')
+    w.unmount()
+  })
+
+  it('無 ACC_LIST_FULL 的本人切換成有 ACC_LIST_FULL 的人：「帳號列表」出現並連 /accounts', async () => {
+    const hank = makeMe({
+      userId: '0000011', userName: 'Hank (黃志翰)', realUserId: '0000011', realUserName: 'Hank (黃志翰)', canImpersonate: true,
+      permissions: [...GENERAL_PERMS, 'SYS_IMPERSONATE']
+    })
+    const { w } = await mountLayout(hank)
+    expect(w.find('.nav-accounts').exists()).toBe(false)
+
+    vi.mocked(listUsers).mockResolvedValue([{ userId: '0000010', userName: 'Gary (許永成)', roleIds: ['ACCT_REGISTRY'] }])
+    vi.mocked(impersonate).mockResolvedValue(makeMe({
+      userId: '0000010', userName: 'Gary (許永成)', realUserId: '0000011', realUserName: 'Hank (黃志翰)',
+      impersonating: true, permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL']
+    }))
+    await w.find('.imp-start').trigger('click')
+    await flushPromises()
+    await w.find('#impTarget').setValue('0000010')
+    await w.find('.imp-confirm').trigger('click')
+    await flushPromises()
+    expect(impersonate).toHaveBeenCalledWith('0000010')
+    expect(w.find('.nav-accounts').attributes('href')).toBe('/accounts')
     w.unmount()
   })
 

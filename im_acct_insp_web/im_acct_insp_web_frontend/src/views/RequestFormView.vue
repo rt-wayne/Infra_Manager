@@ -38,6 +38,10 @@
             仍不送出；新單申請單位帶 /me 的 deptName 並唯讀，部門空白才開放手填（刻意偏離 SA v0.5 第 381 行「新開申請一律空白」）；
             重送申請單位保留原單的值並唯讀（原值空白才開放手填）；唯讀與否在載入時決定一次（deptLocked）；
             「同申請人」只取表單分機／Email，拿掉 me 的後備（欄位已由 me 帶入，後備只會在全空白時誤蓋手填值）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-12
+  變更說明: BACKLOG 第 42 項：新增時申請類型提示（.type-hint）依權限：無 ACC_LIST_FULL 只寫「請從帳號申請單列表」
+            （導覽已不顯示「帳號列表」），有權限者照舊「帳號列表或帳號申請單列表」
 -->
 <template>
   <main>
@@ -73,7 +77,7 @@
             <input type="radio" name="reqType" :value="t" :checked="t === form.reqTypeCode" :disabled="t !== form.reqTypeCode" /> {{ REQ_TYPE_LABEL[t] }}
           </label>
         </div>
-        <div class="hint">{{ typeHint }}</div>
+        <div class="hint type-hint">{{ typeHint }}</div>
       </div>
 
       <div class="grid2">
@@ -384,7 +388,9 @@ function secTitle(key: string): string {
 const typeHint = computed(() => {
   if (resubmitId) return '重新送出不可變更申請類型與帳號類別，僅能修改申請內容。'
   if (changeType) return '申請類型已依您點選的操作鎖定，不可更改。'
-  return '「修改」「停用」「重新啟用」「刪除」請從帳號列表或帳號申請單列表點選對應帳號的操作按鈕發起，此處僅能新增全新帳號。'
+  // 無 ACC_LIST_FULL 者導覽沒有「帳號列表」，提示只指向帳號申請單列表
+  const from = can('ACC_LIST_FULL') ? '帳號列表或帳號申請單列表' : '帳號申請單列表'
+  return `「修改」「停用」「重新啟用」「刪除」請從${from}點選對應帳號的操作按鈕發起，此處僅能新增全新帳號。`
 })
 
 const reasonText = computed((): { label: string; placeholder: string } => {

@@ -23,6 +23,10 @@
 // 變更說明: BACKLOG 第 40 項：無申請單號欄、基本資料欄位順序；分機／申請單位／Email 依 /me 帶入並唯讀，部門空白才可填；
 //           重送保留原單申請單位並唯讀（原值空白可填、輸入後不鎖回）；停用單有部門時帶入並唯讀；
 //           使用者資料全空白時「同申請人」不覆蓋手填值。分機與 Email 欄已唯讀，「同申請人」改以 me 的資料驅動（不對停用欄 setValue）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-12
+// 變更說明: BACKLOG 第 42 項：申請類型提示依 ACC_LIST_FULL 切換（無權限不提帳號列表），以整句比對鎖定文字；
+//           補依操作鎖定類型、退件重送兩種提示的整句測試
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -35,7 +39,7 @@ import { resetSession, useSession } from '../src/composables/useSession'
 import type { AccountLookupDetail } from '../src/types/account'
 import type { RequestDetail } from '../src/types/request'
 import { fmtDate } from '../src/utils/date'
-import { CODES, chooseFile, httpError, lastToast, makeFile, makeMe, makeRouter } from './helpers'
+import { CODES, GENERAL_PERMS, chooseFile, httpError, lastToast, makeFile, makeMe, makeRouter } from './helpers'
 
 vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
@@ -203,6 +207,32 @@ describe('RequestFormView', () => {
     expect(w.findAll('input[name=reqType]').map(i => i.attributes('value'))).toEqual(['ADD', 'MODIFY', 'DISABLE', 'ENABLE', 'DELETE'])
     expect(w.text()).not.toContain('展延')
     w.unmount()
+  })
+
+  it('新增：申請類型提示依權限——無 ACC_LIST_FULL 只指向帳號申請單列表，有權限才提到帳號列表', async () => {
+    const w = await mountForm()
+    const hint = w.find('.type-hint').text()
+    expect(hint).toBe('「修改」「停用」「重新啟用」「刪除」請從帳號申請單列表點選對應帳號的操作按鈕發起，此處僅能新增全新帳號。')
+    expect(hint).not.toContain('帳號列表')
+    w.unmount()
+
+    useSession().me.value = makeMe({ permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL'] })
+    const w2 = await mountForm()
+    expect(w2.find('.type-hint').text())
+      .toBe('「修改」「停用」「重新啟用」「刪除」請從帳號列表或帳號申請單列表點選對應帳號的操作按鈕發起，此處僅能新增全新帳號。')
+    w2.unmount()
+  })
+
+  it('申請類型提示：依操作鎖定類型、退件重送各有固定文字', async () => {
+    lookupDetailMock.mockResolvedValue(ACCT)
+    const w = await mountForm('/requests/new?reqType=MODIFY&acctId=AR20261001-001&acctName=sa')
+    expect(w.find('.type-hint').text()).toBe('申請類型已依您點選的操作鎖定，不可更改。')
+    w.unmount()
+
+    requestMock.mockResolvedValue(REJECTED_REQ)
+    const w2 = await mountForm('/requests/new?resubmit=AR20261005-002')
+    expect(w2.find('.type-hint').text()).toBe('重新送出不可變更申請類型與帳號類別，僅能修改申請內容。')
+    w2.unmount()
   })
 
   it('新增：無申請單號欄；分機、申請單位、Email 自動帶入使用者資料且唯讀；欄位順序 申請人｜申請日期｜分機｜申請單位｜Email', async () => {
