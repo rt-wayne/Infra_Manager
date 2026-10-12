@@ -17,9 +17,9 @@
 | 46 | 緊急存取（SA §5.11、第二階段）：送出即生效、24 小時補核准、申請人回報、主管補核准／退回、異常結案、J03 逾期通知、首頁兩卡、鈴鐺類別 3、審查異常旗標閉環；使用者裁示 17 項見詳情檔 | `backlog/46-緊急存取.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S1 DB 階段——先把欄位草案（詳情檔第 3 節）給使用者確認，並等使用者回填三句唯讀查詢結果（synonym／授權，詳情檔 3.5～3.6），再寫 `db\im_acct_insp_phase2_emg.sql`
-- 已改動（未 commit）：無程式改動（S0 只有文件：本檔、新建 `backlog/46-緊急存取.md`）
-- 卡住／待確認：等使用者：欄位草案確認、三句查詢結果；另有詳情檔第 7 節 7 項待確認
+- 下一步：S1 DB 階段——欄位草案已確認（詳情檔第 3 節），寫 `db\im_acct_insp_phase2_emg.sql`（synonym／GRANT 段先比照第一階段寫、標註待定稿）、同步 `create_table.sql`、PRD 資料結構節；使用者會在 SQL 產出後跑三句唯讀查詢（詳情檔 3.5）並回填 3.6
+- 已改動（未 commit）：無
+- 卡住／待確認：三句查詢結果（SQL 產出後才跑）；請使用者把 EMERGENCY→EMG 補進 DB 規範縮寫字典（裁示 ㉘）
 
 ## 已拍板待實作
 
@@ -55,6 +55,7 @@
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
 | 47 | IM_ACCT_JOB_RUN 沒有清理機制；J03（每 15 分鐘）上線後每天約 96 列、一年約 3.5 萬列。第 46 項 architect 發現 | 2026-10-12 | — |
 | 48 | `db\im_acct_insp_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（只有 `database.properties.example:20` 一句「有 Public Synonym」），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
+| 49 | 第一階段 21 張表對照 `DB規範_V1_20261002_JLA.xlsx` 規則 3（單字超過 6 碼要用字典縮寫）有 7 個字未縮寫：AFFECTED_CNT、CONTENT_JSON、IS_ENABLED、IS_SELECTABLE、SUGGEST_*、IS_REVIEW_TRIGGER、VERSION_NO；「IM_」前綴也不在規範的業務簡碼表。已上線欄位改名要動程式、PRD 與既有資料。第 46 項 DB 規範對照時發現，使用者裁示（2026-10-12）只登記 | 2026-10-12 | — |
 
 ## 已拍板不做
 
