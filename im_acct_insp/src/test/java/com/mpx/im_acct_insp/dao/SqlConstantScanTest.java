@@ -41,6 +41,16 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S8：FIND_LIST 篩選 UNDECIDED＝PENDING＋OVERDUE；首頁卡計數條件 UNDECIDED_COND／RETURNED_COND
 //           對應 STATE_EXPR 的支、含 STATUS = 1、不需 :now；EMG_STATE_FILTERS＝五種計算狀態＋UNDECIDED
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：FLAG_CLEAR 啟用（D42 清旗標歷史），自「已廢除代碼」兩清單移除；
+//           AcctDao.CLEAR_REVIEW_FLAG 欄位掃描（5 欄歸零／NULL、帶 IS_REVIEW_FLAG = 1 條件）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正 ①B：CLEAR_REVIEW_FLAG 帶 REVIEW_FLAG_DATE <= :execDate（只清回報前的旗標）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: BACKLOG 第 46 項 S10 複審：清旗標類型斷言的註解改寫成直接寫內容「重新啟用也清（S10 開工裁示）」
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,7 +100,7 @@ class SqlConstantScanTest {
 	static final Pattern IM_USER = Pattern.compile("(?<![\\w])IM_USER\\b");
 	static final Pattern RD_USER = Pattern.compile("\\bRD_USER\\.");
 	static final Pattern SYSDATE = Pattern.compile("\\bSYSDATE\\b");
-	static final Pattern ABOLISHED_CODE = Pattern.compile("'(EXTEND|VOID|CONFIRM|NA|TO_EXEC|EXTEND_DONE|FLAG_CLEAR|IMPORT\\w*)'");
+	static final Pattern ABOLISHED_CODE = Pattern.compile("'(EXTEND|VOID|CONFIRM|NA|TO_EXEC|EXTEND_DONE|IMPORT\\w*)'");
 	static final Pattern ABOLISHED_COLUMN = Pattern.compile(
 			"\\b(ORIG_REQ_ID|ORIG_ACCT_ID|NEW_ACCT_ID|IMPORT_ID|DISABLE_TYPE_CODE|REVIEW_BASIS_CODE|IS_DIRECT|IS_SHOW|APPLY_TEL_NO|APPLY_EMAIL|EXCPT_CNT\\s*,\\s*INSP_STATE_CODE)\\b");
 	/** END 後面直接接英文字母（END_DATE 之類有底線的欄名不算） */
@@ -228,16 +238,23 @@ class SqlConstantScanTest {
 				.contains("COALESCE(R.APPLY_BY, EM.APPLY_BY) AS REQ_APPLY_BY");
 		assertThat(AcctDao.UPDATE_REVIEW_FLAG).contains("IS_REVIEW_FLAG = 1").contains("REVIEW_FLAG_SOURCE_CODE = :sourceCode")
 				.contains("REVIEW_FLAG_BY = :flagBy").doesNotContain("SYSDATE");
+		// S10：清旗標須 5 欄歸零／NULL，且帶 IS_REVIEW_FLAG = 1 條件（已被清過影響 0 筆、不重寫 FLAG_CLEAR 歷史）
+		assertThat(AcctDao.CLEAR_REVIEW_FLAG).contains("IS_REVIEW_FLAG = 0").contains("REVIEW_FLAG_REASON = NULL")
+				.contains("REVIEW_FLAG_SOURCE_CODE = NULL").contains("REVIEW_FLAG_DATE = NULL")
+				.contains("REVIEW_FLAG_BY = NULL").contains("AND IS_REVIEW_FLAG = 1")
+				.contains("AND REVIEW_FLAG_DATE <= :execDate").doesNotContain("SYSDATE");
 	}
 
 	@Test
 	void 代碼常數_無已廢除值() throws Exception {
-		List<String> abolished = List.of("EXTEND", "VOID", "CONFIRM", "NA", "EXTEND_DONE", "FLAG_CLEAR", "AC", "AI",
+		List<String> abolished = List.of("EXTEND", "VOID", "CONFIRM", "NA", "EXTEND_DONE", "AC", "AI",
 				"EM", "RD_USER.IM_USER");
 		for (Map.Entry<String, String> e : constants(List.of(AcctConst.class)).entrySet()) {
 			assertThat(abolished).as(e.getKey()).doesNotContain(e.getValue());
 		}
 		assertThat(AcctConst.REQ_TYPES).containsExactly("ADD", "MODIFY", "DISABLE", "ENABLE", "DELETE");
+		// 清旗標類型＝D42 的修改／停用，重新啟用也清（S10 開工裁示）；新增與刪除不清
+		assertThat(AcctConst.FLAG_CLEAR_REQ_TYPES).containsExactly("MODIFY", "DISABLE", "ENABLE");
 		assertThat(AcctConst.REQ_STATES).containsExactly("REVIEW", "EXEC", "VERIFY", "APPROVED", "REJECTED");
 		assertThat(AcctConst.ACCT_STATES).containsExactly("REVIEW", "APPROVED", "EXPIRED", "DISABLED", "REJECTED", "DELETED");
 		assertThat(AcctConst.RESULT_CODES).containsExactly("NORMAL", "EXCPT");

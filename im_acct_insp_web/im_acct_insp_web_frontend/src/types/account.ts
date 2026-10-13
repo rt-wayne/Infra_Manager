@@ -9,6 +9,9 @@
 //           申請類型刪 EXTEND；Account 刪展延／匯入欄位，加 pendingVerify、inFlightReqId、allowedReqTypes；
 //           新增 AccountListResult（items＋各狀態／類別數量＋到期數）；AccountQuery 加 expiring；
 //           AccountHist 加 actAsId／actAsName／isSelfAction／selfActionLabel
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：Account 加 reviewFlagDate／reviewFlagBy（帳號詳情顯示標記日期與標記人）
 // ============================================================
 
 /** 申請類型（IM_ACCT_REQ.REQ_TYPE_CODE） */
@@ -41,6 +44,9 @@ export interface Account {
   nextReviewDate?: string | null
   isReviewFlag?: number
   reviewFlagReason?: string | null
+  /** 標記日期與標記人工號（S10：帳號詳情顯示；後端只有工號、無姓名欄） */
+  reviewFlagDate?: string | null
+  reviewFlagBy?: string | null
   /** 是否有在途申請（REVIEW／EXEC／VERIFY） */
   inFlight?: boolean
   inFlightReqId?: string | null

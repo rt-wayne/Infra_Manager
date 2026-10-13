@@ -4,6 +4,9 @@
    變更說明: 新增：im_acct_insp 共用版面樣式（開發文件 spec_im_acct_insp.md 第 6 節；配置依原型）
              色票沿用 main.css 變數；字級依 README 第 5 節（內文 18～20px、標籤 17px、按鈕最小高 48px）
              1024 寬不出橫向捲軸：側欄固定 200px、內容區 min-width:0、表格 table-layout:fixed＋長字斷行
+   AI版本  : Claude Fable 5 (claude-fable-5)
+   修改日期: 2026-10-13
+   變更說明: BACKLOG 第 46 項 S10：加 .tag-flag（紅色「審查異常」標籤，帳號列表與帳號詳情用）
    ============================================================ */
 
 /* ---------- 外框 ---------- */
@@ -91,6 +94,7 @@ input:disabled, select:disabled, textarea:disabled { background: #f1f5f9; color:
 .tag { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 16px; font-weight: 700; line-height: 1.6; }
 .tag-cat { background: #e7edf3; color: var(--blue); }
 .tag-priv { background: #fbe9e9; color: #a13d3d; }
+.tag-flag { background: #fbe9e9; color: #a13d3d; } /* 審查異常（緊急存取退回標記，S10） */
 .tag-ok { background: #e7f4ec; color: var(--green); }
 .tag-warn { background: #fdf3e9; color: #92400e; }
 .tag-pending { background: #faf1de; color: #8a6d1f; }

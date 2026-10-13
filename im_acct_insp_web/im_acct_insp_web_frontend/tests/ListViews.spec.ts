@@ -10,16 +10,21 @@
 //           帳號列表：U14 橫幅與到期篩選、8 類頁籤數量、狀態數量含已逾期、待複驗標記、依權限顯示異動；
 //           申請單列表：完整帳號名稱查詢（U05／U06）、在途不顯示操作、U10、退件原因與重新送出；
 //           巡檢紀錄：巡檢人員代理身分顯示；歷史表格：操作人「（以 ○○ 身分）」與 U12 標籤
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：帳號列表「審查異常」標籤（title 帶原因）；
+//           帳號詳情彈窗：審查異常標籤與原因／標記日期／標記人一列、未掛旗標不顯示
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { Component } from 'vue'
+import AccountDetailModal from '../src/components/AccountDetailModal.vue'
 import AccountListView from '../src/views/AccountListView.vue'
 import InspectionListView from '../src/views/InspectionListView.vue'
 import RequestListView from '../src/views/RequestListView.vue'
 import HistoryTable from '../src/components/HistoryTable.vue'
 import { getCodes, listExpiring } from '../src/api/common'
-import { listAccounts, listMyAccounts, lookupAccounts } from '../src/api/account'
+import { getAccount, listAccounts, listMyAccounts, lookupAccounts } from '../src/api/account'
 import { listInspections } from '../src/api/inspection'
 import { listMyRequests } from '../src/api/request'
 import { resetSession, useSession } from '../src/composables/useSession'
@@ -125,6 +130,7 @@ describe('帳號列表', () => {
     list[0] = { ...list[0], acctStateCode: 'DISABLED', allowedReqTypes: ['ENABLE', 'DELETE'] }
     list[1] = { ...list[1], inFlight: true, pendingVerify: true, allowedReqTypes: [] }
     list[2] = { ...list[2], acctStateCode: 'EXPIRED', allowedReqTypes: ['DISABLE', 'DELETE'] }
+    list[4] = { ...list[4], isReviewFlag: 1, reviewFlagReason: '緊急存取退回未結案' }
     accountsMock.mockResolvedValue(listResult(list, {
       stateCounts: { APPROVED: 22, EXPIRED: 1, DISABLED: 1, REVIEW: 1, DELETED: 4 },
       catgCounts: { HOST: 20, DB: 5 }
@@ -152,6 +158,9 @@ describe('帳號列表', () => {
     expect(rows[2].find('.op-disable').exists()).toBe(true)
     expect(rows[2].find('.op-modify').exists()).toBe(false)
     expect(rows[3].find('.op-modify').exists()).toBe(true)
+    expect(rows[4].find('.review-flag').text()).toBe('審查異常')
+    expect(rows[4].find('.review-flag').attributes('title')).toBe('緊急存取退回未結案')
+    expect(rows[0].find('.review-flag').exists()).toBe(false)
     expect(w.text()).not.toContain('展延')
 
     await w.find('.cat-tab[data-catg=DB]').trigger('click')
@@ -183,6 +192,42 @@ describe('帳號列表', () => {
     const w = await mountView(AccountListView, '/accounts')
     expect(w.find('tbody .op-modify').exists()).toBe(false)
     expect(w.find('tbody .op-view').exists()).toBe(true)
+    w.unmount()
+  })
+})
+
+describe('帳號詳情彈窗：審查異常標記（S10）', () => {
+  beforeEach(() => {
+    resetSession()
+    useSession().me.value = makeMe({ permissions: [...GENERAL_PERMS, 'ACC_LIST_FULL'] })
+    vi.mocked(getCodes).mockReset().mockResolvedValue(CODES)
+  })
+
+  async function mountDetail(over: Partial<Account>) {
+    vi.mocked(getAccount).mockReset().mockResolvedValue({ ...acct(1), ...over })
+    const router = await makeRouter('/accounts')
+    const w = mount(AccountDetailModal, { props: { acctId: acct(1).acctId }, global: { plugins: [router] } })
+    await flushPromises()
+    return w
+  }
+
+  it('掛旗標：狀態列紅色標籤，另列原因／標記日期／標記人', async () => {
+    const w = await mountDetail({
+      isReviewFlag: 1, reviewFlagReason: '緊急存取退回未結案',
+      reviewFlagDate: '2026-10-12 10:00:00', reviewFlagBy: '0105341'
+    })
+    expect(w.find('.review-flag').text()).toBe('審查異常')
+    const info = w.find('.review-flag-info').text()
+    expect(info).toContain('原因：緊急存取退回未結案')
+    expect(info).toContain('標記日期：2026-10-12')
+    expect(info).toContain('標記人：0105341')
+    w.unmount()
+  })
+
+  it('未掛旗標：不顯示標籤與標記列', async () => {
+    const w = await mountDetail({})
+    expect(w.find('.review-flag').exists()).toBe(false)
+    expect(w.find('.review-flag-info').exists()).toBe(false)
     w.unmount()
   })
 })

@@ -4,6 +4,14 @@
 // 變更說明: 新增：申請單明細附件列測試（BACKLOG 第 43 項）
 //           .pdf .jpg .png 檔名可點開啟、Word 檔名為文字；每列都有下載鈕；
 //           點擊當下同步呼叫開啟；新分頁被擋提示改用下載；開啟失敗顯示後端訊息；進行中各列各自停用
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：審查異常警示條測試——關卡 2～5、7 顯示（含原因與標記日期）、
+//           關卡 7 清旗標類型加註自動清除、關卡 6 與未掛旗標不顯示、刪除申請關卡 7 不加註
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：改測「照後端欄位顯示」——有 acctReviewFlag 就顯示、
+//           acctReviewFlagWillClear 為 true 才加註、原因空白顯示（未填原因）；關卡邊界改在後端明細測試
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -150,5 +158,59 @@ describe('RequestDetailModal 附件', () => {
     finish(true)
     await flushPromises()
     expect(row(w, 11).find('.attach-open').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('RequestDetailModal 審查異常警示（S10）', () => {
+  beforeEach(() => {
+    resetSession()
+    useToast().toasts.value = []
+    vi.mocked(getCodes).mockReset().mockResolvedValue(CODES)
+    openMock.mockReset()
+    downloadMock.mockReset()
+  })
+
+  /** 掛旗標的共用欄位 */
+  const FLAGGED = {
+    acctReviewFlag: 1,
+    acctReviewFlagReason: '緊急存取退回未結案',
+    acctReviewFlagDate: '2026-10-12 10:00:00'
+  }
+
+  async function mountWith(over: Partial<RequestDetail>): Promise<VueWrapper> {
+    vi.mocked(getRequest).mockReset().mockResolvedValue({ ...REQ, ...over } as RequestDetail)
+    return await mountModal()
+  }
+
+  // 關卡邊界（2～5、7 才帶旗標）與「會不會清」由後端決定，測在 RequestServiceTest 明細案例；這裡只測前端照欄位顯示
+
+  it('帶旗標欄：顯示原因與標記日期；willClear 為 false 不加自動清除句', async () => {
+    const w = await mountWith({ ...FLAGGED, acctReviewFlagWillClear: false })
+    const hint = w.find('.review-flag-hint')
+    expect(hint.text()).toContain('審查異常標記')
+    expect(hint.text()).toContain('緊急存取退回未結案')
+    expect(hint.text()).toContain('2026-10-12 標記')
+    expect(hint.text()).not.toContain('自動清除')
+    w.unmount()
+  })
+
+  it('willClear 為 true：加註「本單複驗通過後將自動清除」', async () => {
+    const w = await mountWith({ ...FLAGGED, acctReviewFlagWillClear: true })
+    expect(w.find('.review-flag-hint').text()).toContain('本單複驗通過後將自動清除')
+    w.unmount()
+  })
+
+  it('willClear 未帶（null）：不加自動清除句；原因空白顯示「（未填原因）」', async () => {
+    const w = await mountWith({ ...FLAGGED, acctReviewFlagReason: null, acctReviewFlagWillClear: null })
+    const hint = w.find('.review-flag-hint')
+    expect(hint.text()).toContain('（未填原因）')
+    expect(hint.text()).not.toContain('自動清除')
+    w.unmount()
+  })
+
+  it('未帶旗標欄：不顯示（前端不自行判斷關卡與類型）', async () => {
+    const w = await mountWith({ currStageId: 7, reqTypeCode: 'MODIFY', acctReviewFlagWillClear: true })
+    expect(w.find('.review-flag-hint').exists()).toBe(false)
+    w.unmount()
   })
 })

@@ -13,6 +13,9 @@
             類別頁籤 8 類都顯示、數量用 catgCounts，類別改送後端；狀態篩選含數量、含已逾期，預設全部不含已刪除；
             欄位：單號、類別、帳號名稱、所屬系統、使用人、資產分類、特權、到期日、狀態＋「待複驗」標記（U11）；
             操作：查看、歷史，有 ACC_APPLY 時依 allowedReqTypes 顯示修改／停用／重新啟用／刪除
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S10：狀態欄加紅色「審查異常」標籤（isReviewFlag；滑鼠懸停顯示原因）
 -->
 <template>
   <main>
@@ -92,6 +95,7 @@
               <td>{{ a.expiryTypeCode === 'DATE' ? dateOnly(a.expiryDate) || '—' : '永久' }}</td>
               <td>
                 <span class="tag" :class="stateTagClass(a.acctStateCode)">{{ label(ACCT_STATE_LABEL, a.acctStateCode) }}</span>
+                <span v-if="isOn(a.isReviewFlag)" class="tag tag-flag review-flag" :title="a.reviewFlagReason || ''">審查異常</span>
                 <span v-if="a.pendingVerify" class="tag tag-info pending-verify">待複驗</span>
                 <div v-else-if="a.inFlight" class="hint">申請處理中</div>
               </td>

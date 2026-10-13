@@ -39,6 +39,18 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6：selfLabel 對 EMG_CLOSE_MODIFY 回「自行結案」，其他動作的標籤不變
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：複驗通過清審查異常旗標 5 案——修改／重新啟用清除並寫 FLAG_CLEAR 歷史（關卡 7、
+//           備註帶原標記原因）、未掛旗標不清、已被平行清掉（0 筆）不重寫歷史、明細帶旗標三欄
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：clearReview 帶 execDate；補停用清除、刪除不清、旗標晚於回報不清、
+//           同秒視為回報前、版本衝突不清、原因空白寫「（未填）」；明細關卡 2～5／7 帶旗標、6 與結案不帶、willClear
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: BACKLOG 第 46 項 S10 複審：回報時間改為 NOW 前 1 小時（EXEC），clearReview 的回報時間與複驗時間分開斷言；
+//           旗標晚於回報、同一秒兩類案例改以 EXEC 為基準；段落註解直接寫裁示內容
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -327,6 +339,215 @@ class RequestServiceTest {
 		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
 		verify(fx.acctDao).applyState(a.getAcctId(), AcctConst.AS_DISABLED, "不再使用", TestFixture.NOW, ALEX);
 		verify(fx.acctDao, never()).updateReviewDates(any(), any(), any(), any(), any());
+	}
+
+	// ------------------------------------------------------------
+	// 審查異常旗標清除（S10，D42：修改／停用的關卡 7 複驗通過時清；重新啟用也清（S10 開工裁示）；
+	// 只清本單關卡 6 回報（EXEC_DATE）前就存在的旗標（S10 審查裁示））
+	// ------------------------------------------------------------
+
+	private static final String FLAG_REASON = "EA20261013-001 已退回：卡號外借";
+	/** 本單關卡 6 回報時間：刻意與複驗當下（NOW）不同，clearReview 的 execDate、now 兩參數才分得出來 */
+	private static final LocalDateTime EXEC = TestFixture.NOW.minusHours(1);
+
+	/** 掛旗標；日期預設在回報（EXEC）前一天 */
+	private static void flag(Acct a, String reason) {
+		a.setIsReviewFlag(1);
+		a.setReviewFlagReason(reason);
+		a.setReviewFlagDate(TestFixture.NOW.minusDays(1));
+	}
+
+	/** 送出 → 4 關簽核 → 關卡 6 回報，停在關卡 7；回報時間改成 EXEC（替身原寫 NOW） */
+	private void toVerify(AcctReqForm f) {
+		svc.submit(id(KEVIN), f, null);
+		toExecFromReview();
+		svc.execDone(id(ALEX), FIRST_ID, exec(4, null), FILE);
+		fx.req.setExecDate(EXEC);
+	}
+
+	private void assertCleared(Acct a) {
+		verify(fx.acctDao).clearReview(a.getAcctId(), EXEC, TestFixture.NOW, CATHY);
+		assertThat(fx.histActions()).containsSubsequence("VERIFY_OK", "FLAG_CLEAR");
+	}
+
+	private void assertNotCleared() {
+		verify(fx.acctDao, never()).clearReview(any(), any(), any(), any());
+		assertThat(fx.histActions()).doesNotContain("FLAG_CLEAR");
+	}
+
+	@Test
+	void 修改_複驗通過_帳號掛旗標_同交易清除並寫FLAG_CLEAR歷史() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(modifyForm(a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertCleared(a);
+		AcctHist last = fx.hists.get(fx.hists.size() - 1);
+		assertThat(last.getActionCode()).isEqualTo("FLAG_CLEAR");
+		assertThat(last.getStageId()).isEqualTo(7);
+		// 備註帶原標記原因（清掉後主表查不到，只能靠歷史）
+		assertThat(last.getResultDescr()).contains("清除審查異常標記").contains(FLAG_REASON);
+	}
+
+	@Test
+	void 停用_複驗通過_帳號掛旗標_清除() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(reasonOnlyForm(AcctConst.REQ_DISABLE, a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertCleared(a);
+	}
+
+	@Test
+	void 重新啟用_已停用帳號掛旗標_複驗通過清除() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
+		flag(a, "EA20261013-002 異常結案發現異動：補開權限");
+		AcctReqForm f = modifyForm(a.getAcctId());
+		f.setReqTypeCode(AcctConst.REQ_ENABLE);
+		toVerify(f);
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertCleared(a);
+	}
+
+	@Test
+	void 刪除_複驗通過_帳號掛旗標_不清() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
+		flag(a, FLAG_REASON);
+		toVerify(reasonOnlyForm(AcctConst.REQ_DELETE, a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertNotCleared();
+	}
+
+	@Test
+	void 複驗通過_旗標晚於本單回報_不清() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(modifyForm(a.getAcctId()));
+		// 回報後才被標記：審查人複驗時沒看過這個旗標
+		a.setReviewFlagDate(EXEC.plusSeconds(1));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertNotCleared();
+	}
+
+	@Test
+	void 複驗通過_旗標與回報同一秒_視為回報前_清除() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		a.setReviewFlagDate(EXEC);
+		toVerify(modifyForm(a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertCleared(a);
+	}
+
+	@Test
+	void 複驗通過_未掛旗標_不清旗標不寫歷史() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		toVerify(modifyForm(a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		assertNotCleared();
+	}
+
+	@Test
+	void 複驗通過_版本衝突_409_不清旗標() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(modifyForm(a.getAcctId()));
+		when(fx.acctReqDao.verifyOk(anyString(), anyInt(), any(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.verifyOk(id(CATHY), FIRST_ID, version(5)), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertNotCleared();
+	}
+
+	@Test
+	void 複驗通過_旗標已被平行動作清掉_影響0筆_不重寫FLAG_CLEAR歷史() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		when(fx.acctDao.clearReview(any(), any(), any(), any())).thenReturn(0);
+		toVerify(modifyForm(a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		verify(fx.acctDao).clearReview(a.getAcctId(), EXEC, TestFixture.NOW, CATHY);
+		assertThat(fx.histActions()).contains("VERIFY_OK").doesNotContain("FLAG_CLEAR");
+	}
+
+	@Test
+	void 複驗通過_旗標原因空白_歷史備註寫未填() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, null);
+		toVerify(modifyForm(a.getAcctId()));
+		svc.verifyOk(id(CATHY), FIRST_ID, version(5));
+		AcctHist last = fx.hists.get(fx.hists.size() - 1);
+		assertThat(last.getActionCode()).isEqualTo("FLAG_CLEAR");
+		assertThat(last.getResultDescr()).contains("原標記原因：（未填）").doesNotContain("null");
+	}
+
+	@Test
+	void 明細_簽核關卡2到5_帶出旗標三欄_willClear為false() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		for (int stage = 2; stage <= 5; stage++) {
+			fx.req.setCurrStageId(stage);
+			AcctReqDetail d = svc.detail(id(KEVIN), FIRST_ID);
+			assertThat(d.getAcctReviewFlag()).as("關卡 %d", stage).isEqualTo(1);
+			assertThat(d.getAcctReviewFlagReason()).isEqualTo(FLAG_REASON);
+			assertThat(d.getAcctReviewFlagDate()).isEqualTo(TestFixture.NOW.minusDays(1));
+			assertThat(d.getAcctReviewFlagWillClear()).as("關卡 %d", stage).isFalse();
+		}
+	}
+
+	@Test
+	void 明細_關卡6與已結案_不帶旗標() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		fx.req.setCurrStageId(6);
+		assertNoFlag(svc.detail(id(KEVIN), FIRST_ID));
+		fx.req.setCurrStageId(null);
+		assertNoFlag(svc.detail(id(KEVIN), FIRST_ID));
+	}
+
+	@Test
+	void 明細_關卡7_修改且旗標在回報前_willClear為true() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(modifyForm(a.getAcctId()));
+		AcctReqDetail d = svc.detail(id(KEVIN), FIRST_ID);
+		assertThat(d.getAcctReviewFlag()).isEqualTo(1);
+		assertThat(d.getAcctReviewFlagWillClear()).isTrue();
+	}
+
+	@Test
+	void 明細_關卡7_旗標晚於回報_帶出但willClear為false() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		flag(a, FLAG_REASON);
+		toVerify(modifyForm(a.getAcctId()));
+		a.setReviewFlagDate(EXEC.plusSeconds(1));
+		AcctReqDetail d = svc.detail(id(KEVIN), FIRST_ID);
+		assertThat(d.getAcctReviewFlag()).isEqualTo(1);
+		assertThat(d.getAcctReviewFlagWillClear()).isFalse();
+	}
+
+	@Test
+	void 明細_關卡7_刪除_帶出但willClear為false() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_DISABLED);
+		flag(a, FLAG_REASON);
+		toVerify(reasonOnlyForm(AcctConst.REQ_DELETE, a.getAcctId()));
+		AcctReqDetail d = svc.detail(id(KEVIN), FIRST_ID);
+		assertThat(d.getAcctReviewFlag()).isEqualTo(1);
+		assertThat(d.getAcctReviewFlagWillClear()).isFalse();
+	}
+
+	@Test
+	void 明細_未掛旗標_四欄皆null() {
+		Acct a = fx.acct("AR20261001-001", "HOST", AcctConst.AS_APPROVED);
+		svc.submit(id(KEVIN), modifyForm(a.getAcctId()), null);
+		assertNoFlag(svc.detail(id(KEVIN), FIRST_ID));
+	}
+
+	private static void assertNoFlag(AcctReqDetail d) {
+		assertThat(d.getAcctReviewFlag()).isNull();
+		assertThat(d.getAcctReviewFlagReason()).isNull();
+		assertThat(d.getAcctReviewFlagDate()).isNull();
+		assertThat(d.getAcctReviewFlagWillClear()).isNull();
 	}
 
 	@Test

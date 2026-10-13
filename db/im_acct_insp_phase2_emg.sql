@@ -195,7 +195,7 @@ COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有�
 
 -- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯）；S6 異常結案再補 EMG_CLOSE_MODIFY 的寫法
 -- （只改說明、不動結構；重覆執行無害）。與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
-COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
+COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
 COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
 COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明；EMG_CLOSE_MODIFY 帶單號、結案人、結案說明與該帳號異動說明）';
 COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對）。default 0';

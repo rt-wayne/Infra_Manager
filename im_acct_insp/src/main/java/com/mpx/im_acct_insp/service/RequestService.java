@@ -53,6 +53,23 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6：selfLabel 對緊急存取結案登記異動（EMG_CLOSE_MODIFY）顯示「自行結案」（S6-③）；其餘動作不變
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：複驗通過時若申請類型屬 FLAG_CLEAR_REQ_TYPES（修改／停用／重新啟用，D42＋裁示 ①B）
+//           且帳號現掛審查異常旗標，同交易清 5 欄並寫 FLAG_CLEAR 歷史（關卡 7、備註帶原標記原因，裁示㉔）；
+//           明細補 acctReviewFlag 三欄（spec §3.4 關卡 2～5、7 警示由前端依 currStageId 顯示）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：①B 只清本單關卡 6 回報（EXEC_DATE）前就存在的旗標（flagWillClear，
+//           verifyOk 與明細共用）；③A 明細只在關卡 2～5、7 帶旗標（AcctConst.isFlagHintStage）；
+//           ②A 明細加 acctReviewFlagWillClear（關卡 7 且複驗通過會清），前端不再自留清除類型清單；
+//           FLAG_CLEAR 歷史備註原因為 null 時寫「（未填）」
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: BACKLOG 第 46 項 S10 複審：flagWillClear、verifyOk 的註解改寫成直接寫內容；
+//           取代上方 Fable 區塊「關卡 2～5、7 警示由前端依 currStageId 顯示」「明細補三欄」的敘述——
+//           上線行為是後端決定哪些關卡帶旗標（isFlagHintStage）與會不會清（acctReviewFlagWillClear），明細共四欄；
+//           上方兩區塊的代號對照：「裁示 ①B」＝重新啟用也清（S10 開工裁示），「審查修正 ①B」＝只清回報前旗標（S10 審查裁示）
 // ============================================================
 
 import java.nio.file.Path;
@@ -170,7 +187,32 @@ public class RequestService {
 		r.setAttachments(attachDao.findActiveByReq(r.getReqId()));
 		r.setHistory(withLabels(acctHistDao.findByReq(r.getReqId())));
 		r.setActions(actions(id, r, stages));
+		// 審查異常警示（S10，spec §3.4）：只在關卡 2～5、7 且帳號現掛旗標時帶出（其餘關卡與已結案不帶，資料最小化）；
+		// 「複驗通過後會自動清除」由後端判斷，前端只顯示
+		if (r.getAcctId() != null && AcctConst.isFlagHintStage(r.getCurrStageId())) {
+			Acct a = acctDao.findById(r.getAcctId());
+			if (isFlagged(a)) {
+				r.setAcctReviewFlag(1);
+				r.setAcctReviewFlagReason(a.getReviewFlagReason());
+				r.setAcctReviewFlagDate(a.getReviewFlagDate());
+				r.setAcctReviewFlagWillClear(r.getCurrStageId() == AcctConst.STAGE_VERIFY && flagWillClear(r, a));
+			}
+		}
 		return r;
+	}
+
+	private static boolean isFlagged(Acct a) {
+		return a != null && a.getIsReviewFlag() != null && a.getIsReviewFlag() == 1;
+	}
+
+	/**
+	 * 本單複驗通過會不會清這個旗標：類型屬 FLAG_CLEAR_REQ_TYPES（D42 修改／停用，重新啟用也清（S10 開工裁示））、
+	 * 帳號掛旗標，且只清回報前旗標（S10 審查裁示）——旗標在本單關卡 6 回報前就存在
+	 * （同 AcctDao.CLEAR_REVIEW_FLAG 的 REVIEW_FLAG_DATE <= :execDate；兩欄都是 DATE，同秒視為回報前）
+	 */
+	static boolean flagWillClear(AcctReq r, Acct a) {
+		return isFlagged(a) && AcctConst.FLAG_CLEAR_REQ_TYPES.contains(r.getReqTypeCode()) && a.getReviewFlagDate() != null
+				&& r.getExecDate() != null && !a.getReviewFlagDate().isAfter(r.getExecDate());
 	}
 
 	/** 我此刻可做的動作 */
@@ -541,7 +583,17 @@ public class RequestService {
 		AcctReqDetail r = load(reqId);
 		int v = checkVerifier(id, r, form == null ? null : form.getVersionNo());
 		LocalDateTime now = LocalDateTime.now(clock);
-		// 交易：帶條件 UPDATE 申請單（APPROVED、DONE_DATE）→ INSERT 歷史 VERIFY_OK；主表不動（spec §5）
+		// 旗標清除（S10，D42 修改／停用，重新啟用也清（S10 開工裁示））：帳號掛旗標、且只清回報前旗標（S10 審查裁示），
+		// 複驗通過時同交易清除
+		Acct flagged = null;
+		if (AcctConst.FLAG_CLEAR_REQ_TYPES.contains(r.getReqTypeCode())) {
+			Acct a = acctDao.findById(r.getAcctId());
+			if (flagWillClear(r, a)) {
+				flagged = a;
+			}
+		}
+		Acct flaggedAcct = flagged;
+		// 交易：帶條件 UPDATE 申請單（APPROVED、DONE_DATE）→ INSERT 歷史 VERIFY_OK；主表只動旗標 5 欄（spec §5、D42）
 		tx.executeWithoutResult(s -> {
 			if (acctReqDao.verifyOk(reqId, v, id.getUserId(), now, id.getRealUserId()) != 1) {
 				throw AcctMsg.concurrent();
@@ -549,6 +601,14 @@ public class RequestService {
 			int self = selfAction(AcctConst.ACT_VERIFY_OK, id.getUserId(), r.getApplyBy(), AcctConst.STAGE_VERIFY,
 					acctHistDao.findSelfCheckActs(reqId));
 			acctHistDao.insert(hist(id, r, AcctConst.ACT_VERIFY_OK, AcctConst.STAGE_VERIFY, "複驗通過，結案", self, now));
+			// 清旗標影響 0 筆＝已被平行動作清掉，或讀完後被重新標記（日期晚於回報），不寫 FLAG_CLEAR 歷史；
+			// 影響 1 筆時清掉的必是讀到的那一筆（之後的覆蓋日期都晚於回報），備註帶原標記原因（清掉後主表查不到）
+			if (flaggedAcct != null && acctDao.clearReview(r.getAcctId(), r.getExecDate(), now, id.getRealUserId()) == 1) {
+				acctHistDao.insert(hist(id, r, AcctConst.ACT_FLAG_CLEAR, AcctConst.STAGE_VERIFY,
+						"複驗通過，清除審查異常標記（原標記原因：" + Objects.toString(flaggedAcct.getReviewFlagReason(), "（未填）")
+								+ "）",
+						0, now));
+			}
 		});
 		log.info("申請單複驗通過 reqId={}", reqId);
 		return result(reqId, AcctConst.RS_APPROVED, null, v + 1);

@@ -42,6 +42,17 @@ package com.mpx.im_acct_insp.common;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S8：緊急存取清單篩選值加 UNDECIDED（未處理＝待補核准＋逾期未補核准，首頁卡「待補核准」點進來用；
 //           不是計算狀態、不會出現在 EMG_STATE_CODE），篩選可接受的值另列 EMG_STATE_FILTERS（＝EMG_STATES＋UNDECIDED，五種狀態只寫一份）
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：啟用歷史動作 FLAG_CLEAR（審查異常旗標清除，裁示㉔）；
+//           FLAG_CLEAR_REQ_TYPES＝關卡 7 複驗通過時清旗標的申請類型（D42 修改／停用＋S10 裁示 ①B 加重新啟用）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：加 isFlagHintStage（明細帶旗標警示的關卡 2～5、7，前後端只此一份）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: BACKLOG 第 46 項 S10 複審：FLAG_CLEAR_REQ_TYPES 註解改寫成直接寫內容「重新啟用也清（S10 開工裁示）」；
+//           上方 Fable 區塊的「S10 裁示 ①B」即指這項
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -70,6 +81,8 @@ public final class AcctConst {
 	public static final List<String> CHANGE_REQ_TYPES = List.of(REQ_MODIFY, REQ_DISABLE, REQ_ENABLE, REQ_DELETE);
 	/** 只填原因、內容複製主表的類型（spec §4.3） */
 	public static final List<String> REASON_ONLY_TYPES = List.of(REQ_DISABLE, REQ_DELETE);
+	/** 關卡 7 複驗通過時清審查異常旗標的類型（D42：修改／停用；重新啟用也清（S10 開工裁示），否則已停用帳號的旗標沒有正規清除路徑） */
+	public static final List<String> FLAG_CLEAR_REQ_TYPES = List.of(REQ_MODIFY, REQ_DISABLE, REQ_ENABLE);
 	public static final Map<String, String> REQ_TYPE_NAMES;
 
 	// 申請單狀態 REQ_STATE_CODE
@@ -104,6 +117,11 @@ public final class AcctConst {
 	public static final int STAGE_EXEC = 6;
 	public static final int STAGE_VERIFY = 7;
 
+	/** 申請單明細帶審查異常警示的關卡：簽核 2～5、複驗 7（spec §3.4；關卡 6 執行回報不提示） */
+	public static boolean isFlagHintStage(Integer stageId) {
+		return stageId != null && ((stageId >= STAGE_FIRST_APPR && stageId <= STAGE_LAST_APPR) || stageId == STAGE_VERIFY);
+	}
+
 	// 歷史 IM_ACCT_HIST
 	public static final String HIST_SRC_REQ = "REQ";
 	public static final String HIST_SRC_SYS = "SYS";
@@ -121,6 +139,8 @@ public final class AcctConst {
 	public static final String ACT_EMG_MODIFY = "EMG_MODIFY";
 	/** 緊急存取結案登記異動：異常結案發現有異動時依結案登記的受影響帳號逐筆寫入，不覆蓋申請人回報（D13，S6） */
 	public static final String ACT_EMG_CLOSE_MODIFY = "EMG_CLOSE_MODIFY";
+	/** 審查異常旗標清除：FLAG_CLEAR_REQ_TYPES 的申請在關卡 7 複驗通過時寫入（D42、裁示㉔；S10） */
+	public static final String ACT_FLAG_CLEAR = "FLAG_CLEAR";
 	/** 判斷 IS_SELF_ACTION 的動作（spec §4.8） */
 	public static final List<String> SELF_CHECK_ACTIONS = List.of(ACT_APPROVE, ACT_REJECT, ACT_EXEC_DONE, ACT_VERIFY_OK,
 			ACT_VERIFY_REJECT);

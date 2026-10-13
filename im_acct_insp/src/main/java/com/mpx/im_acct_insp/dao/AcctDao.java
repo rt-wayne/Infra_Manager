@@ -23,6 +23,18 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：審查異常旗標 UPDATE_REVIEW_FLAG（緊急存取退回且申請人回報為異動時逐帳號標記；
 //           同帳號再次標記直接覆蓋原因與時間，S4-①）；REVIEW_FLAG_BY 有效身分、UPDATE_BY 實際操作人
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：審查異常旗標清除 CLEAR_REVIEW_FLAG（修改／停用／重新啟用申請關卡 7
+//           複驗通過時清 5 欄，D42＋裁示 ①B；帶 IS_REVIEW_FLAG = 1 條件當雙保險）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正 ①B：CLEAR_REVIEW_FLAG 加 REVIEW_FLAG_DATE <= :execDate，
+//           只清本單關卡 6 回報前就存在的旗標（回報後新標或覆蓋的異常留著，也避免清錯、記錯原因）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: BACKLOG 第 46 項 S10 複審：CLEAR_REVIEW_FLAG 註解改寫成直接寫內容；上方兩區塊的代號對照——
+//           Fable 區塊「裁示 ①B」＝重新啟用也清（S10 開工裁示），上一區塊「審查修正 ①B」＝只清回報前旗標（S10 審查裁示）
 // ============================================================
 
 import java.time.LocalDate;
@@ -216,12 +228,25 @@ public class AcctDao {
 			 WHERE ACCT_ID = :acctId
 			""";
 
-	/** 審查異常旗標（S4-①）：不看現值，第二次標記直接覆蓋；旗標清除是日後定期審查的事，本模組不寫 */
+	/** 審查異常旗標（S4-①）：不看現值，第二次標記直接覆蓋；清除見 CLEAR_REVIEW_FLAG（S10） */
 	public static final String UPDATE_REVIEW_FLAG = """
 			UPDATE IM_ACCT
 			   SET IS_REVIEW_FLAG = 1, REVIEW_FLAG_REASON = :reason, REVIEW_FLAG_SOURCE_CODE = :sourceCode,
 			       REVIEW_FLAG_DATE = :now, REVIEW_FLAG_BY = :flagBy, UPDATE_DATE = :now, UPDATE_BY = :userId
 			 WHERE ACCT_ID = :acctId
+			""";
+
+	/**
+	 * 審查異常旗標清除（S10，D42 修改／停用，重新啟用也清（S10 開工裁示））：清 5 欄；只清回報前旗標（S10 審查裁示）——
+	 * 本單關卡 6 回報（:execDate）後才標上（或被覆蓋）的異常不可能是本單的處理結果，留著；已被清過或不符影響 0 筆
+	 */
+	public static final String CLEAR_REVIEW_FLAG = """
+			UPDATE IM_ACCT
+			   SET IS_REVIEW_FLAG = 0, REVIEW_FLAG_REASON = NULL, REVIEW_FLAG_SOURCE_CODE = NULL,
+			       REVIEW_FLAG_DATE = NULL, REVIEW_FLAG_BY = NULL, UPDATE_DATE = :now, UPDATE_BY = :userId
+			 WHERE ACCT_ID = :acctId
+			   AND IS_REVIEW_FLAG = 1
+			   AND REVIEW_FLAG_DATE <= :execDate
 			""";
 
 	// ---- J01／J02（spec §4.11）
@@ -403,6 +428,13 @@ public class AcctDao {
 		params.put("sourceCode", sourceCode);
 		params.put("flagBy", flagBy);
 		return dbClient.update(itflowDb, UPDATE_REVIEW_FLAG, params);
+	}
+
+	/** 清審查異常旗標（S10，D42：修改／停用／重新啟用申請關卡 7 複驗通過時）；execDate＝本單關卡 6 回報時間；已被清過或旗標晚於回報回 0 */
+	public int clearReview(String acctId, LocalDateTime execDate, LocalDateTime now, String userId) {
+		Map<String, Object> params = idParams(acctId, now, userId);
+		params.put("execDate", DaoSupport.ts(execDate));
+		return dbClient.update(itflowDb, CLEAR_REVIEW_FLAG, params);
 	}
 
 	public List<Acct> findToExpire(LocalDate today) {

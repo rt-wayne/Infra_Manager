@@ -14,12 +14,26 @@
   修改日期: 2026-10-12
   變更說明: BACKLOG 第 43 項：.pdf .jpg .png 的檔名可點、以新分頁開啟；.doc .docx 檔名維持文字；每列保留「下載」鈕；
             新分頁被瀏覽器擋下時提示改用下載；開啟或下載進行中，該列檔名與下載鈕都停用（busyAttachIds 各列各自鎖定）
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S10（SA §5.10、決策 D42）：帳號掛審查異常旗標時，關卡 2～5、7 顯示警示條
+            （原因＋標記日期）；修改／停用／重新啟用申請在關卡 7 加註「複驗通過後將自動清除」
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S10 審查修正：拿掉前端的關卡與類型判斷，有帶 acctReviewFlag 就顯示（關卡 2～5、7 由後端決定）；
+            「複驗通過後將自動清除」改看後端 acctReviewFlagWillClear
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-14
+  變更說明: BACKLOG 第 46 項 S10 複審（只改檔頭，程式不變）：上一區塊的修正取代上方 Fable 區塊
+            「關卡 2～5、7 顯示警示條」「修改／停用／重新啟用申請在關卡 7 加註」兩句的前端判斷——
+            上線行為是後端決定帶不帶旗標與會不會清，前端照欄位顯示；且只清本單回報前旗標（S10 審查裁示）
 -->
 <template>
   <BaseModal :title="`申請明細 — ${reqId}`" sub="簽核前的完整申請內容，作為核准／退件的判斷依據。" wide @close="emit('close')">
     <p v-if="loading" class="hint">載入中…</p>
     <template v-else-if="req">
       <div v-if="showVerifyHint" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(req.verifyRejectReason) }}</div>
+      <div v-if="showReviewFlagHint" class="note-box warn review-flag-hint">🚩 此帳號帶有審查異常標記：<b>{{ req.acctReviewFlagReason || '（未填原因）' }}</b>{{ req.acctReviewFlagDate ? `（${dateOnly(req.acctReviewFlagDate)} 標記）` : '' }}{{ flagWillClear ? '；本單複驗通過後將自動清除' : '' }}</div>
       <div v-if="req.reqStateCode === 'REJECTED' && req.rejectReason" class="note-box warn">退件原因：<b>{{ req.rejectReason }}</b></div>
       <div class="kv"><div class="k">申請單位／申請人</div><div class="v">{{ req.applyDept || '（未填寫）' }}　·　{{ req.applyByName || req.applyBy }}</div></div>
       <div class="kv"><div class="k">類別／申請類型</div><div class="v">{{ catgNameOf(codes, req.catgId, req.catgName) }}{{ isOn(req.isPriv) ? '（特權）' : '' }}　·　{{ label(REQ_TYPE_LABEL, req.reqTypeCode) }}</div></div>
@@ -112,6 +126,10 @@ const showVerifyHint = computed(() => {
   const r = req.value
   return !!r && (r.currStageId === 6 || r.currStageId === 7) && (r.verifyRejectCnt ?? 0) > 0
 })
+/** S10：後端只在關卡 2～5、7 且帳號掛旗標時帶旗標欄，前端有帶就顯示 */
+const showReviewFlagHint = computed(() => !!req.value && isOn(req.value.acctReviewFlag))
+/** 本單複驗通過會不會清旗標，由後端判斷（類型、旗標是否在關卡 6 回報前就存在） */
+const flagWillClear = computed(() => req.value?.acctReviewFlagWillClear === true)
 const hasFlowAction = computed(() =>
   (req.value?.actions ?? []).some(a => a === 'APPROVE' || a === 'REJECT' || a === 'EXEC_DONE' || a === 'VERIFY_OK' || a === 'VERIFY_REJECT')
 )

@@ -558,7 +558,7 @@ CREATE SEQUENCE SEQ_IM_ACCT_JOB_RUN MINVALUE 1 INCREMENT BY 1 START WITH 1 NOCAC
 CREATE SEQUENCE SEQ_IM_ACCT_NOTIFY_LOG MINVALUE 1 INCREMENT BY 1 START WITH 1 NOCACHE NOORDER NOCYCLE ;
 
 -- ===== COMMENTS
-COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
+COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
 COMMENT ON TABLE IM_ACCT_ADMIN_LOG IS '系統管理軌跡。只增不改；第一階段只記切換身分（IMPERSONATE）與切回（IMPERSONATE_END），無權限者嘗試切換記 DENY。資料來源：切換身分 API。主鍵：LOG_ID（序列 SEQ_IM_ACCT_ADMIN_LOG）。保留：永久';
 COMMENT ON TABLE IM_ACCT_APPR_STAGE IS '簽核關卡。帳號申請單的關卡 1～7 與各關所需權限；五種申請類型（新增、修改、停用、重新啟用、刪除）皆走 1～7 關。資料來源：初始資料。主鍵：STAGE_ID。保留：永久';
 COMMENT ON TABLE IM_ACCT_ATTACH IS '申請單附件。關卡 1 的公文與關卡 6 的執行佐證；被新檔取代的舊檔 STATUS＝0（檔案保留）。上傳人與時間即 CREATE_BY、CREATE_DATE。資料來源：申請表單、執行回報。主鍵：ATTACH_ID（序列 SEQ_IM_ACCT_ATTACH）。保留：隨申請單永久';

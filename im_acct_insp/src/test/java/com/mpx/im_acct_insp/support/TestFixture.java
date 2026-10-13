@@ -25,6 +25,12 @@ package com.mpx.im_acct_insp.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S7：jobService() 建構子多傳 EmgDao（J03 逾期掃描）
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：acctDao.clearReview 預設回 1（複驗通過清審查異常旗標）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：clearReview 多一個 execDate 參數；execDone 替身比照 SQL 寫 execDate（＝now）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -277,6 +283,7 @@ public class TestFixture {
 		when(acctDao.updateAcctName(any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.flagReview(any(), any(), any(), any(), any(), any())).thenReturn(1);
+		when(acctDao.clearReview(any(), any(), any(), any())).thenReturn(1);
 
 		when(acctHistDao.insert(any())).thenAnswer(inv -> {
 			AcctHist h = new AcctHist();
@@ -344,6 +351,7 @@ public class TestFixture {
 				req.setAcctName(inv.getArgument(4));
 			}
 			req.setExecBy(inv.getArgument(5));
+			req.setExecDate(inv.getArgument(6));
 			if (req.getEffectDate() == null) {
 				req.setEffectDate(inv.getArgument(6));
 			}

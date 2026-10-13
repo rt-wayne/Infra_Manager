@@ -8,6 +8,13 @@
 //           RequestPayload 去掉申請人分機／Email（不儲存、不送）與附件檔名（改 multipart 上傳）；
 //           新增 ResubmitPayload（＋versionNo）、ActionResult、Attachment；
 //           RequestItem 改為 /requests 列表欄位；RequestDetail 加 versionNo、附件、history、actions
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10：RequestDetail 加 acctReviewFlag／acctReviewFlagReason／acctReviewFlagDate
+//           （帳號掛審查異常旗標時後端帶出，明細關卡 2～5、7 顯示警示條）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S10 審查修正：加 acctReviewFlagWillClear（複驗通過會不會清，由後端判斷）
 // ============================================================
 import type { AccountHist, ReqTypeCode } from './account'
 
@@ -133,6 +140,12 @@ export interface RequestDetail {
   verifyDate?: string | null
   verifyRejectCnt?: number
   verifyRejectReason?: string | null
+  /** 帳號目前掛審查異常旗標時帶出（S10：關卡 2～5、7 顯示警示；異動類申請才有 acctId 對應帳號） */
+  acctReviewFlag?: number | null
+  acctReviewFlagReason?: string | null
+  acctReviewFlagDate?: string | null
+  /** 本單複驗通過會清這個旗標（只在關卡 7 可能為 true；未帶旗標時 null） */
+  acctReviewFlagWillClear?: boolean | null
   doneDate?: string | null
   versionNo: number
   attachments?: Attachment[]
