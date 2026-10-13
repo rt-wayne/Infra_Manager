@@ -17,9 +17,9 @@
 | 46 | 緊急存取（SA §5.11、第二階段）：送出即生效、24 小時補核准、申請人回報、主管補核准／退回、異常結案、J03 逾期通知、首頁兩卡、鈴鐺類別 3、審查異常旗標閉環；使用者裁示 17 項見詳情檔 | `backlog/46-緊急存取.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S1 腳本已 commit；等使用者執行 `db\im_acct_insp_phase2_emg.sql` 與三句查詢（詳情檔 3.5）後回填 3.6、定稿 synonym／GRANT 段。DB 動作不卡程式開發，可先進 S2（後端送出與查詢：Dao／Service／Controller、EA 取號、資料範圍、送出通知）
-- 已改動（未 commit）：無
-- 卡住／待確認：等使用者：執行升級腳本並核對檔尾期望值、三句查詢結果、把 EMERGENCY→EMG 補進 DB 規範縮寫字典（裁示 ㉘）；規範 xlsx 不進 repo（裁示 2026-10-13）
+- 下一步：S1、S2 完成並 commit（2026-10-13）；下一階段 S3（前端送出表單與列表、明細頁），動工前讀詳情檔第 4 節 S3 列與「各階段動工前要先定的細節」
+- 已改動（未 commit）：新檔 `model/Emg.java`、`EmgDetail.java`、`EmgAffectAcct.java`、`EmgIdResult.java`、`model/request/EmgForm.java`、`dao/EmgDao.java`、`service/EmergencyService.java`、`controller/EmergencyController.java`（後端與殼 jar 各一）、`test/.../service/EmergencyServiceTest.java`；改既有 `AcctConst`（EA、EMG 事件／權限／狀態／代碼常數）、`AcctMsg`（四個欄位名）、`Texts`（共用 `parseDate`）、`MailHtml`（PATH_EMG）、`NotificationService`（建構子加 EmgDao、`emgEvent`）、`InspectionService`／`RequestService`（改用 `Texts.parseDate`、刪私有副本）、測試 `TestFixture`、`JobAndNotifyTest`、`SqlConstantScanTest`（API 數 35）
+- 卡住／待確認：EMERGENCY→EMG 補進 DB 規範縮寫字典由使用者自行處理（裁示 ㉘）；規範 xlsx 不進 repo（裁示 2026-10-13，commit 一律用明確路徑 `git add`）
 
 ## 已拍板待實作
 
