@@ -14,14 +14,23 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 46 項 S4a：申請人回報 report（本人即可、只一次、主管處理前、逾期後仍可）：「異動」須 1～20 個受影響帳號、
 //           回報說明必填，帳號說明選填；「沒有異動」不得帶帳號；帳號以單號＋完整名稱＋三種狀態驗證（S4-⑥，R8）；
 //           樂觀鎖帶 versionNo（S4-⑰）；子表 REPORT 列與主表回報同一交易；回報不寄信；明細與回報共用 load（404）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：主管補核准 approve／退回 returnEmg（EMG_DECIDE，S4-⑬；逾期後仍可處理）：
+//           共用 decide——404 → 403 → 欄位（退回原因必填 E10、500 字 E11）→ E02 版本號 → 409（已處理、版本不符，S4-⑰）；
+//           補核准須先有申請人回報，否則 400（S4-⑦）；DECIDE_BY 有效身分、DECIDE_ACT_BY 實際操作人、IS_SELF_DECIDE＝處理人即申請人；
+//           交易內先 UPDATE 主表（0 筆→409 回滾）再讀回報帳號：回報為「異動」才每帳號寫一列 EMG_MODIFY 歷史（S4-⑧⑨⑩），
+//           退回時再逐帳號標審查異常旗標（S4-①，同帳號第二次直接覆蓋）；補核准不標旗標；退回提交後才寄 EMG_RETURN 給申請人（S4-⑪）
 // ============================================================
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -31,18 +40,24 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.AcctMsg;
+import com.mpx.im_acct_insp.common.ApiException;
 import com.mpx.im_acct_insp.common.DocSeqService;
 import com.mpx.im_acct_insp.common.Identity;
 import com.mpx.im_acct_insp.common.Texts;
 import com.mpx.im_acct_insp.dao.AcctDao;
+import com.mpx.im_acct_insp.dao.AcctHistDao;
 import com.mpx.im_acct_insp.dao.EmgDao;
 import com.mpx.im_acct_insp.model.Acct;
+import com.mpx.im_acct_insp.model.AcctHist;
 import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.EmgActionResult;
+import com.mpx.im_acct_insp.model.EmgAffectAcct;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.EmgIdResult;
 import com.mpx.im_acct_insp.model.request.EmgForm;
 import com.mpx.im_acct_insp.model.request.EmgReportForm;
+import com.mpx.im_acct_insp.model.request.ReasonForm;
+import com.mpx.im_acct_insp.model.request.VersionForm;
 
 @Service
 public class EmergencyService {
@@ -58,23 +73,34 @@ public class EmergencyService {
 	static final List<String> REPORT_TYPES = List.of(AcctConst.EMG_REPORT_NONE, AcctConst.EMG_REPORT_MODIFIED);
 	/** 受影響帳號可選的帳號狀態（D29＋㉑；與 AcctDao.FIND_LOOKUP 同範圍） */
 	static final List<String> AFFECT_STATES = List.of(AcctConst.AS_APPROVED, AcctConst.AS_EXPIRED, AcctConst.AS_DISABLED);
+	static final int RETURN_REASON_MAX = 500;
+	/** IM_ACCT.REVIEW_FLAG_REASON 欄寬 */
+	static final int FLAG_REASON_MAX = 500;
+	/** IM_ACCT_HIST.RESULT_DESCR 欄寬（與 RequestService 同） */
+	static final int RESULT_DESCR_MAX = 1000;
+	static final String LABEL_APPROVED = "已補核准";
+	static final String LABEL_RETURNED = "已退回";
+	private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
 	private final PermissionService perm;
 	private final CodeService codeService;
 	private final DocSeqService docSeqService;
 	private final EmgDao emgDao;
 	private final AcctDao acctDao;
+	private final AcctHistDao acctHistDao;
 	private final NotificationService notificationService;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
 	public EmergencyService(PermissionService perm, CodeService codeService, DocSeqService docSeqService, EmgDao emgDao,
-			AcctDao acctDao, NotificationService notificationService, TransactionTemplate tx, Clock clock) {
+			AcctDao acctDao, AcctHistDao acctHistDao, NotificationService notificationService, TransactionTemplate tx,
+			Clock clock) {
 		this.perm = perm;
 		this.codeService = codeService;
 		this.docSeqService = docSeqService;
 		this.emgDao = emgDao;
 		this.acctDao = acctDao;
+		this.acctHistDao = acctHistDao;
 		this.notificationService = notificationService;
 		this.tx = tx;
 		this.clock = clock;
@@ -232,6 +258,132 @@ public class EmergencyService {
 		});
 		log.info("緊急存取回報 emgId={} type={} accts={} realUser={}", emgId, type, picked.size(), id.getRealUserId());
 		return result(emgId, v + 1);
+	}
+
+	/**
+	 * 主管補核准（EMG_DECIDE）；逾期後仍可。須先有申請人回報（S4-⑦）：沒有回報只能退回。
+	 * 順序：404 → 403 → E02 版本號 → 409（已處理、版本不符）→ 400 尚未回報 → 交易。
+	 * 回報為「異動」時每個受影響帳號寫一列 EMG_MODIFY 歷史；補核准代表異動已獲追認，不標審查異常旗標
+	 */
+	public EmgActionResult approve(Identity id, String emgId, VersionForm form) {
+		EmgDetail d = load(id, emgId);
+		perm.require(id, AcctConst.PERM_EMG_DECIDE);
+		Integer v = requireVersion(form == null ? null : form.getVersionNo());
+		checkUndecided(d, v);
+		if (d.getReportTypeCode() == null) {
+			throw ApiException.badRequest(AcctMsg.EMG_APPROVE_NO_REPORT);
+		}
+		return decide(id, d, AcctConst.EMG_DECIDE_APPROVE, null, v);
+	}
+
+	/**
+	 * 主管退回（EMG_DECIDE）；逾期後仍可、不要求先回報。順序：404 → 403 → E10 退回原因 → E11（500 字）→ E02 版本號 → 409 → 交易。
+	 * 回報為「異動」時每帳號寫 EMG_MODIFY 歷史並標審查異常旗標（S4-①）；「沒有異動」或未回報不寫歷史、不標旗標。
+	 * 交易提交後寄 EMG_RETURN 給申請人（S4-⑪）
+	 */
+	public EmgActionResult returnEmg(Identity id, String emgId, ReasonForm form) {
+		EmgDetail d = load(id, emgId);
+		perm.require(id, AcctConst.PERM_EMG_DECIDE);
+		String reason = Texts.trimToNull(form == null ? null : form.getReason());
+		if (reason == null) {
+			throw AcctMsg.fillIn(AcctMsg.WHAT_EMG_RETURN_REASON);
+		}
+		Texts.maxChars(AcctMsg.WHAT_EMG_RETURN_REASON, reason, RETURN_REASON_MAX);
+		Integer v = requireVersion(form.getVersionNo());
+		checkUndecided(d, v);
+		return decide(id, d, AcctConst.EMG_DECIDE_RETURN, reason, v);
+	}
+
+	/** 預檢：已處理或版本不符 → 409（真正的防線是 UPDATE_DECIDE 的 WHERE） */
+	private static void checkUndecided(EmgDetail d, Integer v) {
+		if (d.getDecideCode() != null || !v.equals(d.getVersionNo())) {
+			throw AcctMsg.concurrent();
+		}
+	}
+
+	/**
+	 * 補核准與退回共用：同一交易內 UPDATE 主表（0 筆→409 回滾）→ 回報為「異動」才讀 REPORT 列，逐帳號寫歷史、退回再標旗標。
+	 * 主表更新成功即表示讀取後沒人動過這張單（回報也會遞增版本），所以回報內容可直接用 d 的值
+	 */
+	private EmgActionResult decide(Identity id, EmgDetail d, String decideCode, String returnReason, int v) {
+		String emgId = d.getEmgId();
+		boolean returned = AcctConst.EMG_DECIDE_RETURN.equals(decideCode);
+		// 裁示⑤：處理人（有效身分）就是申請人
+		int self = id.getUserId().equals(d.getApplyBy()) ? 1 : 0;
+		LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+		String flagReason = returned ? Texts.truncate(emgId + " " + LABEL_RETURNED + "：" + returnReason, FLAG_REASON_MAX) : null;
+
+		int written = tx.execute(s -> {
+			if (emgDao.decide(emgId, v, decideCode, id.getUserId(), returnReason, self, now, id.getRealUserId()) != 1) {
+				throw AcctMsg.concurrent();
+			}
+			if (!AcctConst.EMG_REPORT_MODIFIED.equals(d.getReportTypeCode())) {
+				return 0;
+			}
+			int n = 0;
+			for (EmgAffectAcct a : emgDao.findAffects(emgId)) {
+				if (!AcctConst.AFFECT_REPORT.equals(a.getAffectTypeCode())) {
+					continue;
+				}
+				acctHistDao.insert(emgHist(id, d, a, decideCode, returnReason, self, now));
+				if (returned) {
+					// 帳號不存在會更新 0 筆：不能讓單已退回、旗標卻沒標（稽核欄位不得靜默不一致），整筆回滾
+					int rows = acctDao.flagReview(a.getAcctId(), flagReason, AcctConst.FLAG_SRC_EMG, id.getUserId(), now,
+							id.getRealUserId());
+					if (rows != 1) {
+						log.error("標審查異常旗標影響筆數 {}（預期 1），交易回復 emgId={} acctId={}", rows, emgId, a.getAcctId());
+						throw ApiException.internal("資料寫入未完成（單號 " + emgId + "），請聯絡系統管理員");
+					}
+				}
+				n++;
+			}
+			return n;
+		});
+		log.info("緊急存取處理 emgId={} decide={} self={} hist={} realUser={}", emgId, decideCode, self, written, id.getRealUserId());
+		if (returned) {
+			notificationService.emgEvent(AcctConst.EV_EMG_RETURN, emgId, id.getRealUserId());
+		}
+		return result(emgId, v + 1);
+	}
+
+	/**
+	 * EMG_MODIFY 歷史列（S4-⑧⑨⑩）：SOURCE_CODE＝EMG、EMG_ID＝單號、REQ_ID／STAGE_ID／APPLY_DEPT 空；
+	 * ACT_BY＝實際操作人、ACT_AS＝代理身分、IS_SELF_ACTION＝處理人即申請人；
+	 * RESULT_DESCR 寫單號、處理結果（退回含原因）、申請人、回報時間、整體說明與本帳號說明，超過 1000 字截斷
+	 */
+	private static AcctHist emgHist(Identity id, EmgDetail d, EmgAffectAcct a, String decideCode, String returnReason, int self,
+			LocalDateTime now) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("緊急存取 ").append(d.getEmgId()).append(' ');
+		if (AcctConst.EMG_DECIDE_RETURN.equals(decideCode)) {
+			sb.append(LABEL_RETURNED).append("（").append(returnReason).append("）");
+		} else {
+			sb.append(LABEL_APPROVED);
+		}
+		sb.append("；申請人 ").append(d.getApplyByName() != null ? d.getApplyByName() : d.getApplyBy());
+		if (d.getReportDate() != null) {
+			sb.append(" 於 ").append(DATE_TIME_FMT.format(d.getReportDate()));
+		}
+		// 回報「異動」時說明必填（S4a），這裡只防資料被手動改壞時寫出字面 null（歷史只增不改）
+		sb.append(" 回報異動：").append(Objects.toString(d.getReportDescr(), ""));
+		if (a.getAffectDescr() != null) {
+			sb.append("；本帳號：").append(a.getAffectDescr());
+		}
+
+		AcctHist h = new AcctHist();
+		h.setAcctId(a.getAcctId());
+		h.setEmgId(d.getEmgId());
+		h.setSourceCode(AcctConst.HIST_SRC_EMG);
+		h.setActionCode(AcctConst.ACT_EMG_MODIFY);
+		h.setActBy(id.getRealUserId());
+		h.setActByName(id.getRealUserName());
+		h.setActAsId(id.actAsId());
+		h.setActAsName(id.actAsName());
+		h.setActDate(now);
+		h.setResultDescr(Texts.truncate(sb.toString(), RESULT_DESCR_MAX));
+		h.setIsSelfAction(self);
+		h.setCreateBy(id.getRealUserId());
+		return h;
 	}
 
 	/** 查無或無權看一律 404（裁示①A） */

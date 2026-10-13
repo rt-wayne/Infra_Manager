@@ -19,6 +19,10 @@ package com.mpx.im_acct_insp.dao;
 //           主表寫入改在關卡 6（APPLY_ADD／APPLY_MODIFY／APPLY_ENABLE／APPLY_STATE），修改時已逾期且新期限有效改回 APPROVED；
 //           審查日期另句寫入；J01 用的轉逾期、尚未寄信查詢（參照鍵 ACCT_ID_到期日yyyymmdd）；
 //           刪展延、作廢相關 SQL；時間一律綁定 :now
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：審查異常旗標 UPDATE_REVIEW_FLAG（緊急存取退回且申請人回報為異動時逐帳號標記；
+//           同帳號再次標記直接覆蓋原因與時間，S4-①）；REVIEW_FLAG_BY 有效身分、UPDATE_BY 實際操作人
 // ============================================================
 
 import java.time.LocalDate;
@@ -212,6 +216,14 @@ public class AcctDao {
 			 WHERE ACCT_ID = :acctId
 			""";
 
+	/** 審查異常旗標（S4-①）：不看現值，第二次標記直接覆蓋；旗標清除是日後定期審查的事，本模組不寫 */
+	public static final String UPDATE_REVIEW_FLAG = """
+			UPDATE IM_ACCT
+			   SET IS_REVIEW_FLAG = 1, REVIEW_FLAG_REASON = :reason, REVIEW_FLAG_SOURCE_CODE = :sourceCode,
+			       REVIEW_FLAG_DATE = :now, REVIEW_FLAG_BY = :flagBy, UPDATE_DATE = :now, UPDATE_BY = :userId
+			 WHERE ACCT_ID = :acctId
+			""";
+
 	// ---- J01／J02（spec §4.11）
 	public static final String FIND_TO_EXPIRE = SELECT_BASE + """
 			 WHERE A.ACCT_STATE_CODE = 'APPROVED'
@@ -382,6 +394,15 @@ public class AcctDao {
 		params.put("lastReviewDate", DaoSupport.ts(last));
 		params.put("nextReviewDate", DaoSupport.ts(next));
 		return dbClient.update(itflowDb, UPDATE_REVIEW_DATES, params);
+	}
+
+	/** 標審查異常旗標；flagBy＝有效身分（REVIEW_FLAG_BY）、userId＝實際操作人（UPDATE_BY）；reason 由 Service 截到 500 字 */
+	public int flagReview(String acctId, String reason, String sourceCode, String flagBy, LocalDateTime now, String userId) {
+		Map<String, Object> params = idParams(acctId, now, userId);
+		params.put("reason", reason);
+		params.put("sourceCode", sourceCode);
+		params.put("flagBy", flagBy);
+		return dbClient.update(itflowDb, UPDATE_REVIEW_FLAG, params);
 	}
 
 	public List<Acct> findToExpire(LocalDate today) {

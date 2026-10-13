@@ -18,6 +18,10 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：回報 UPDATE_REPORT（條件：版本相符、APPLY_BY＝本人、尚未回報、尚未處理；VERSION_NO＋1）、
 //           受影響帳號 INSERT_AFFECT（只增不改；RECORD_BY 有效身分、CREATE_BY 實際操作人）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：主管處理 UPDATE_DECIDE（補核准與退回共用；條件：版本相符、尚未處理；不看逾期；
+//           DECIDE_BY 有效身分、DECIDE_ACT_BY／UPDATE_BY 實際操作人、IS_SELF_DECIDE 由 Service 算；VERSION_NO＋1）
 // ============================================================
 
 import java.time.LocalDate;
@@ -121,6 +125,18 @@ public class EmgDao {
 			   AND DECIDE_CODE IS NULL
 			""";
 
+	/** 主管處理（S4b）：尚未處理、版本相符才更新；逾期後仍可處理，所以不看 DUE_DATE；VERSION_NO＋1（樂觀鎖，0 筆＝409） */
+	public static final String UPDATE_DECIDE = """
+			UPDATE IM_EMG_ACCESS
+			   SET DECIDE_CODE = :decideCode, DECIDE_BY = :decideBy, DECIDE_DATE = :now, DECIDE_ACT_BY = :actBy,
+			       RETURN_REASON = :returnReason, IS_SELF_DECIDE = :isSelfDecide, VERSION_NO = VERSION_NO + 1,
+			       UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE EMG_ID = :emgId
+			   AND STATUS = 1
+			   AND VERSION_NO = :versionNo
+			   AND DECIDE_CODE IS NULL
+			""";
+
 	/** 受影響帳號（只增不改）：RECORD_BY＝有效身分、CREATE_BY＝實際操作人 */
 	public static final String INSERT_AFFECT = """
 			INSERT INTO IM_EMG_AFFECT_ACCT (EMG_ID, AFFECT_TYPE_CODE, ACCT_ID, AFFECT_DESCR, RECORD_BY, RECORD_DATE,
@@ -190,6 +206,24 @@ public class EmgDao {
 		params.put("now", DaoSupport.ts(now));
 		params.put("actBy", actBy);
 		return dbClient.update(itflowDb, UPDATE_REPORT, params);
+	}
+
+	/**
+	 * 主管處理；decideBy＝有效身分，actBy＝實際操作人；returnReason 補核准時為 null；isSelfDecide 1＝處理人即申請人；
+	 * 回傳更新筆數（0＝已處理或版本不符）
+	 */
+	public int decide(String emgId, int versionNo, String decideCode, String decideBy, String returnReason, int isSelfDecide,
+			LocalDateTime now, String actBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("emgId", emgId);
+		params.put("versionNo", versionNo);
+		params.put("decideCode", decideCode);
+		params.put("decideBy", decideBy);
+		params.put("returnReason", returnReason);
+		params.put("isSelfDecide", isSelfDecide);
+		params.put("now", DaoSupport.ts(now));
+		params.put("actBy", actBy);
+		return dbClient.update(itflowDb, UPDATE_DECIDE, params);
 	}
 
 	public int insertAffect(String emgId, String affectTypeCode, String acctId, String affectDescr, String recordBy,

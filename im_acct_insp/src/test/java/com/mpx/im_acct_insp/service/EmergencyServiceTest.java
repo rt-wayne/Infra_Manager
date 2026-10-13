@@ -11,12 +11,21 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：回報測試——沒有異動／異動（子表 REPORT 列、有效身分與實際操作人）、上限 20、逾期後仍可、
 //           404／非本人 403、欄位驗證順序、帳號單號＋名稱＋狀態不符同一句、已回報／已處理／版本不符／UPDATE 0 筆皆 409
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：主管補核准／退回測試——未回報不得補核准（400）、補核准不標旗標、回報異動每帳號一列 EMG_MODIFY
+//           歷史（只取 REPORT 列；ACT_BY 實際操作人、ACT_AS 代理身分、RESULT_DESCR 內容）、退回＋異動逐帳號標旗標且提交後才寄信、
+//           沒有異動或未回報不寫歷史不標旗標、退回原因必填／500 字／版本號必填、404／403、兩位主管並發與回報並發皆 409、
+//           自核（處理人即申請人、含切換成申請人）IS_SELF_DECIDE＝1 且歷史標籤「自行核准」、逾期後仍可處理；
+//           審查補強：標旗標 0 筆→500 回滾、交易中途例外整筆回滾且不寄信
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
+import static com.mpx.im_acct_insp.support.TestFixture.GARY;
 import static com.mpx.im_acct_insp.support.TestFixture.HANK;
 import static com.mpx.im_acct_insp.support.TestFixture.KEVIN;
 import static com.mpx.im_acct_insp.support.TestFixture.MICHAEL;
+import static com.mpx.im_acct_insp.support.TestFixture.MOLLY;
 import static com.mpx.im_acct_insp.support.TestFixture.NAMES;
 import static com.mpx.im_acct_insp.support.TestFixture.NOW;
 import static com.mpx.im_acct_insp.support.TestFixture.TERRY;
@@ -25,6 +34,7 @@ import static com.mpx.im_acct_insp.support.TestFixture.id;
 import static com.mpx.im_acct_insp.support.TestFixture.idWith;
 import static com.mpx.im_acct_insp.support.TestFixture.impersonate;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -33,6 +43,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,11 +59,15 @@ import org.springframework.http.HttpStatus;
 import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.Identity;
+import com.mpx.im_acct_insp.model.AcctHist;
 import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.EmgActionResult;
+import com.mpx.im_acct_insp.model.EmgAffectAcct;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.request.EmgForm;
 import com.mpx.im_acct_insp.model.request.EmgReportForm;
+import com.mpx.im_acct_insp.model.request.ReasonForm;
+import com.mpx.im_acct_insp.model.request.VersionForm;
 import com.mpx.im_acct_insp.support.TestFixture;
 
 class EmergencyServiceTest {
@@ -341,17 +356,301 @@ class EmergencyServiceTest {
 		assertThat(fx.txm.rollbacks).isEqualTo(1);
 	}
 
-	/** 待回報、未處理的單；report() 預設寫入 1 筆 */
+	// ------------------------------------------------------------
+	// 主管處理（S4b-1）：補核准 approve、退回 returnEmg
+	// ------------------------------------------------------------
+
+	@Test
+	void 補核准_回報沒有異動_寫主表_不寫歷史不標旗標_不寄信_逾期後仍可() {
+		EmgDetail d = emg(MICHAEL, 1);
+		d.setDueDate(NOW.minusHours(3));
+		reported(d, AcctConst.EMG_REPORT_NONE, null);
+		EmgActionResult r = svc.approve(id(TERRY), EMG_ID, version(1));
+		assertThat(r.getEmgId()).isEqualTo(EMG_ID);
+		assertThat(r.getVersionNo()).isEqualTo(2);
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_APPROVE, TERRY, null, 0, NOW, TERRY);
+		// 「沒有異動」連子表都不用讀
+		verify(fx.emgDao, never()).findAffects(any());
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 補核准_回報異動_每帳號一列EMG_MODIFY歷史_只取REPORT列_不標旗標_切換身分時ACT_BY實際操作人() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "改了密碼", affectRow("A1", "重設密碼"), affectRow("A2", null),
+				closeRow("A9"));
+		svc.approve(impersonate(HANK, TERRY), EMG_ID, version(1));
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_APPROVE, TERRY, null, 0, NOW, HANK);
+
+		assertThat(fx.hists).extracting(AcctHist::getAcctId).containsExactly("A1", "A2");
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getEmgId()).isEqualTo(EMG_ID);
+		assertThat(h.getReqId()).isNull();
+		assertThat(h.getStageId()).isNull();
+		assertThat(h.getApplyDept()).isNull();
+		assertThat(h.getSourceCode()).isEqualTo(AcctConst.HIST_SRC_EMG);
+		assertThat(h.getActionCode()).isEqualTo(AcctConst.ACT_EMG_MODIFY);
+		assertThat(h.getActBy()).isEqualTo(HANK);
+		assertThat(h.getActByName()).isEqualTo(NAMES.get(HANK));
+		assertThat(h.getActAsId()).isEqualTo(TERRY);
+		assertThat(h.getActAsName()).isEqualTo(NAMES.get(TERRY));
+		assertThat(h.getActDate()).isEqualTo(NOW);
+		assertThat(h.getIsSelfAction()).isZero();
+		assertThat(h.getCreateBy()).isEqualTo(HANK);
+		assertThat(h.getResultDescr()).isEqualTo("緊急存取 " + EMG_ID + " 已補核准；申請人 " + NAMES.get(MICHAEL)
+				+ " 於 2026-10-07 09:00:00 回報異動：改了密碼；本帳號：重設密碼");
+		// 沒有本帳號說明就不加那一段
+		assertThat(fx.hists.get(1).getResultDescr()).endsWith("回報異動：改了密碼");
+
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 補核准_申請人尚未回報_400_不寫() {
+		emg(MICHAEL, 1);
+		assertStatus(() -> svc.approve(id(TERRY), EMG_ID, version(1)), HttpStatus.BAD_REQUEST, AcctMsg.EMG_APPROVE_NO_REPORT);
+		assertNothingDecided();
+	}
+
+	@Test
+	void 退回_回報異動_每帳號歷史並標旗標_RESULT_DESCR含退回原因_提交後才寄EMG_RETURN給申請人() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "改了密碼", affectRow("A1", "重設密碼"), affectRow("A2", null));
+		// 寄信時交易必須已提交（S4-⑪）
+		doAnswer(inv -> {
+			assertThat(fx.txm.commits).isEqualTo(1);
+			return null;
+		}).when(fx.notificationService).emgEvent(anyString(), anyString(), anyString());
+
+		EmgActionResult r = svc.returnEmg(id(MOLLY), EMG_ID, reasonForm(1, " 未事先通知 "));
+		assertThat(r.getVersionNo()).isEqualTo(2);
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_RETURN, MOLLY, "未事先通知", 0, NOW, MOLLY);
+		assertThat(fx.hists).extracting(AcctHist::getAcctId).containsExactly("A1", "A2");
+		assertThat(fx.hists.get(0).getResultDescr()).isEqualTo("緊急存取 " + EMG_ID + " 已退回（未事先通知）；申請人 "
+				+ NAMES.get(MICHAEL) + " 於 2026-10-07 09:00:00 回報異動：改了密碼；本帳號：重設密碼");
+		String flag = EMG_ID + " 已退回：未事先通知";
+		verify(fx.acctDao).flagReview("A1", flag, AcctConst.FLAG_SRC_EMG, MOLLY, NOW, MOLLY);
+		verify(fx.acctDao).flagReview("A2", flag, AcctConst.FLAG_SRC_EMG, MOLLY, NOW, MOLLY);
+		verify(fx.notificationService).emgEvent(AcctConst.EV_EMG_RETURN, EMG_ID, MOLLY);
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 退回_旗標原因超過500字截斷_歷史說明超過1000字截斷() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "說".repeat(500), affectRow("A1", "改".repeat(500)));
+		String reason = "因".repeat(500);
+		svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, reason));
+		ArgumentCaptor<String> flag = ArgumentCaptor.forClass(String.class);
+		verify(fx.acctDao).flagReview(eq("A1"), flag.capture(), eq(AcctConst.FLAG_SRC_EMG), eq(TERRY), eq(NOW), eq(TERRY));
+		assertThat(flag.getValue()).hasSize(500).startsWith(EMG_ID + " 已退回：因因");
+		assertThat(fx.hists.get(0).getResultDescr()).hasSize(1000).startsWith("緊急存取 " + EMG_ID + " 已退回（因因");
+	}
+
+	@Test
+	void 退回_沒有異動或未回報_不寫歷史不標旗標_仍寄信_逾期後仍可() {
+		EmgDetail d = emg(MICHAEL, 0);
+		d.setDueDate(NOW.minusDays(2));
+		svc.returnEmg(id(GARY), EMG_ID, reasonForm(0, "逾期未回報"));
+		reported(d, AcctConst.EMG_REPORT_NONE, "沒動到帳號");
+		svc.returnEmg(id(GARY), EMG_ID, reasonForm(0, "事由不符"));
+
+		verify(fx.emgDao).decide(EMG_ID, 0, AcctConst.EMG_DECIDE_RETURN, GARY, "逾期未回報", 0, NOW, GARY);
+		verify(fx.emgDao).decide(EMG_ID, 0, AcctConst.EMG_DECIDE_RETURN, GARY, "事由不符", 0, NOW, GARY);
+		verify(fx.emgDao, never()).findAffects(any());
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, times(2)).emgEvent(AcctConst.EV_EMG_RETURN, EMG_ID, GARY);
+		assertThat(fx.txm.commits).isEqualTo(2);
+	}
+
+	@Test
+	void 處理驗證_退回原因必填與500字_版本號必填_不寫() {
+		emg(MICHAEL, 1);
+		String what = AcctMsg.WHAT_EMG_RETURN_REASON;
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, null), HttpStatus.BAD_REQUEST, AcctMsg.E10_PREFIX + what);
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, " ")), HttpStatus.BAD_REQUEST, AcctMsg.E10_PREFIX + what);
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, "x".repeat(501))), HttpStatus.BAD_REQUEST,
+				AcctMsg.E11_PREFIX + what);
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(null, "原因")), HttpStatus.BAD_REQUEST,
+				AcctMsg.E02_PREFIX + "版本號");
+		assertStatus(() -> svc.approve(id(TERRY), EMG_ID, null), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "版本號");
+		assertStatus(() -> svc.approve(id(TERRY), EMG_ID, version(null)), HttpStatus.BAD_REQUEST, AcctMsg.E02_PREFIX + "版本號");
+		assertNothingDecided();
+
+		// 500 字整為上限內
+		svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, "x".repeat(500)));
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_RETURN, TERRY, "x".repeat(500), 0, NOW, TERRY);
+	}
+
+	@Test
+	void 處理權限_查無或無權看404_無EMG_DECIDE者403_申請人本人沒權限也403() {
+		emg(MICHAEL, 1);
+		assertStatus(() -> svc.approve(id(KEVIN), EMG_ID, version(1)), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.returnEmg(id(TERRY), "EA20261007-999", reasonForm(1, "x")), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		// 看得到（EMG_VIEW_ALL）但不能處理
+		assertStatus(() -> svc.approve(idWith(TERRY, Set.of(AcctConst.PERM_EMG_VIEW_ALL), List.of()), EMG_ID, version(1)),
+				HttpStatus.FORBIDDEN, AcctMsg.P01);
+		// 申請人看得到自己的單，沒 EMG_DECIDE 一樣不能處理
+		assertStatus(() -> svc.returnEmg(id(MICHAEL), EMG_ID, reasonForm(1, "x")), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertNothingDecided();
+	}
+
+	@Test
+	void 並發_兩位主管先後處理_已處理或版本不符409_UPDATE零筆409回滾不寫歷史不標旗標不寄信() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "說明", affectRow("A1", null));
+		// 讀到已處理
+		d.setDecideCode(AcctConst.EMG_DECIDE_APPROVE);
+		assertStatus(() -> svc.returnEmg(id(MOLLY), EMG_ID, reasonForm(1, "x")), HttpStatus.CONFLICT, AcctMsg.E08);
+		// 版本落後
+		d.setDecideCode(null);
+		assertStatus(() -> svc.approve(id(MOLLY), EMG_ID, version(0)), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertNothingDecided();
+
+		// 讀取時沒人動、寫入時被另一位主管搶先 → UPDATE 0 筆 → 409，整筆回滾
+		when(fx.emgDao.decide(any(), anyInt(), any(), any(), any(), anyInt(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.returnEmg(id(MOLLY), EMG_ID, reasonForm(1, "x")), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	@Test
+	void 退回_標旗標零筆_500整筆回滾_不寄信() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "說明", affectRow("A1", null), affectRow("A2", null));
+		// 第二個帳號已不存在 → UPDATE 0 筆
+		when(fx.acctDao.flagReview(eq("A2"), any(), any(), any(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, "x")), HttpStatus.INTERNAL_SERVER_ERROR,
+				"資料寫入未完成（單號 " + EMG_ID + "），請聯絡系統管理員");
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void 退回_交易中途例外_整筆回滾_例外往外丟_不寄信() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "說明", affectRow("A1", null), affectRow("A2", null));
+		when(fx.acctDao.flagReview(eq("A2"), any(), any(), any(), any(), any())).thenThrow(new IllegalStateException("DB 斷線"));
+		assertThatThrownBy(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, "x"))).isInstanceOf(IllegalStateException.class)
+				.hasMessage("DB 斷線");
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+	}
+
+	@Test
+	void 並發_主管畫面停在未回報_申請人先回報_版本已變_409而非400() {
+		// DB 現況：已回報、版本 2；主管畫面還是版本 1
+		EmgDetail d = emg(MICHAEL, 2);
+		reported(d, AcctConst.EMG_REPORT_NONE, null);
+		assertStatus(() -> svc.approve(id(TERRY), EMG_ID, version(1)), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertStatus(() -> svc.returnEmg(id(TERRY), EMG_ID, reasonForm(1, "x")), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertNothingDecided();
+	}
+
+	@Test
+	void 自核_處理人即申請人_IS_SELF_DECIDE與歷史IS_SELF_ACTION為1_標籤自行核准_切換成申請人也算() {
+		EmgDetail d = emg(MICHAEL, 1);
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "說明", affectRow("A1", null));
+		svc.approve(idWith(MICHAEL, Set.of(AcctConst.PERM_EMG_DECIDE), List.of()), EMG_ID, version(1));
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_APPROVE, MICHAEL, null, 1, NOW, MICHAEL);
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getIsSelfAction()).isEqualTo(1);
+		// 查詢時 REQ_APPLY_BY 由 COALESCE(R.APPLY_BY, EM.APPLY_BY) 帶出緊急存取申請人
+		h.setReqApplyBy(MICHAEL);
+		assertThat(RequestService.withLabels(List.of(h)).get(0).getSelfActionLabel()).isEqualTo(AcctConst.SELF_LABEL_APPLICANT);
+
+		// HANK 切換成申請人 MICHAEL 處理：有效身分是申請人 → 自核；ACT_BY＝HANK、ACT_AS＝MICHAEL
+		fx.hists.clear();
+		Identity asApplicant = new Identity("hash-" + HANK, HANK, NAMES.get(HANK), MICHAEL, NAMES.get(MICHAEL), true,
+				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null, null);
+		svc.returnEmg(asApplicant, EMG_ID, reasonForm(1, "自己退回"));
+		verify(fx.emgDao).decide(EMG_ID, 1, AcctConst.EMG_DECIDE_RETURN, MICHAEL, "自己退回", 1, NOW, HANK);
+		AcctHist h2 = fx.hists.get(0);
+		assertThat(h2.getActBy()).isEqualTo(HANK);
+		assertThat(h2.getActAsId()).isEqualTo(MICHAEL);
+		assertThat(h2.getIsSelfAction()).isEqualTo(1);
+		h2.setReqApplyBy(MICHAEL);
+		assertThat(RequestService.selfLabel(h2)).isEqualTo(AcctConst.SELF_LABEL_APPLICANT);
+
+		// 非申請人處理：不是自核、沒有標籤
+		fx.hists.clear();
+		svc.approve(id(TERRY), EMG_ID, version(1));
+		AcctHist h3 = fx.hists.get(0);
+		assertThat(h3.getIsSelfAction()).isZero();
+		h3.setReqApplyBy(MICHAEL);
+		assertThat(RequestService.selfLabel(h3)).isNull();
+	}
+
+	/** 待回報、未處理的單；report()／decide() 預設寫入 1 筆 */
 	EmgDetail emg(String applyBy, int versionNo) {
 		EmgDetail d = new EmgDetail();
 		d.setEmgId(EMG_ID);
 		d.setApplyBy(applyBy);
+		d.setApplyByName(NAMES.get(applyBy));
 		d.setVersionNo(versionNo);
 		d.setDueDate(NOW.plusHours(20));
 		when(fx.emgDao.findById(EMG_ID, NOW)).thenReturn(d);
 		when(fx.emgDao.report(any(), anyInt(), any(), any(), any(), any(), any())).thenReturn(1);
 		when(fx.emgDao.insertAffect(any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+		when(fx.emgDao.decide(any(), anyInt(), any(), any(), any(), anyInt(), any(), any())).thenReturn(1);
 		return d;
+	}
+
+	/** 申請人已於 09:00 回報；子表列由 findAffects 回傳 */
+	void reported(EmgDetail d, String type, String descr, EmgAffectAcct... rows) {
+		d.setReportTypeCode(type);
+		d.setReportDescr(descr);
+		d.setReportDate(NOW.minusMinutes(90));
+		d.setReportActBy(d.getApplyBy());
+		when(fx.emgDao.findAffects(EMG_ID)).thenReturn(List.of(rows));
+	}
+
+	static EmgAffectAcct affectRow(String acctId, String descr) {
+		EmgAffectAcct a = new EmgAffectAcct();
+		a.setEmgId(EMG_ID);
+		a.setAffectTypeCode(AcctConst.AFFECT_REPORT);
+		a.setAcctId(acctId);
+		a.setAffectDescr(descr);
+		return a;
+	}
+
+	/** 異常結案登記的列（S6 才會有）；處理時不得拿來寫歷史 */
+	static EmgAffectAcct closeRow(String acctId) {
+		EmgAffectAcct a = affectRow(acctId, null);
+		a.setAffectTypeCode(AcctConst.AFFECT_CLOSE);
+		return a;
+	}
+
+	void assertNothingDecided() {
+		verify(fx.emgDao, never()).decide(any(), anyInt(), any(), any(), any(), anyInt(), any(), any());
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isZero();
+	}
+
+	static VersionForm version(Integer versionNo) {
+		VersionForm f = new VersionForm();
+		f.setVersionNo(versionNo);
+		return f;
+	}
+
+	static ReasonForm reasonForm(Integer versionNo, String reason) {
+		ReasonForm f = new ReasonForm();
+		f.setVersionNo(versionNo);
+		f.setReason(reason);
+		return f;
 	}
 
 	void assertBad(EmgReportForm f, String msg) {

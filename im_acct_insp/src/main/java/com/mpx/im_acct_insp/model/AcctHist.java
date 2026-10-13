@@ -9,6 +9,9 @@ package com.mpx.im_acct_insp.model;
 // 變更說明: v2.0（spec_im_acct_insp_v2.0.md §4.8、§6.4；Table v0.2 7.17）：actByName 改為快照欄（不 JOIN 使用者表）；
 //           加 actAsId、actAsName、isSelfAction、selfActionLabel（計算）；reqApplyBy（該單申請人，算標籤用，不輸出）；
 //           寫入用 createBy（不輸出）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：加 emgId（SOURCE_CODE＝EMG 時的來源緊急存取單號）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -21,6 +24,7 @@ public class AcctHist {
 	private Long histId;
 	private String acctId;
 	private String reqId;
+	private String emgId;
 	private String sourceCode;
 	private String actionCode;
 	private Integer stageId;
@@ -54,6 +58,14 @@ public class AcctHist {
 
 	public void setAcctId(String acctId) {
 		this.acctId = acctId;
+	}
+
+	public String getEmgId() {
+		return emgId;
+	}
+
+	public void setEmgId(String emgId) {
+		this.emgId = emgId;
 	}
 
 	public String getReqId() {

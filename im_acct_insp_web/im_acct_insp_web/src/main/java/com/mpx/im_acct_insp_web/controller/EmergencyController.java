@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp_web.controller;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：/emergencies/{id}/report（申請人回報）轉送
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：/emergencies/{id}/approve（主管補核准）、/emergencies/{id}/return（主管退回）轉送
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -55,5 +58,17 @@ public class EmergencyController {
 	@PostMapping("/emergencies/{id}/report")
 	public ResponseEntity<byte[]> report(@PathVariable("id") String id, HttpServletRequest request) {
 		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/report", request);
+	}
+
+	/** 主管補核准：POST <backend>/emergencies/{id}/approve，JSON {versionNo} */
+	@PostMapping("/emergencies/{id}/approve")
+	public ResponseEntity<byte[]> approve(@PathVariable("id") String id, HttpServletRequest request) {
+		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/approve", request);
+	}
+
+	/** 主管退回：POST <backend>/emergencies/{id}/return，JSON {versionNo, reason} */
+	@PostMapping("/emergencies/{id}/return")
+	public ResponseEntity<byte[]> returnEmg(@PathVariable("id") String id, HttpServletRequest request) {
+		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/return", request);
 	}
 }

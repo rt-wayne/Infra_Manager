@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp.controller;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：POST /emergencies/{id}/report（申請人回報）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：POST /emergencies/{id}/approve（主管補核准）、POST /emergencies/{id}/return（主管退回）
 // ============================================================
 
 import java.util.List;
@@ -27,6 +30,8 @@ import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.EmgIdResult;
 import com.mpx.im_acct_insp.model.request.EmgForm;
 import com.mpx.im_acct_insp.model.request.EmgReportForm;
+import com.mpx.im_acct_insp.model.request.ReasonForm;
+import com.mpx.im_acct_insp.model.request.VersionForm;
 import com.mpx.im_acct_insp.service.EmergencyService;
 
 @RestController
@@ -60,5 +65,17 @@ public class EmergencyController {
 	public EmgActionResult report(Identity id, @PathVariable("id") String emgId,
 			@RequestBody(required = false) EmgReportForm form) {
 		return emergencyService.report(id, emgId, form);
+	}
+
+	@PostMapping("/emergencies/{id}/approve")
+	public EmgActionResult approve(Identity id, @PathVariable("id") String emgId,
+			@RequestBody(required = false) VersionForm form) {
+		return emergencyService.approve(id, emgId, form);
+	}
+
+	@PostMapping("/emergencies/{id}/return")
+	public EmgActionResult returnEmg(Identity id, @PathVariable("id") String emgId,
+			@RequestBody(required = false) ReasonForm form) {
+		return emergencyService.returnEmg(id, emgId, form);
 	}
 }

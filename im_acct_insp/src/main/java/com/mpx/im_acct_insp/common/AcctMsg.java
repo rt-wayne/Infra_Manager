@@ -11,6 +11,9 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：緊急存取回報欄位的 E10／E11 受詞（回報結果、受影響帳號、回報說明、帳號異動說明）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：退回原因受詞；補核准前須有申請人回報的文案（S4-⑦）
 // ============================================================
 
 import java.util.List;
@@ -60,9 +63,13 @@ public final class AcctMsg {
 	public static final String WHAT_EMG_AFFECT = "受影響帳號";
 	public static final String WHAT_EMG_REPORT_DESCR = "回報說明";
 	public static final String WHAT_EMG_AFFECT_DESCR = "帳號異動說明";
+	// 緊急存取主管處理欄位（BACKLOG 第 46 項 S4b）
+	public static final String WHAT_EMG_RETURN_REASON = "退回原因";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";
+	/** 補核准須先有申請人回報（S4-⑦，刻意偏離 SA v0.5 §5.11；未回報只能退回） */
+	public static final String EMG_APPROVE_NO_REPORT = "申請人尚未回報，不能補核准";
 	public static final String BAD_DATE = "日期格式錯誤（yyyy-MM-dd）";
 	public static final String BAD_DATE_TIME = "時間格式錯誤（yyyy-MM-dd HH:mm:ss）";
 	public static final String ADD_WITH_ACCT = "新增申請不可指定帳號";

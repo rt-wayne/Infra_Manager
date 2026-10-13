@@ -23,6 +23,10 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：API 數 35 → 36（POST /emergencies/{id}/report）；EmgDao.UPDATE_REPORT 須帶樂觀鎖與前置條件
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：API 數 36 → 38（/approve、/return）；EmgDao.UPDATE_DECIDE 樂觀鎖與不看 DUE_DATE；
+//           AcctHistDao 寫入帶 EMG_ID、查詢 COALESCE 兩種來源單的申請人；AcctDao.UPDATE_REVIEW_FLAG 欄位
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -175,6 +179,19 @@ class SqlConstantScanTest {
 		assertThat(EmgDao.UPDATE_REPORT).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
 				.contains("APPLY_BY = :applyBy").contains("REPORT_TYPE_CODE IS NULL").contains("DECIDE_CODE IS NULL")
 				.contains("STATUS = 1");
+		// 緊急存取主管處理（S4b）：帶版本、限尚未處理；逾期後仍可處理所以不看 DUE_DATE
+		assertThat(EmgDao.UPDATE_DECIDE).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
+				.contains("DECIDE_CODE IS NULL").contains("STATUS = 1").contains("IS_SELF_DECIDE = :isSelfDecide")
+				.doesNotContain("DUE_DATE");
+	}
+
+	@Test
+	void 帳號歷史_寫入帶EMG_ID_查詢取申請單或緊急存取單申請人() {
+		assertThat(AcctHistDao.INSERT_HIST).contains("EMG_ID").contains(":emgId");
+		assertThat(AcctHistDao.FIND_BY_ACCT).contains("LEFT JOIN IM_EMG_ACCESS EM ON EM.EMG_ID = H.EMG_ID")
+				.contains("COALESCE(R.APPLY_BY, EM.APPLY_BY) AS REQ_APPLY_BY");
+		assertThat(AcctDao.UPDATE_REVIEW_FLAG).contains("IS_REVIEW_FLAG = 1").contains("REVIEW_FLAG_SOURCE_CODE = :sourceCode")
+				.contains("REVIEW_FLAG_BY = :flagBy").doesNotContain("SYSDATE");
 	}
 
 	@Test
@@ -212,7 +229,7 @@ class SqlConstantScanTest {
 				}
 			}
 		}
-		assertThat(apis).isEqualTo(36);
+		assertThat(apis).isEqualTo(38);
 		assertThat(missing).isEmpty();
 	}
 }

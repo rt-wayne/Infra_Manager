@@ -29,6 +29,9 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4a：回報受影響帳號上限 EMG_AFFECT_MAX＝20（S4-③）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-1：歷史來源 EMG 與動作 EMG_MODIFY（S4-⑧）、審查異常旗標來源 EMG（S4-①）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -93,6 +96,8 @@ public final class AcctConst {
 	// 歷史 IM_ACCT_HIST
 	public static final String HIST_SRC_REQ = "REQ";
 	public static final String HIST_SRC_SYS = "SYS";
+	/** 緊急存取事件（EMG_ID 有值、REQ_ID／STAGE_ID／APPLY_DEPT 空） */
+	public static final String HIST_SRC_EMG = "EMG";
 	public static final String ACT_SUBMIT = "SUBMIT";
 	public static final String ACT_RESUB = "RESUB";
 	public static final String ACT_APPROVE = "APPROVE";
@@ -101,6 +106,8 @@ public final class AcctConst {
 	public static final String ACT_VERIFY_OK = "VERIFY_OK";
 	public static final String ACT_VERIFY_REJECT = "VERIFY_REJECT";
 	public static final String ACT_EXPIRE = "EXPIRE";
+	/** 緊急存取異動：主管處理（補核准或退回）時依申請人回報的受影響帳號逐筆寫入（S4-⑧） */
+	public static final String ACT_EMG_MODIFY = "EMG_MODIFY";
 	/** 判斷 IS_SELF_ACTION 的動作（spec §4.8） */
 	public static final List<String> SELF_CHECK_ACTIONS = List.of(ACT_APPROVE, ACT_REJECT, ACT_EXEC_DONE, ACT_VERIFY_OK,
 			ACT_VERIFY_REJECT);
@@ -219,6 +226,8 @@ public final class AcctConst {
 	/** 受影響帳號登記來源 IM_EMG_AFFECT_ACCT.AFFECT_TYPE_CODE */
 	public static final String AFFECT_REPORT = "REPORT";
 	public static final String AFFECT_CLOSE = "CLOSE";
+	/** 審查異常旗標來源 IM_ACCT.REVIEW_FLAG_SOURCE_CODE：緊急存取（退回且申請人回報為異動，S4-①） */
+	public static final String FLAG_SRC_EMG = "EMG";
 	/** 補核准期限＝送出＋24 小時（SA §5.11） */
 	public static final int EMG_DUE_HOURS = 24;
 	/** 預估時長（小時，整數）的範圍（裁示②） */

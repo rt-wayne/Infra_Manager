@@ -243,7 +243,7 @@ public class TestFixture {
 	public final InspectionService inspectionService = new InspectionService(permissionService, docSeqService, inspDao, tx,
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
-			acctDao, notificationService, tx, clock);
+			acctDao, acctHistDao, notificationService, tx, clock);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;
@@ -273,6 +273,7 @@ public class TestFixture {
 		when(acctDao.applyState(any(), any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.updateAcctName(any(), any(), any(), any())).thenReturn(1);
 		when(acctDao.updateReviewDates(any(), any(), any(), any(), any())).thenReturn(1);
+		when(acctDao.flagReview(any(), any(), any(), any(), any(), any())).thenReturn(1);
 
 		when(acctHistDao.insert(any())).thenAnswer(inv -> {
 			AcctHist h = new AcctHist();
