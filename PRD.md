@@ -305,7 +305,7 @@
 - 核准／退件判斷順序：① 沒有任何關卡 2～5 權限 → 403 ② 未帶 versionNo → 400 E02 ③ 狀態或版本不符 → 409 E08 ④ 沒有目前關卡的權限 → 403 ⑤ 退件原因 E10。回報執行、複驗同理：先驗權限，再做帶條件的 UPDATE。
 - **樂觀鎖**：狀態轉移 UPDATE 帶「單號＋版本號＋預期狀態＋預期關卡」條件；影響 0 筆 → 409 E08「此申請已由他人處理，請重新整理」，先送出者成功。前端收到 409 → toast 訊息並重新載入。
 - **同帳號一筆在途**：程式先查；併發競態由唯一函式索引 IND_IM_ACCT_REQ_04 擋下，ORA-00001 經 Spring 轉成 DuplicateKeyException 後，例外鏈訊息含「(擁有者.IND_IM_ACCT_REQ_04)」才回 409 E07（因此建表時不得改這個索引名）；送出與重送交易內其他唯一鍵衝突（例如其他表的主鍵重複）記 error log 後回 500。
-- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。
+- **自行核准／同人兼任**（U12，只標示不阻擋）：對核准、退件、回報、複驗通過、複驗退回判斷；有效身分＝申請人 →「自行核准」；同單其他關已由同一有效身分處理 →「同人兼任」。緊急存取歷史：EMG_MODIFY 處理人即申請人 →「自行核准」；EMG_CLOSE_MODIFY 結案人即申請人 →「自行結案」。
 - **退件重送**：只有原申請人看得到、能做（否則 403）；沿用同一單號；附新公文時舊公文失效、新公文一筆，不附則保留舊公文。申請類型與帳號類別不可變更：前端兩者都鎖定；新增申請重送時後端以原申請單的帳號類別為準，忽略表單值。
 
 **申請單狀態**：REVIEW＝審核中（關卡 2～5，畫面顯示 U10「審核中：待 {關卡名}」）、EXEC＝待執行（6）、VERIFY＝待複驗（7）、APPROVED＝已核准（無關卡）、REJECTED＝已退件（無關卡，可重送）。
@@ -477,12 +477,12 @@
 
 #### 14. 緊急存取（送出、查詢、回報、處理）
 
-本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API 與詳情彈窗內的回報動作（回報彈窗、受影響帳號選取器）、補核准與退回 API 與詳情彈窗內的處理動作；異常結案與逾期通知尚未上線。
+本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API 與詳情彈窗內的回報動作（回報彈窗、受影響帳號選取器）、補核准與退回 API 與詳情彈窗內的處理動作、異常結案 API；異常結案的畫面與逾期通知尚未上線。
 
 - **送出**（EMG_APPLY；GENERAL 角色即有）：填帳號類別（只要類別存在即可，停用中的類別也能選）、帳號或系統（自由文字，200 字內）、緊急事由（500 字內）、預估時長（整數 1～24 小時）。送出即生效、同一交易取 EA 單號；補核准期限＝送出時間＋24 小時；申請人＝有效身分、建立者＝實際操作人（切換身分代送時兩者不同）。驗證順序：權限 403 → 四個必填（E10「請填寫帳號類別／帳號或系統／緊急事由／預估時長」）→ 欄寬 E11 → 時長範圍（400「欄位內容不正確：預估時長」）→ 類別不存在（400「欄位內容不正確：帳號類別」）。交易提交後寄 EMG_SUBMIT 給所有 EMG_DECIDE 持有人；寄信失敗不影響送出結果。沒有每人送單張數上限（濫用靠登入與申請人／建立者欄位追責）。
 - **狀態**（不存欄位，查詢當下計算）：待補核准＝尚未處理且未逾期；逾期未補核准＝尚未處理且已過期限；已補核准；已退回＝退回且尚未異常結案；已結案＝退回且已異常結案。
 - **列表**（登入即可）：有 EMG_VIEW_ALL 看全部，否則只看申請人＝有效身分的單。篩選：關鍵字（比對單號、申請人姓名、帳號或系統，LIKE 跳脫 `\ % _`）、狀態（五種代碼之一，其他回 400「欄位內容不正確：狀態」）、送出日期區間（yyyy-MM-dd，含頭尾；格式錯回 400「日期格式錯誤（yyyy-MM-dd）」）。依送出時間新到舊排序，沒有分頁。
-- **明細**：主表全部欄位、類別名稱、申請人／處理人／結案人姓名、計算後狀態、受影響帳號清單（目前只有回報寫入的列；結案登記尚未上線）。可看條件與列表相同；查無或無權看一律 404 N01，不透露單據是否存在。
+- **明細**：主表全部欄位、類別名稱、申請人／處理人／結案人姓名、計算後狀態、受影響帳號清單（回報寫入的 REPORT 列與結案登記的 CLOSE 列，以登記來源區分）。可看條件與列表相同；查無或無權看一律 404 N01，不透露單據是否存在。
 - **回報**（申請人本人＝有效身分即可，不需 EMG_APPLY）：每張單只能回報一次、須在主管處理前，逾期後仍可回報；回報不寄信。選「沒有異動」（NONE）或「異動了既有帳號」（MODIFIED）：
   - 異動：受影響帳號 1～20 個、回報說明必填，各帳號的異動說明選填；帳號類別不限與單上相同。
   - 沒有異動：不得帶帳號，回報說明選填。
@@ -497,6 +497,13 @@
   - **退回且回報為「異動」時**另對每個帳號標審查異常旗標（IS_REVIEW_FLAG＝1、原因「{單號} 已退回：{退回原因}」500 字截斷、來源 EMG、標記人＝有效身分、時間＝處理時間）；帳號已不存在（更新 0 筆）則整筆回滾、回 500「資料寫入未完成」。旗標的清除（定期審查複驗）尚未上線。
   - 回報為「沒有異動」或未回報：不寫歷史、不標旗標。
   - 兩位主管同時處理、或申請人回報與主管處理同時發生時，後到者回 409 E08。
+- **異常結案**（EMG_DECIDE 任一人；目前只有 API，畫面施工中）：只有已退回且尚未結案的單可結案，每張單只結案一次；結案人（CLOSE_BY）＝有效身分、CLOSE_ACT_BY 與 UPDATE_BY＝實際操作人、IS_SELF_CLOSE＝結案人即申請人；主表寫結案發現、結案說明、結案人、結案時間並遞增版本。結案不寄信。
+  - 結案發現二選一：「確認沒有異動」（NO_CHANGE）或「有帳號異動」（CHANGED）。結案說明兩種都必填（500 字內）。
+  - 有異動：受影響帳號 1～20 個，規則與回報相同（單號＋完整名稱、狀態範圍、不重複、不符一律 400「欄位內容不正確：受影響帳號」）；各帳號異動說明選填。沒有異動：不得帶帳號。
+  - 驗證順序：查無或無權看 404 → 無 EMG_DECIDE 403 → 未選結案發現 E10 → 值不是兩種之一 400 → 有異動卻沒帶帳號 E10 → 沒有異動卻帶帳號、超過 20 個、單號或名稱空白、同單號重複 400 → 結案說明空白 E10 → 說明 500 字 E11 → 帳號驗證 400 → 未帶版本號 E02 → 未退回、已結案或版本不符 409 E08（與回報同一順序）。
+  - **有異動時**：每個帳號依單號排序後寫子表 CLOSE 列（申請人回報的 REPORT 列不動）、帳號歷史一筆 EMG_CLOSE_MODIFY（來源 EMG、帶單號、關卡空白；ACT_BY＝實際操作人、ACT_AS＝代理身分；結案人即申請人時歷史畫面顯示「自行結案」；結果文字＝「緊急存取 {單號} 異常結案：有帳號異動；結案人 {姓名}；結案說明：{結案說明}；本帳號：{該帳號異動說明}」，1000 字截斷），並標審查異常旗標（原因「{單號} 異常結案發現異動：{結案說明}」500 字截斷、來源 EMG、標記人＝有效身分）；帳號已不存在則整筆回滾、回 500「資料寫入未完成」。
+  - **沒有異動時**：只更新主表，不寫歷史、不動既有旗標（退回時已標的旗標仍待定期審查清除）。
+  - 兩位主管同時結案時後到者回 409 E08。
 
 ### 使用者流程
 
@@ -577,7 +584,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | U09 | 查詢失敗，請稍後再試 | 任何查詢失敗 |
 | U10 | 審核中：待 {關卡名} | 申請單狀態 |
 | U11 | 待複驗 | 帳號列表標記 |
-| U12 | 自行核准／同人兼任 | 歷史標籤 |
+| U12 | 自行核准／同人兼任／自行結案 | 歷史標籤（自行結案只用於緊急存取結案登記異動） |
 | U13 | 目前沒有已逾期未處理的帳號 | J02 彙總 0 筆 |
 | U14 | 有 {n} 個帳號 30 天內到期或已逾期 | 帳號列表橫幅 |
 | — | 所選檔案沒有內容，視同未上傳 | 前端選到空檔時（`utils/attach.ts`） |
@@ -841,7 +848,7 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | ACT_DATE | DATE | ✓ | 發生時間 |
 | APPLY_DEPT | VARCHAR2(50 CHAR) | | 申請單位快照 |
 | RESULT_DESCR | VARCHAR2(1000 CHAR) | | 結果文字 |
-| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任，預設 0 |
+| IS_SELF_ACTION | NUMBER(1) | ✓ | 自行核准／同人兼任；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對），預設 0 |
 
 索引：IND_IM_ACCT_HIST_01（ACCT_ID, ACT_DATE）、_02（REQ_ID）。
 
@@ -918,14 +925,14 @@ END
 | CLOSE_BY | VARCHAR2(30) | | 異常結案人（有效身分；只有已退回的單可結案） |
 | CLOSE_DATE | DATE | | 結案時間；有值＝已結案 |
 | CLOSE_ACT_BY | VARCHAR2(30) | | 結案的實際操作人 |
-| CLOSE_DESCR | VARCHAR2(500 CHAR) | | 結案說明 |
+| CLOSE_DESCR | VARCHAR2(500 CHAR) | | 結案說明（兩種結案發現都必填） |
 | CLOSE_RESULT_CODE | VARCHAR2(10) | | 結案發現：NO_CHANGE、CHANGED（結案時必填） |
 | IS_SELF_CLOSE | NUMBER(1) | ✓ | 結案人＝申請人為 1，預設 0 |
 | VERSION_NO | NUMBER(9) | ✓ | 樂觀鎖版本號，預設 0 |
 
 狀態：待補核准＝DECIDE_CODE 空且現在 ≤ DUE_DATE；逾期未補核准＝DECIDE_CODE 空且現在 > DUE_DATE；已補核准＝APPROVE；已退回＝RETURN 且 CLOSE_DATE 空；已退回（已結案）＝RETURN 且 CLOSE_DATE 有值。索引：IND_IM_EMG_ACCESS_01（APPLY_BY, SUBMIT_DATE）、_02（DECIDE_CODE, DUE_DATE）。
 
-**IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
+**IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明；REPORT 與 CLOSE 皆選填）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
 
 **SEQUENCE**：SEQ_IM_ACCT_ATTACH、SEQ_IM_ACCT_ADMIN_LOG、SEQ_IM_ACCT_NOTIFY_LOG、SEQ_IM_ACCT_JOB_RUN（NOCACHE）；SEQ_IM_ACCT_HIST（CACHE 20）；皆 START WITH 1。緊急存取兩表不用序列。
 
@@ -1105,10 +1112,11 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 |---|---|---|---|---|---|
 | POST | `/emergencies` | EMG_APPLY | catgId、targetDescr、applyReason、expectHourQty（整數 1～24） | emgId | 403、400 E10、E11、欄位內容不正確（預估時長／帳號類別） |
 | GET | `/emergencies` | 登入（有 EMG_VIEW_ALL 看全部，否則限本人） | query：keyword、stateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）、dateFrom、dateTo | [IM_EMG_ACCESS 全欄、catgName、applyByName、decideByName、closeByName、createByName、reportActByName、decideActByName、closeActByName（四個實際操作人姓名，LEFT JOIN IM_ACCT_USER，查不到為 null）、emgStateCode] | 400 欄位內容不正確（狀態）、日期格式錯誤 |
-| GET | `/emergencies/{id}` | 可看緊急存取單（同列表範圍） | — | 上列欄位＋affectAccts[emgId、affectTypeCode、acctId、acctName、sysName、catgId、affectDescr、recordBy、recordByName、recordDate]（目前只有回報寫入的 REPORT 列） | 404（查無或無權看） |
+| GET | `/emergencies/{id}` | 可看緊急存取單（同列表範圍） | — | 上列欄位＋affectAccts[emgId、affectTypeCode、acctId、acctName、sysName、catgId、affectDescr、recordBy、recordByName、recordDate]（回報的 REPORT 列與結案登記的 CLOSE 列） | 404（查無或無權看） |
 | POST | `/emergencies/{id}/report` | 申請人本人（不需 EMG_APPLY） | reportTypeCode（NONE／MODIFIED）、reportDescr、versionNo、affectAccts[acctId、acctName、affectDescr]（MODIFIED 時 1～20 個） | emgId、versionNo（回報後的新版本） | 404、403、400 E10、E11、E02、欄位內容不正確（回報結果／受影響帳號）、409 E08 |
 | POST | `/emergencies/{id}/approve` | EMG_DECIDE（可看該單） | versionNo | emgId、versionNo（處理後的新版本） | 404、403、400 E02、申請人尚未回報，不能補核准、409 E08 |
 | POST | `/emergencies/{id}/return` | EMG_DECIDE（可看該單） | reason（500 字內）、versionNo | 同上 | 404、403、400 E10、E11、E02、409 E08、500 資料寫入未完成（受影響帳號已不存在） |
+| POST | `/emergencies/{id}/close` | EMG_DECIDE（可看該單；只限已退回且未結案） | closeResultCode（NO_CHANGE／CHANGED）、closeDescr（必填，500 字內）、versionNo、affectAccts[acctId、acctName、affectDescr]（CHANGED 時 1～20 個） | emgId、versionNo（結案後的新版本） | 404、403、400 E10、E11、E02、欄位內容不正確（結案發現／受影響帳號）、409 E08、500 資料寫入未完成（受影響帳號已不存在） |
 
 keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）。狀態由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 與查詢當下時間計算（時間以參數綁定，不用 SYSDATE）。
 
@@ -1131,7 +1139,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | E07 | 409 | 此帳號目前已有一筆申請正在處理中 |
 | E08 | 409 | 此申請已由他人處理，請重新整理 |
 | E09 | 409 | 此帳號目前的狀態不可提出此類申請 |
-| E10 | 400 | 請填寫{原因／異常說明／處理方式與結果／帳號類別／帳號或系統／緊急事由／預估時長／回報結果／受影響帳號／回報說明／退回原因}（退件與複驗退回＝原因、巡檢異常＝異常說明、標記處理＝處理方式與結果、緊急存取送出＝帳號類別至預估時長、緊急存取回報＝回報結果至回報說明、緊急存取退回＝退回原因） |
+| E10 | 400 | 請填寫{原因／異常說明／處理方式與結果／帳號類別／帳號或系統／緊急事由／預估時長／回報結果／受影響帳號／回報說明／退回原因／結案發現／結案說明}（退件與複驗退回＝原因、巡檢異常＝異常說明、標記處理＝處理方式與結果、緊急存取送出＝帳號類別至預估時長、緊急存取回報＝回報結果至回報說明、緊急存取退回＝退回原因、緊急存取異常結案＝結案發現、受影響帳號、結案說明） |
 | E11 | 400 | 欄位長度超過上限：{欄位名} |
 | E12 | 400 | 請上傳執行佐證附件 |
 | E13 | 400 | 請填寫門禁卡號 |
@@ -1148,7 +1156,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | P01 | 403 | 您沒有執行此操作的權限 |
 | N01 | 404 | 查無資料 |
 
-無代號的 400 文案：欄位內容不正確：{欄位}（緊急存取為「預估時長」「帳號類別」「狀態」「回報結果」「受影響帳號」）／日期格式錯誤（yyyy-MM-dd）／時間格式錯誤（yyyy-MM-dd HH:mm:ss）／新增申請不可指定帳號／不可切換為自己／巡檢時間不可晚於現在／申請人尚未回報，不能補核准（緊急存取補核准）。
+無代號的 400 文案：欄位內容不正確：{欄位}（緊急存取為「預估時長」「帳號類別」「狀態」「回報結果」「受影響帳號」「結案發現」）／日期格式錯誤（yyyy-MM-dd）／時間格式錯誤（yyyy-MM-dd HH:mm:ss）／新增申請不可指定帳號／不可切換為自己／巡檢時間不可晚於現在／申請人尚未回報，不能補核准（緊急存取補核准）。
 
 ### 環境設定
 
