@@ -17,8 +17,8 @@
 | 46 | 緊急存取（SA §5.11、第二階段）：送出即生效、24 小時補核准、申請人回報、主管補核准／退回、異常結案、J03 逾期通知、首頁兩卡、鈴鐺類別 3、審查異常旗標閉環；使用者裁示 17 項見詳情檔 | `backlog/46-緊急存取.md` |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：S1、S2 完成並 commit（2026-10-13）；下一階段 S3（前端送出表單與列表、明細頁），動工前讀詳情檔第 4 節 S3 列與「各階段動工前要先定的細節」
-- 已改動（未 commit）：新檔 `model/Emg.java`、`EmgDetail.java`、`EmgAffectAcct.java`、`EmgIdResult.java`、`model/request/EmgForm.java`、`dao/EmgDao.java`、`service/EmergencyService.java`、`controller/EmergencyController.java`（後端與殼 jar 各一）、`test/.../service/EmergencyServiceTest.java`；改既有 `AcctConst`（EA、EMG 事件／權限／狀態／代碼常數）、`AcctMsg`（四個欄位名）、`Texts`（共用 `parseDate`）、`MailHtml`（PATH_EMG）、`NotificationService`（建構子加 EmgDao、`emgEvent`）、`InspectionService`／`RequestService`（改用 `Texts.parseDate`、刪私有副本）、測試 `TestFixture`、`JobAndNotifyTest`、`SqlConstantScanTest`（API 數 35）
+- 下一步：S1～S3 完成並 commit（2026-10-13）；S3 瀏覽器實測由使用者執行，結果未回報。下一階段 S4（後端回報、補核准、退回），動工前讀詳情檔第 4 節 S4 列與「各階段動工前要先定的細節」的 S4 條目（旗標覆蓋規則、兩個說明欄必填規則、兩句既有 COMMENT）
+- 已改動（未 commit）：無
 - 卡住／待確認：EMERGENCY→EMG 補進 DB 規範縮寫字典由使用者自行處理（裁示 ㉘）；規範 xlsx 不進 repo（裁示 2026-10-13，commit 一律用明確路徑 `git add`）
 
 ## 已拍板待實作
@@ -50,7 +50,7 @@
 | 36 | 測試 DB 的附件 14～18、20 在 DB 有紀錄但實體檔不存在，後端下載回 500「附件檔案不存在」，真實附件下載無法實測（第 30 項瀏覽器實測改以模擬 PDF 驗證下載）。要補檔、刪紀錄或維持現狀未定 | 2026-10-11 | — |
 | 37 | 帳號歷史彈窗在視窗高 900px 時，底部「關閉」鈕被畫面底緣切掉一半（按得到、關得掉）；第 30 項瀏覽器補測發現，與安全標頭無關 | 2026-10-11 | — |
 | 41 | `PRD.md` 表單欄位表「使用人聯絡方式」列寫「灰底範例『#1614 或 Email』」，但畫面（`RequestFormView.vue` 的 `#holderCntct`）是一般 placeholder「請填寫使用人的分機、電話或 Email（外部廠商請務必填寫）」、無灰底；第 40 項審查時發現的既有落差，要改 PRD 照現況或改畫面照 PRD 未定 | 2026-10-11 | — |
-| 44 | `SETUP.md` 第 71 行寫 `npm run build` 會清掉 `im_acct_insp_web\src\frontend\.gitkeep`、要用 `git checkout` 還原，且「該目錄只有 `.gitkeep` 時殼 jar 也能建置」；但使用者已確認刪除該 `.gitkeep`（第 43 項動工前快照 `83a5f62` 一併 commit），現在 git 還原不回來，新 clone 沒有該目錄時殼 jar 能否建置未驗證。`im_acct_insp_web\README.md` 第 32 行「平時只有 `.gitkeep`」同樣過時。第 43 項 test-runner 發現 | 2026-10-12 | — |
+| 44 | `SETUP.md` 第 71 行寫 `npm run build` 會清掉 `im_acct_insp_web\src\frontend\.gitkeep`、要用 `git checkout` 還原，且「該目錄只有 `.gitkeep` 時殼 jar 也能建置」；但使用者已確認刪除該 `.gitkeep`（第 43 項動工前快照 `83a5f62` 一併 commit），現在 git 還原不回來，新 clone 沒有該目錄時殼 jar 能否建置未驗證。`im_acct_insp_web\README.md` 第 32 行「平時只有 `.gitkeep`」同樣過時。第 43 項 test-runner 發現。補充（第 46 項 S3 審查，2026-10-13）：`im_acct_insp_web\im_acct_insp_web\.gitignore` 第 12 行 `!src/frontend/.gitkeep` 例外仍在但檔已不在 git；單純補回沒用，每次 `npm run build`（vite 清空輸出目錄）都會再刪，要一併改建置設定或改用其他方式保留目錄 | 2026-10-12 | — |
 | 45 | 處理中的按鈕沒有停用外觀：`src/assets/app.css` 第 84 行 `.btn-link` 無 `:disabled` 樣式（只有 `.btn:disabled` 半透明，第 79 行），附件檔名鈕與下載鈕在處理中停用時外觀、游標都不變，下載大檔時看不出在處理。改法一行 `.btn-link:disabled { opacity: .55; cursor: default; }`，但屬全站共用樣式，要目視確認其他畫面的停用連結鈕。第 43 項 code-reviewer 發現，使用者裁示（2026-10-12）留到下一批 | 2026-10-12 | — |
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
 | 47 | IM_ACCT_JOB_RUN 沒有清理機制；J03（每 15 分鐘）上線後每天約 96 列、一年約 3.5 萬列。第 46 項 architect 發現 | 2026-10-12 | — |
