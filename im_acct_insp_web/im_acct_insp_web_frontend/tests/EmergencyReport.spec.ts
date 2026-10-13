@@ -30,7 +30,8 @@ vi.mock('../src/api/emergency', () => ({
   getEmergency: vi.fn(),
   reportEmergency: vi.fn(),
   approveEmergency: vi.fn(),
-  returnEmergency: vi.fn()
+  returnEmergency: vi.fn(),
+  closeEmergency: vi.fn()
 }))
 vi.mock('../src/api/account', () => ({
   lookupAccounts: vi.fn()

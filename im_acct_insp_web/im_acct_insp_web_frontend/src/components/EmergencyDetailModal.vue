@@ -18,6 +18,10 @@
   變更說明: BACKLOG 第 46 項 S5 回合 2：底部加「回報」（申請人是我的有效身分、尚未回報、尚未處理；S4-⑬ 不需 EMG_APPLY），
             開 EmergencyReportModal；回報成功或 409 時關回報彈窗、重載明細並 emit changed；
             回報彈窗開著時忽略主彈窗關閉（審查第 1 項：鍵盤可摸到底下的關閉鈕）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S6 回合 2：底部加「異常結案」（EMG_DECIDE、已退回、尚未結案；裁示⑥），開 EmergencyCloseModal（S6-④）；
+            結案成功或 409 時與回報同一處理（關子彈窗、重載明細、emit changed）；結案彈窗開著時同樣忽略主彈窗關閉
 -->
 <template>
   <BaseModal :title="`緊急存取 — ${emgId}`" :sub="subText" wide @close="closeMain">
@@ -95,6 +99,7 @@
         <button type="button" class="btn btn-warn act-return" :disabled="busy" @click="openReturn">退回</button>
         <button type="button" class="btn btn-primary act-approve" :disabled="busy || !d.reportTypeCode" @click="confirmApprove = true">補核准</button>
       </template>
+      <button v-if="canClose" type="button" class="btn btn-primary act-close-case" :disabled="busy" @click="closingCase = true">異常結案</button>
     </template>
   </BaseModal>
 
@@ -116,12 +121,14 @@
     </template>
   </BaseModal>
 
-  <EmergencyReportModal v-if="d && reporting" :emg="d" @close="reporting = false" @done="onReported" />
+  <EmergencyReportModal v-if="d && reporting" :emg="d" @close="reporting = false" @done="onSubDone" />
+  <EmergencyCloseModal v-if="d && closingCase" :emg="d" @close="closingCase = false" @done="onSubDone" />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
+import EmergencyCloseModal from './EmergencyCloseModal.vue'
 import EmergencyReportModal from './EmergencyReportModal.vue'
 import { approveEmergency, getEmergency, returnEmergency } from '../api/emergency'
 import { errorMessage, errorStatus } from '../api/errors'
@@ -145,7 +152,7 @@ const MSG_REASON = '請填寫退回原因'
 const MSG_REASON_LEN = `退回原因不可超過 ${REASON_MAX} 字`
 
 const props = defineProps<{ emgId: string }>()
-/** changed：補核准或退回成功（含 409 後重載），讓呼叫端重查清單 */
+/** changed：補核准、退回、回報、異常結案成功（含 409 後重載），讓呼叫端重查清單 */
 const emit = defineEmits<{ close: []; changed: [] }>()
 const { toast } = useToast()
 const { can, me } = useSession()
@@ -157,6 +164,8 @@ const confirmApprove = ref(false)
 const returning = ref(false)
 const returnReason = ref('')
 const reporting = ref(false)
+/** 異常結案彈窗開著（不叫 closing：與「關閉彈窗」一字兩義） */
+const closingCase = ref(false)
 
 const subText = computed(() => (d.value ? `狀態：${label(EMG_STATE_LABEL, d.value.emgStateCode)}` : ''))
 /** 處理時間晚於補核准期限（D14：逾期後仍可處理，照實標示）；兩者同為 yyyy-MM-dd HH:mm:ss，可直接字串比較 */
@@ -168,6 +177,8 @@ const canReport = computed(() => {
   const x = d.value
   return !!x && !!me.value && me.value.userId === x.applyBy && !x.reportTypeCode && !x.decideCode
 })
+/** 有 EMG_DECIDE、已退回、尚未結案才能異常結案（裁示⑥）；後端同樣驗證 */
+const canClose = computed(() => can('EMG_DECIDE') && !!d.value && d.value.decideCode === 'RETURN' && !d.value.closeDate)
 /** 字數按字元（碼點）算、去頭尾空白，與後端一致 */
 const reasonCount = computed(() => [...returnReason.value.trim()].length)
 
@@ -209,10 +220,10 @@ function openReturn(): void {
 
 /**
  * 請求送出中不關主彈窗：元件卸載後 Vue 會丟掉 emit，清單就收不到 changed。
- * 回報彈窗開著時也不關：它的送出中旗標是自己的，滑鼠點不到底下的主彈窗，但鍵盤 Tab 摸得到關閉鈕
+ * 回報、結案彈窗開著時也不關：它們的送出中旗標是自己的，滑鼠點不到底下的主彈窗，但鍵盤 Tab 摸得到關閉鈕
  */
 function closeMain(): void {
-  if (busy.value || reporting.value) return
+  if (busy.value || reporting.value || closingCase.value) return
   emit('close')
 }
 
@@ -247,9 +258,10 @@ async function run(action: () => Promise<unknown>, okMsg: string): Promise<void>
   }
 }
 
-/** 回報成功或 409：關回報彈窗、重載明細並通知清單；重載期間同樣不讓主彈窗關閉 */
-async function onReported(): Promise<void> {
+/** 回報或結案成功、或 409：關該子彈窗、重載明細並通知清單；重載期間同樣不讓主彈窗關閉 */
+async function onSubDone(): Promise<void> {
   reporting.value = false
+  closingCase.value = false
   busy.value = true
   try {
     await load()

@@ -5,9 +5,21 @@
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S5：加回報 reportEmergency、補核准 approveEmergency、退回 returnEmergency（都帶 versionNo 樂觀鎖）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：加異常結案 closeEmergency
 // ============================================================
 import http from './http'
-import type { Emg, EmgDetail, EmgIdResult, EmgPayload, EmgQuery, EmgReportPayload, EmgVersionResult } from '../types/emergency'
+import type {
+  Emg,
+  EmgClosePayload,
+  EmgDetail,
+  EmgIdResult,
+  EmgPayload,
+  EmgQuery,
+  EmgReportPayload,
+  EmgVersionResult
+} from '../types/emergency'
 
 function base(emgId: string): string {
   return `/emergencies/${encodeURIComponent(emgId)}`
@@ -46,4 +58,9 @@ export function approveEmergency(emgId: string, versionNo: number): Promise<EmgV
 /** 主管退回：POST /emergencies/{id}/return（EMG_DECIDE；原因必填 500 字內） */
 export function returnEmergency(emgId: string, versionNo: number, reason: string): Promise<EmgVersionResult> {
   return http.post<EmgVersionResult>(`${base(emgId)}/return`, { versionNo, reason }).then(r => r.data)
+}
+
+/** 主管異常結案：POST /emergencies/{id}/close（EMG_DECIDE；只限已退回且未結案，409 E08＝已結案或版本不符） */
+export function closeEmergency(emgId: string, payload: EmgClosePayload): Promise<EmgVersionResult> {
+  return http.post<EmgVersionResult>(`${base(emgId)}/close`, payload).then(r => r.data)
 }

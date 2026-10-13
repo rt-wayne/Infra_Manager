@@ -15,6 +15,9 @@
 //           清單收到 changed 重查；API：report／approve／return 路徑與本文
 //           S5 審查：退回原因字數按碼點（501 個 emoji 擋、500 個可送）；退回 409 同樣關原因框並重載；
 //           子彈窗取消只關子彈窗、不 emit close；送出中主、子彈窗的關閉都被忽略
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6 回合 2：mock 補 closeEmergency；退回成功重載後出現異常結案鈕、退回鈕消失
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -49,7 +52,8 @@ vi.mock('../src/api/emergency', () => ({
   getEmergency: vi.fn(),
   reportEmergency: vi.fn(),
   approveEmergency: vi.fn(),
-  returnEmergency: vi.fn()
+  returnEmergency: vi.fn(),
+  closeEmergency: vi.fn()
 }))
 
 const listMock = vi.mocked(listEmergencies)
@@ -633,6 +637,10 @@ describe('緊急存取詳情彈窗', () => {
     expect(w.find('.confirm-return').exists()).toBe(false)
     expect(w.find('.sec-decide').text()).toContain('退回：事由不足')
     expect(w.find('.sec-close').text()).toBe('尚未結案')
+    // 退回後重載：退回／補核准鈕消失，改出現異常結案鈕（S6）
+    expect(w.find('.act-return').exists()).toBe(false)
+    expect(w.find('.act-approve').exists()).toBe(false)
+    expect(w.find('.act-close-case').exists()).toBe(true)
     expect(w.emitted('changed')).toHaveLength(1)
     w.unmount()
   })

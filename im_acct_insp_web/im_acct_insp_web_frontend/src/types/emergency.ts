@@ -10,6 +10,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S5 回合 2：新增帳號選取器已加入列 EmgPickedAcct
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：新增異常結案本文 EmgClosePayload
 // ============================================================
 
 /** 緊急存取狀態（計算值）：待補核准／逾期未補核准／已補核准／已退回／已退回（已結案） */
@@ -117,7 +120,15 @@ export interface EmgReportPayload {
   affectAccts: EmgAffectInput[]
 }
 
-/** 回報、補核准、退回的回傳：單號與操作後的新版本 */
+/** POST /emergencies/{id}/close 本文：結案說明兩種都必填；NO_CHANGE 不帶帳號；CHANGED 帳號 1～20 個 */
+export interface EmgClosePayload {
+  closeResultCode: 'NO_CHANGE' | 'CHANGED'
+  closeDescr: string
+  versionNo: number
+  affectAccts: EmgAffectInput[]
+}
+
+/** 回報、補核准、退回、異常結案的回傳：單號與操作後的新版本 */
 export interface EmgVersionResult {
   emgId: string
   versionNo: number
