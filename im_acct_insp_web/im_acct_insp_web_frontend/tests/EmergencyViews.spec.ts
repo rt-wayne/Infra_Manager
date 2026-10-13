@@ -18,6 +18,10 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6 回合 2：mock 補 closeEmergency；退回成功重載後出現異常結案鈕、退回鈕消失
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：清單讀網址 ?state=（合法值當預設篩選、首查即帶、日期維持全部；不合法視為全部，皆只查一次）；
+//           PENDING 文字改「待補核准（未逾期）」
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -103,8 +107,8 @@ describe('緊急存取清單', () => {
     vi.useRealTimers()
   })
 
-  async function mountList(): Promise<VueWrapper> {
-    const router = await makeRouter('/emergency')
+  async function mountList(path = '/emergency'): Promise<VueWrapper> {
+    const router = await makeRouter(path)
     const w = mount(EmergencyListView, { global: { plugins: [router] } })
     await flushPromises()
     return w
@@ -117,7 +121,7 @@ describe('緊急存取清單', () => {
     expect(rows).toHaveLength(2)
     const cells = rows[0].findAll('td').map(c => c.text())
     expect(cells.slice(0, 7)).toEqual([
-      'EM20261013-001', '2026-10-13 09:30', 'Kevin (李凱鈞)', '資料庫帳號', 'ERP 正式機 DB 的 sys 帳號', '2026-10-14 09:30', '待補核准'
+      'EM20261013-001', '2026-10-13 09:30', 'Kevin (李凱鈞)', '資料庫帳號', 'ERP 正式機 DB 的 sys 帳號', '2026-10-14 09:30', '待補核准（未逾期）'
     ])
     expect(rows[1].find('.tag').text()).toBe('逾期未補核准')
     expect(rows[1].find('.tag').classes()).toContain('tag-priv')
@@ -162,6 +166,31 @@ describe('緊急存取清單', () => {
     await flushPromises()
     expect(listMock).toHaveBeenLastCalledWith({ keyword: '', stateCode: 'OVERDUE' })
     w.unmount()
+  })
+
+  it('網址帶 state（首頁卡導入）：下拉預設該值、首查即帶狀態碼且不帶日期；下拉有「未處理（含逾期）」', async () => {
+    for (const [state, text] of [['UNDECIDED', '未處理（含逾期）'], ['RETURNED', '已退回']]) {
+      listMock.mockClear()
+      const w = await mountList(`/emergency?state=${state}`)
+      expect(listMock).toHaveBeenCalledTimes(1)
+      expect(listMock).toHaveBeenCalledWith({ keyword: '', stateCode: state })
+      const sel = w.find('select[aria-label=狀態]').element as HTMLSelectElement
+      expect(sel.value).toBe(state)
+      expect(sel.selectedOptions[0].text).toBe(text)
+      expect((w.find('select[aria-label=送出日期區間]').element as HTMLSelectElement).value).toBe('all')
+      w.unmount()
+    }
+  })
+
+  it('網址 state 不是下拉有的值（含重複參數）：視為全部狀態', async () => {
+    for (const path of ['/emergency?state=DONE', '/emergency?state=undecided', '/emergency?state=UNDECIDED&state=RETURNED']) {
+      listMock.mockClear()
+      const w = await mountList(path)
+      expect(listMock).toHaveBeenCalledTimes(1)
+      expect(listMock).toHaveBeenCalledWith({ keyword: '', stateCode: '' })
+      expect((w.find('select[aria-label=狀態]').element as HTMLSelectElement).value).toBe('')
+      w.unmount()
+    }
   })
 
   it('查詢失敗只 toast（顯示後端訊息）；成功回空陣列才顯示查無資料', async () => {
@@ -453,7 +482,7 @@ describe('緊急存取詳情彈窗', () => {
 
   it('待補核准：申請內容齊全、尚未回報、尚未處理，沒有異常結案段與受影響帳號', async () => {
     const w = await mountDetail(detail())
-    expect(w.find('.sub').text()).toBe('狀態：待補核准')
+    expect(w.find('.sub').text()).toBe('狀態：待補核准（未逾期）')
     expect(w.text()).toContain('月結批次卡住')
     expect(w.find('.sec-report').text()).toBe('尚未回報')
     expect(w.find('.sec-decide').text()).toBe('尚未處理')

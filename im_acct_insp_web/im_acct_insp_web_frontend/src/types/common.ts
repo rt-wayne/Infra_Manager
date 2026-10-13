@@ -13,6 +13,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 40 項：Me 加 deptName（有效身分的部門名稱，新增申請帶入申請單位）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：HomeStats 加 emgUndecided、emgReturned（首頁緊急存取兩張卡）
 // ============================================================
 
 /** 後端錯誤回應本文：{ message } */
@@ -103,6 +106,10 @@ export interface HomeStats {
   acctPriv: number
   inspThisMonth: number
   inspExcptThisMonth: number
+  /** 緊急存取待補核准（尚未處理，含逾期；看全部，不依登入者過濾） */
+  emgUndecided: number
+  /** 緊急存取異常待追蹤（已退回、尚未結案） */
+  emgReturned: number
 }
 
 /** GET /home/expiring 一列（鈴鐺；含已逾期，daysLeft 已過為負數） */

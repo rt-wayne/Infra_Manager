@@ -14,6 +14,11 @@
 // 變更說明: BACKLOG 第 46 項 S3：緊急存取狀態 EMG_STATE_LABEL／EMG_STATE_FILTER（五種計算值）、
 //           回報／處理／結案發現代碼文字；stateTagClass 加 PENDING（黃）、OVERDUE（紅）、RETURNED（橘）
 //           （APPROVED 與帳號、申請單共用綠色；CLOSED 走預設灰色）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：EMG_STATE_FILTER 加「未處理（含逾期）」（UNDECIDED＝PENDING＋OVERDUE），
+//           讓首頁卡帶 UNDECIDED 進清單時下拉有對應文字；新增 EMG_UNDECIDED、EMG_RETURNED 常數；
+//           PENDING 文字改「待補核准（未逾期）」，與首頁卡「緊急存取待補核准」（含逾期）區分（審查 ①C）
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
 
@@ -119,16 +124,24 @@ export function stateTagClass(code: string): string {
 
 /** 緊急存取狀態（計算值 emgStateCode；不存欄位） */
 export const EMG_STATE_LABEL: Record<string, string> = {
-  PENDING: '待補核准',
+  // 加「（未逾期）」：與首頁卡「緊急存取待補核准」（含逾期）區分，避免同名不同筆數（S8 審查 ①C）
+  PENDING: '待補核准（未逾期）',
   OVERDUE: '逾期未補核准',
   APPROVED: '已補核准',
   RETURNED: '已退回',
   CLOSED: '已退回（已結案）'
 }
 
-/** 緊急存取清單狀態篩選（空＝全部） */
+/** 緊急存取清單篩選「尚未處理（含逾期）」＝PENDING＋OVERDUE（首頁「待補核准」卡導入用） */
+export const EMG_UNDECIDED = 'UNDECIDED'
+
+/** 緊急存取「已退回」（未結案）狀態碼（首頁「異常待追蹤」卡導入用） */
+export const EMG_RETURNED = 'RETURNED'
+
+/** 緊急存取清單狀態篩選（空＝全部；後端 EMG_STATE_FILTERS 同一組值） */
 export const EMG_STATE_FILTER: { value: string; label: string }[] = [
   { value: '', label: '全部狀態' },
+  { value: EMG_UNDECIDED, label: '未處理（含逾期）' },
   ...Object.entries(EMG_STATE_LABEL).map(([value, text]) => ({ value, label: text }))
 ]
 

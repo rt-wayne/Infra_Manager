@@ -9,6 +9,10 @@
   AI版本  : Claude Fable 5.1 (claude-fable-5-1)
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S5：詳情彈窗內補核准／退回成功後（changed）重查清單，狀態欄即時更新
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S8：網址 ?state= 為下拉有的值時當預設狀態篩選（首頁兩張卡導入：UNDECIDED／RETURNED）；
+            日期維持預設全部，筆數才會與首頁卡一致
 -->
 <template>
   <main>
@@ -80,7 +84,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import EmergencyDetailModal from '../components/EmergencyDetailModal.vue'
 import PagerBar from '../components/PagerBar.vue'
 import ToastHost from '../components/ToastHost.vue'
@@ -96,8 +100,16 @@ import { EMG_STATE_FILTER, EMG_STATE_LABEL, label, stateTagClass } from '../util
 const { toast } = useToast()
 const { can } = useSession()
 
+const route = useRoute()
+
+/** 網址 ?state= 是下拉有的值才當預設篩選（首頁卡導入），其餘一律視為全部 */
+function initialState(): string {
+  const v = route.query.state
+  return typeof v === 'string' && EMG_STATE_FILTER.some(o => o.value === v) ? v : ''
+}
+
 const keyword = ref('')
-const stateCode = ref('')
+const stateCode = ref(initialState())
 const dateRange = ref('all')
 const dateFrom = ref('')
 const dateTo = ref('')
