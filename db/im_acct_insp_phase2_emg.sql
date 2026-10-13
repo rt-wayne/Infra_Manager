@@ -21,7 +21,7 @@
 --       VERSION_NO 的 VERSION 為 7 碼，沿用第一階段既有欄名（施工計畫裁示 ㉘）；
 --       旗標 IS_ 前綴；每表最後固定五欄。
 -- 注意：本檔不含任何帳密、主機位址。被授權帳號 AP_USER 是殼 jar 的連線帳號名，不是機密。
--- 施工計畫：backlog/46-緊急存取.md 第 3 節。
+-- 施工計畫：backlog/46-緊急存取.md 第 3 節（第 46 項已結案、檔已刪除，用 git show 6d313e1:backlog/46-緊急存取.md 查看）。
 -- ============================================================================
 
 SET DEFINE OFF
@@ -206,7 +206,7 @@ COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾�
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.ERR_MSG IS '錯誤摘要（失敗筆的帳號或單號與例外類別）';
 
 -- ===== PUBLIC SYNONYM 與授權給 AP_USER（synonym 已存在就略過；GRANT 重覆執行無害）
--- 依 2026-10-13 以 RD_USER 查詢的結果（backlog/46-緊急存取.md 3.6）：第一階段 21 張表與 5 個序列全部是
+-- 依 2026-10-13 以 RD_USER 查詢的結果（git 歷史 6d313e1 的 backlog/46-緊急存取.md 3.6）：第一階段 21 張表與 5 個序列全部是
 -- PUBLIC synonym（同名、指向 RD_USER），被授權帳號是 AP_USER；RD_USER 本身有 CREATE PUBLIC SYNONYM 權限，不需 DBA。
 -- 權限採最小範圍（使用者裁示 2026-10-13 ①B）：IM_EMG_ACCESS 只有狀態更新、無刪除 → SELECT／INSERT／UPDATE；
 -- IM_EMG_AFFECT_ACCT 只增不改 → SELECT／INSERT。第一階段每張表四種全給是沒有紀錄的舊做法，不延續；
