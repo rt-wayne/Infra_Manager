@@ -22,6 +22,9 @@ package com.mpx.im_acct_insp.support;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S2：加 EmgDao（mock）與 EmergencyService（真）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7：jobService() 建構子多傳 EmgDao（J03 逾期掃描）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -407,8 +410,8 @@ public class TestFixture {
 	}
 
 	public JobService jobService(boolean allowBaseDate) {
-		return new JobService(acctDao, acctHistDao, jobRunDao, notifyLogDao, notificationService, permissionService, tx, clock,
-				true, allowBaseDate);
+		return new JobService(acctDao, acctHistDao, jobRunDao, notifyLogDao, emgDao, notificationService, permissionService, tx,
+				clock, true, allowBaseDate);
 	}
 
 	// ------------------------------------------------------------

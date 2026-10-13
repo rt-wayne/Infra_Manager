@@ -40,6 +40,12 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 46 項 S4b-2：emgEvent 加 EMG_RETURN（S4-⑪）——只寄原申請人，主旨「已退回」，本文＝送出信 8 列＋
 //           處理人（有效身分姓名）、退回原因、回報結果（未回報／無異動／有異動：回報說明；代碼不明時標示不明），信末提醒後續由主管異常結案；
 //           連結仍為「緊急存取」。寄失敗沿用 sendAll（退回照常成功、FAIL 紀錄，S4-⑫）。emgRows 抽出共用列清單
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7（S7-⑨）：新增 emgOverdue（J03 呼叫）——以排程基準時間點重讀該單，已處理（DECIDE_CODE 非空）
+//           或不存在則回 0 不寄；寄給所有 EMG_DECIDE 持有人，主旨「已逾期未補核准（期限 …）」，本文＝送出信 8 列＋回報結果＋
+//           提醒「補核准須申請人先回報；逾期後仍可補核准或退回」；參照 EMG／單號、CREATE_BY＝SYSTEM；
+//           回寫入筆數（0＝已處理、不存在、無收件人或紀錄全部寫入失敗；SMTP 寄送失敗寫 FAIL 紀錄、仍計入）
 // ============================================================
 
 import java.time.Clock;
@@ -191,7 +197,7 @@ public class NotificationService {
 	// ------------------------------------------------------------
 
 	/**
-	 * @param event    EMG_SUBMIT／EMG_RETURN（EMG_OVERDUE 待 S7）
+	 * @param event    EMG_SUBMIT／EMG_RETURN（EMG_OVERDUE 由排程走 emgOverdue）
 	 * @param emgId    緊急存取單號（重新讀取提交後的內容）
 	 * @param createBy 寫通知紀錄的 CREATE_BY（實際操作人）
 	 */
@@ -222,6 +228,38 @@ public class NotificationService {
 			log.error("通知失敗 event={} emgId={} 例外={}", event, emgId, ex.getClass().getSimpleName());
 		}
 	}
+
+	/**
+	 * EMG_OVERDUE（J03 逾期通知，S7-⑨）：以排程基準時間點 base 重讀該單；不存在或主管已處理（補核准或退回）則不寄、回 0。
+	 * 收件人＝所有 EMG_DECIDE 持有人；參照 EMG／單號、CREATE_BY＝SYSTEM。
+	 *
+	 * @return 寫入的通知紀錄筆數（0＝已處理、不存在、沒有收件人或紀錄全部寫入失敗；SMTP 寄失敗寫 FAIL 紀錄仍計入；呼叫端據此記 PARTIAL）
+	 */
+	public int emgOverdue(String emgId, LocalDateTime base) {
+		try {
+			Emg e = emgDao.findById(emgId, base);
+			if (e == null || e.getDecideCode() != null) {
+				log.info("逾期通知略過（已處理或不存在）emgId={}", emgId);
+				return 0;
+			}
+			String subject = "【緊急存取】" + emgId + " 已逾期未補核准（期限 " + dateTimeText(e.getDueDate()) + "）";
+			return sendAll(AcctConst.EV_EMG_OVERDUE, AcctConst.REF_EMG, emgId, withPerm(AcctConst.PERM_EMG_DECIDE), subject,
+					html.page(subject, emgOverdueBody(e), MailHtml.PATH_EMG), AcctConst.SYSTEM_USER);
+		} catch (RuntimeException ex) {
+			log.error("通知失敗 event={} emgId={} 例外={}", AcctConst.EV_EMG_OVERDUE, emgId, ex.getClass().getSimpleName());
+			return 0;
+		}
+	}
+
+	/** 逾期信本文：送出信 8 列＋回報結果，信末提醒處理方式（S7-⑨） */
+	static String emgOverdueBody(Emg e) {
+		List<String[]> rows = emgRows(e);
+		rows.add(new String[] { "回報結果", reportResultText(e) });
+		return MailHtml.table(rows) + MailHtml.para(EMG_OVERDUE_FOOTER);
+	}
+
+	/** 逾期信信末提醒 */
+	static final String EMG_OVERDUE_FOOTER = "補核准須申請人先回報；逾期後仍可補核准或退回";
 
 	/** 緊急存取送出信本文的兩欄表（HTML 片段，值已跳脫） */
 	static String emgBody(Emg e) {

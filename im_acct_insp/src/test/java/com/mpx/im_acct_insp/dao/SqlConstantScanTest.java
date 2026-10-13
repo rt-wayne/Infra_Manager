@@ -33,6 +33,10 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6：API 數 38 → 39（/close）；EmgDao.UPDATE_CLOSE 樂觀鎖、限已退回且未結案
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7：EmgDao.FIND_OVERDUE_UNNOTIFIED 須以計算狀態 OVERDUE 篩選（同 STATE_EXPR、:now 綁參數）、
+//           以 NOT EXISTS 通知紀錄（:eventCode、EMG）排除已寄過的單
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -171,6 +175,11 @@ class SqlConstantScanTest {
 		assertThat(EmgDao.FIND_LIST).contains(EmgDao.STATE_EXPR).contains(":applyBy IS NULL OR X.APPLY_BY = :applyBy");
 		assertThat(EmgDao.FIND_BY_ID).contains(EmgDao.STATE_EXPR).contains("E.EMG_ID = :emgId");
 		assertThat(EmgDao.INSERT_EMG).contains("VERSION_NO").contains(":dueDate").doesNotContain("DECIDE_CODE");
+		// S7：J03 逾期掃描與列表同口徑（計算狀態 OVERDUE、:now 綁基準時間點），每案一次靠通知紀錄 NOT EXISTS
+		assertThat(EmgDao.FIND_OVERDUE_UNNOTIFIED).contains(EmgDao.STATE_EXPR).contains("X.EMG_STATE_CODE = 'OVERDUE'")
+				.contains("NOT EXISTS (SELECT 1 FROM IM_ACCT_NOTIFY_LOG N").contains("N.EVENT_CODE = :eventCode")
+				.contains("N.REF_TYPE_CODE = 'EMG'").contains("N.REF_ID = X.EMG_ID").contains("ORDER BY X.DUE_DATE, X.EMG_ID")
+				.doesNotContain("SYSDATE").doesNotContain("DECIDE_CODE IS NULL AND E.DUE_DATE < :now");
 	}
 
 	@Test

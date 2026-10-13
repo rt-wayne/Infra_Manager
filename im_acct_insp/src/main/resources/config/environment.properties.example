@@ -16,6 +16,9 @@
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 ### 修改日期: 2026-10-11
 ### 變更說明: BACKLOG 第 27 項：新增 im.acct.insp.mail.site-url（信末「前往系統」連結）
+### AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+### 修改日期: 2026-10-13
+### 變更說明: BACKLOG 第 46 項 S7：新增 im.acct.insp.job.j03.cron（緊急存取逾期通知，預設每 15 分鐘）；allow-base-date 註解補 J03 收時間點
 ### 首次建置：複製本檔為 environment.properties 後填值（environment.properties 不進 git）
 ###################################
 
@@ -36,7 +39,10 @@ im.acct.insp.job.enabled=true
 im.acct.insp.job.j01.cron=0 10 0 * * *
 ### J02 每週彙總；每日觸發、每週只寄一次；預設每日 08:00
 im.acct.insp.job.j02.cron=0 0 8 * * *
+### J03 緊急存取逾期通知；每次掃描逾期未補核准且尚未寄過的單、每案一次；預設每 15 分鐘；設 - 可單獨停用
+im.acct.insp.job.j03.cron=0 */15 * * * *
 ### 測試環境設 true 才能以 baseDate 手動執行（否則 400「此環境不允許指定基準日」）；預設 false
+### J01／J02 的 baseDate 收日期（yyyy-MM-dd），J03 收時間點（yyyy-MM-dd HH:mm:ss，只給日期會 400）
 im.acct.insp.job.allow-base-date=false
 
 ###################################

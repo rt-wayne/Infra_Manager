@@ -35,6 +35,9 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6：歷史動作 EMG_CLOSE_MODIFY、自核標籤「自行結案」（S6-③）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7：排程代碼加 J03（緊急存取逾期通知）並納入 JOB_CODES
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -152,7 +155,9 @@ public final class AcctConst {
 	// 排程 JOB_CODE、RESULT_CODE
 	public static final String JOB_J01 = "J01";
 	public static final String JOB_J02 = "J02";
-	public static final List<String> JOB_CODES = List.of(JOB_J01, JOB_J02);
+	/** J03 緊急存取逾期通知（BACKLOG 第 46 項 S7）：基準為時間點（到秒），J01／J02 為日期 */
+	public static final String JOB_J03 = "J03";
+	public static final List<String> JOB_CODES = List.of(JOB_J01, JOB_J02, JOB_J03);
 	public static final String JR_RUNNING = "RUNNING";
 	public static final String JR_SUCCESS = "SUCCESS";
 	public static final String JR_PARTIAL = "PARTIAL";

@@ -38,6 +38,14 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 46 項 S4b-2：新增緊急存取退回通知測試——只寄原申請人、主旨「已退回」、本文含送出信 8 列與
 //           處理人（有效身分姓名）／退回原因／回報結果（有異動帶回報說明、無異動、未回報、不明代碼）、信末提醒句、值跳脫、
 //           連結到緊急存取頁、通知紀錄事件 EMG_RETURN；申請人無 Email 記 SKIP 不寄
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7 回合 1：J03 緊急存取逾期通知——逐張寄、AFFECTED_CNT＝有寫入紀錄的單數、不碰 J01／J02 查詢（陷阱 A）、
+//           寫入 0 筆記 PARTIAL「單號:未寫入通知紀錄」並寄 JOB_FAIL、單張例外記錄後繼續、查詢失敗整體 FAIL、
+//           手動 baseDate 收時間點（只給日期 400 BAD_DATE_TIME）、排程基準為現在時刻（到秒）、每個排程代碼都有鎖（陷阱 B）、
+//           JOB_CODES 外的代碼丟 IllegalArgumentException、cron 預設每 15 分鐘；BASE_DATE 改收 LocalDateTime（J01／J02 仍寫 00:00）；
+//           原「J03 回 404」改用 J04；通知：emgOverdue 寄 EMG_DECIDE 持有人、主旨含期限、本文 8 列＋回報結果＋提醒句、
+//           以基準時間點重讀、已處理／查無／例外回 0 不寄、紀錄 EMG_OVERDUE／EMG／CREATE_BY SYSTEM
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -55,6 +63,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -64,7 +73,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,8 +91,10 @@ import org.springframework.http.HttpStatus;
 import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.ApiException;
+import com.mpx.im_acct_insp.common.AppConfig;
 import com.mpx.im_acct_insp.model.Acct;
 import com.mpx.im_acct_insp.model.AcctReqDetail;
+import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.JobRunResult;
 import com.mpx.im_acct_insp.model.Recipient;
@@ -137,7 +150,7 @@ class JobAndNotifyTest {
 			assertThat(h.getResultDescr()).contains("2026-10-06");
 		});
 		assertThat(fx.txm.commits).isEqualTo(2);
-		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J01"), eq(HANK), eq(TODAY), any(), eq(HANK));
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J01"), eq(HANK), eq(TODAY.atStartOfDay()), any(), eq(HANK));
 		verify(fx.jobRunDao).finish(eq(77L), eq("SUCCESS"), eq(3), isNull(), any(), eq(HANK));
 		verify(fx.notificationService, never()).jobFail(any(), any(), any(), any());
 	}
@@ -286,13 +299,16 @@ class JobAndNotifyTest {
 	@Test
 	void 手動觸發_權限_未知代碼_基準日開關() {
 		assertStatus(() -> job.runManual(id(KEVIN), "J01", null), HttpStatus.FORBIDDEN, AcctMsg.P01);
-		assertStatus(() -> job.runManual(id(HANK), "J03", null), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> job.runManual(id(HANK), "J04", null), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		JobService noBase = fx.jobService(false);
 		assertStatus(() -> noBase.runManual(id(HANK), "J01", "2026-10-09"), HttpStatus.BAD_REQUEST, AcctMsg.E17);
 		assertStatus(() -> job.runManual(id(HANK), "J01", "2026/10/09"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE);
+		// J01／J02 只收日期：帶時間也是格式錯
+		assertStatus(() -> job.runManual(id(HANK), "J01", "2026-10-09 10:00:00"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE);
 		job.runManual(id(HANK), "J01", "2026-10-09");
 		verify(fx.acctDao).findToExpire(LocalDate.of(2026, 10, 9));
-		verify(fx.jobRunDao).insertRunning(anyLong(), eq("J01"), eq(HANK), eq(LocalDate.of(2026, 10, 9)), any(), any());
+		// BASE_DATE 寫基準日 00:00（S7-① 改收時間點後值不變）
+		verify(fx.jobRunDao).insertRunning(anyLong(), eq("J01"), eq(HANK), eq(LocalDate.of(2026, 10, 9).atStartOfDay()), any(), any());
 	}
 
 	@Test
@@ -325,12 +341,123 @@ class JobAndNotifyTest {
 
 	@Test
 	void 排程觸發_關閉時不執行_由排程觸發RUN_BY為空() {
-		JobService off = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.notificationService,
+		JobService off = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
 				fx.permissionService, fx.tx, fx.clock, false, false);
 		off.scheduledJ01();
+		off.scheduledJ03();
 		verify(fx.jobRunDao, never()).nextId();
 		job.scheduledJ02();
-		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J02"), isNull(), eq(TODAY), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J02"), isNull(), eq(TODAY.atStartOfDay()), any(), eq(AcctConst.SYSTEM_USER));
+	}
+
+	// ------------------------------------------------------------
+	// J03 緊急存取逾期通知（BACKLOG 第 46 項 S7）
+	// ------------------------------------------------------------
+
+	@Test
+	void J03_逐張寄逾期信_計數為有寫入紀錄的單數_查詢與寄信同一基準時間點_不碰J01J02() {
+		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any()))
+				.thenReturn(List.of(overdueEmg("EA20261006-001"), overdueEmg("EA20261006-002")));
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(2);
+
+		JobRunResult r = job.runManual(id(HANK), "J03", null);
+		assertThat(r.getRunId()).isEqualTo(77L);
+		assertThat(r.getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+		assertThat(r.getAffectedCnt()).isEqualTo(2);
+		// 查詢、寄信、BASE_DATE 都是同一個基準時間點（現在時刻，不是 00:00）
+		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, NOW);
+		verify(fx.notificationService).emgOverdue("EA20261006-001", NOW);
+		verify(fx.notificationService).emgOverdue("EA20261006-002", NOW);
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), eq(HANK), eq(NOW), any(), eq(HANK));
+		verify(fx.jobRunDao).finish(eq(77L), eq("SUCCESS"), eq(2), isNull(), any(), eq(HANK));
+		verify(fx.notificationService, never()).jobFail(any(), any(), any(), any());
+		// 陷阱 A：分派不得落到 J02（原本「不是 J01 就跑 J02」）
+		verify(fx.acctDao, never()).findToExpire(any());
+		verify(fx.acctDao, never()).findExpiredAll();
+		verify(fx.notifyLogDao, never()).countByEventRef(eq(AcctConst.EV_WEEKLY_SUMMARY), any(), any());
+		verify(fx.notificationService, never()).weeklySummary(any(), any(), any());
+		verify(fx.notificationService, never()).expiryEvent(any(), any(), any());
+	}
+
+	@Test
+	void J03_寫入0筆記PARTIAL並寄排程失敗信_單張例外記錄後繼續_查詢失敗整體FAIL() {
+		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any()))
+				.thenReturn(List.of(overdueEmg("EA20261006-001"), overdueEmg("EA20261006-002"), overdueEmg("EA20261006-003")));
+		when(fx.notificationService.emgOverdue(eq("EA20261006-001"), any())).thenReturn(1);
+		// 無收件人、寄前重讀發現已處理、或全部寫紀錄失敗都回 0 → 記 PARTIAL，下次掃描再試
+		when(fx.notificationService.emgOverdue(eq("EA20261006-002"), any())).thenReturn(0);
+		when(fx.notificationService.emgOverdue(eq("EA20261006-003"), any())).thenThrow(new IllegalStateException("x"));
+
+		JobRunResult r = job.runManual(id(HANK), "J03", null);
+		assertThat(r.getResultCode()).isEqualTo(AcctConst.JR_PARTIAL);
+		assertThat(r.getAffectedCnt()).isEqualTo(1);
+		String err = "EA20261006-002:未寫入通知紀錄; EA20261006-003:IllegalStateException";
+		verify(fx.jobRunDao).finish(eq(77L), eq("PARTIAL"), eq(1), eq(err), any(), eq(HANK));
+		verify(fx.notificationService).jobFail("J03", 77L, AcctConst.JR_PARTIAL, err);
+
+		// 查詢本身失敗：整體 FAIL、0 筆、錯誤摘要為例外名稱
+		doThrow(new IllegalStateException("db")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		JobRunResult f = job.runManual(id(HANK), "J03", null);
+		assertThat(f.getResultCode()).isEqualTo(AcctConst.JR_FAIL);
+		assertThat(f.getAffectedCnt()).isZero();
+		verify(fx.jobRunDao).finish(eq(77L), eq("FAIL"), eq(0), eq("IllegalStateException"), any(), eq(HANK));
+		verify(fx.notificationService).jobFail("J03", 77L, AcctConst.JR_FAIL, "IllegalStateException");
+		verify(fx.notificationService, times(3)).emgOverdue(any(), any());
+	}
+
+	@Test
+	void J03_手動基準為時間點_只給日期400_時間點寫BASE_DATE並用於查詢_J02仍寫當天零時() {
+		assertStatus(() -> job.runManual(id(HANK), "J03", "2026-10-15"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE_TIME);
+		assertStatus(() -> job.runManual(id(HANK), "J03", "2026/10/15 10:00:00"), HttpStatus.BAD_REQUEST, AcctMsg.BAD_DATE_TIME);
+		JobService noBase = fx.jobService(false);
+		assertStatus(() -> noBase.runManual(id(HANK), "J03", "2026-10-15T10:00"), HttpStatus.BAD_REQUEST, AcctMsg.E17);
+		verify(fx.jobRunDao, never()).nextId();
+
+		// T 可換空白、可省秒（沿用巡檢時間的解析）
+		LocalDateTime base = LocalDateTime.of(2026, 10, 15, 10, 0);
+		job.runManual(id(HANK), "J03", "2026-10-15T10:00");
+		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, base);
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), eq(HANK), eq(base), any(), eq(HANK));
+		job.runManual(id(HANK), "J03", "2026-10-15 10:00:05");
+		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, base.plusSeconds(5));
+
+		job.runManual(id(HANK), "J02", "2026-10-15");
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J02"), eq(HANK), eq(LocalDate.of(2026, 10, 15).atStartOfDay()), any(),
+				eq(HANK));
+	}
+
+	@Test
+	void J03_排程觸發基準為現在時刻截到秒_每個排程代碼都有鎖_JOB_CODES外的代碼丟例外不跑任何排程() {
+		// 時鐘帶毫秒：BASE_DATE 與查詢的 :now 都截到秒（Oracle DATE 精度），寫入與查詢才會一致
+		Clock millis = Clock.fixed(NOW.plusNanos(123_456_789).atZone(AppConfig.ZONE).toInstant(), AppConfig.ZONE);
+		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
+				fx.permissionService, fx.tx, millis, true, true);
+		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001")));
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(1);
+		j.scheduledJ03();
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), isNull(), eq(NOW), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, NOW);
+		// 寄信端拿到的也是截過秒的同一值（寄前重讀用它，不能帶毫秒）
+		verify(fx.notificationService).emgOverdue("EA20261006-001", NOW);
+		j.runManual(id(HANK), "J03", null);
+		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), eq(HANK), eq(NOW), any(), eq(HANK));
+		verify(fx.notificationService, times(2)).emgOverdue("EA20261006-001", NOW);
+
+		// 陷阱 B：鎖表由 JOB_CODES 產生，每個代碼都拿得到鎖
+		for (String code : AcctConst.JOB_CODES) {
+			assertThat(job.run(code, NOW, HANK).getResultCode()).isEqualTo(AcctConst.JR_SUCCESS);
+			verify(fx.jobRunDao, atLeastOnce()).insertRunning(eq(77L), eq(code), eq(HANK), any(), any(), eq(HANK));
+		}
+		// JOB_CODES 外的代碼：明確丟例外，不寫執行紀錄、不跑任何排程
+		assertThatThrownBy(() -> job.run("J99", NOW, HANK)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("J99");
+		verify(fx.jobRunDao, never()).insertRunning(anyLong(), eq("J99"), any(), any(), any(), any());
+	}
+
+	/** 逾期掃描查到的單（J03 只用單號） */
+	static Emg overdueEmg(String emgId) {
+		Emg e = new Emg();
+		e.setEmgId(emgId);
+		return e;
 	}
 
 	// ------------------------------------------------------------
@@ -472,6 +599,9 @@ class JobAndNotifyTest {
 		assertThat(s.zone()).isEqualTo("Asia/Taipei");
 		var s2 = JobService.class.getMethod("scheduledJ02").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
 		assertThat(s2.cron()).isEqualTo("${im.acct.insp.job.j02.cron:0 0 8 * * *}");
+		var s3 = JobService.class.getMethod("scheduledJ03").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
+		assertThat(s3.cron()).isEqualTo("${im.acct.insp.job.j03.cron:0 */15 * * * *}");
+		assertThat(s3.zone()).isEqualTo("Asia/Taipei");
 		assertThat(new ApiException(HttpStatus.CONFLICT, AcctMsg.E16).getStatus()).isEqualTo(HttpStatus.CONFLICT);
 	}
 
@@ -719,6 +849,80 @@ class JobAndNotifyTest {
 		verify(sender, never()).send(any(), any(), any());
 		verify(fx.notifyLogDao).insert(eq("EMG_RETURN"), eq("EMG"), eq("EA20261007-004"), eq(KEVIN), isNull(), eq("SKIP"),
 				isNull(), any(), eq(HANK));
+	}
+
+	@Test
+	void 緊急存取_逾期通知寄給補核准權限持有人_主旨含期限_本文8列加回報結果與提醒_以基準時間點重讀_紀錄EMG_OVERDUE由系統建立() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		EmgDetail e = returnedEmg("EA20261006-001");
+		// 尚未處理（逾期信只寄給還沒補核准也沒退回的單）
+		e.setDecideCode(null);
+		e.setDecideBy(null);
+		e.setDecideByName(null);
+		e.setDecideDate(null);
+		e.setReturnReason(null);
+		e.setReportTypeCode(AcctConst.EMG_REPORT_NONE);
+		LocalDateTime base = NOW.plusHours(25);
+		when(fx.emgDao.findById("EA20261006-001", base)).thenReturn(e);
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE))
+				.thenReturn(List.of(rcpt("0000004", "t@example.com"), rcpt("0000005", null)));
+
+		int written = n.emgOverdue("EA20261006-001", base);
+		assertThat(written).isEqualTo(2);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("t@example.com"), eq("【緊急存取】EA20261006-001 已逾期未補核准（期限 2026-10-08 10:30）"),
+				body.capture());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				// 送出信 8 列照舊
+				.contains("資料庫", "prod-db &lt;root&gt;", "凱文 &amp; 測試", "第一行<br>&lt;i&gt;斜體&lt;/i&gt;", "4 小時",
+						"2026-10-07 10:30", "2026-10-08 10:30", "補核准期限")
+				.contains("回報結果", "無異動")
+				.contains("<p>補核准須申請人先回報；逾期後仍可補核准或退回</p>")
+				// 沒有退回信才有的列
+				.doesNotContain("處理人", "退回原因", "<root>")
+				.contains("<a href=\"http://h/ctx/#/emergency\"", "前往「緊急存取」", FOOTER);
+		// 以排程的基準時間點重讀（不是現在時刻），通知紀錄事件 EMG_OVERDUE、參照 EMG、CREATE_BY 為系統；無 Email 記 SKIP
+		verify(fx.emgDao).findById("EA20261006-001", base);
+		verify(fx.notifyLogDao).insert(eq("EMG_OVERDUE"), eq("EMG"), eq("EA20261006-001"), eq("0000004"), eq("t@example.com"),
+				eq("SUCCESS"), isNull(), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.notifyLogDao).insert(eq("EMG_OVERDUE"), eq("EMG"), eq("EA20261006-001"), eq("0000005"), isNull(), eq("SKIP"),
+				isNull(), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.permDao).findUsersWithPerm("EMG_DECIDE");
+		// 未回報的單：回報結果列寫「未回報」
+		e.setReportTypeCode(null);
+		assertThat(NotificationService.emgOverdueBody(e)).contains("未回報").doesNotContain("null");
+	}
+
+	@Test
+	void 緊急存取_逾期通知_已處理或查無回0不寄_DAO例外回0不外拋() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		// 掃描到寄信之間主管已退回（或補核准）：重讀後 DECIDE_CODE 非空 → 不寄
+		when(fx.emgDao.findById(eq("EA20261006-002"), any())).thenReturn(returnedEmg("EA20261006-002"));
+		assertThat(n.emgOverdue("EA20261006-002", NOW)).isZero();
+		assertThat(n.emgOverdue("EA-none", NOW)).isZero();
+		doThrow(new IllegalStateException("db")).when(fx.emgDao).findById(eq("EA-err"), any());
+		assertThat(n.emgOverdue("EA-err", NOW)).isZero();
+		verify(sender, never()).send(any(), any(), any());
+		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+		verify(fx.permDao, never()).findUsersWithPerm(any());
+	}
+
+	@Test
+	void 緊急存取_逾期通知_沒有人持有補核准權限時回0不寄不記() {
+		// 這是 J03 記 PARTIAL 最常見的持續性來源：沒有收件人 → 0 筆紀錄 → 下次掃描再試
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		EmgDetail e = returnedEmg("EA20261006-001");
+		e.setDecideCode(null);
+		when(fx.emgDao.findById("EA20261006-001", NOW)).thenReturn(e);
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of());
+
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isZero();
+		verify(fx.permDao).findUsersWithPerm("EMG_DECIDE");
+		verify(sender, never()).send(any(), any(), any());
+		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	/** 已退回的緊急存取單（處理人 Gary、姓名與原因含 HTML 特殊字元；回報欄位由各測試自行設定） */

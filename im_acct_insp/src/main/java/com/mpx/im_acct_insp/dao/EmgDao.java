@@ -31,6 +31,11 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S6：異常結案 UPDATE_CLOSE（條件：版本相符、已退回、尚未結案；CLOSE_BY 有效身分、
 //           CLOSE_ACT_BY／UPDATE_BY 實際操作人、IS_SELF_CLOSE 由 Service 算；VERSION_NO＋1）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7（S7-③）：J03 逾期掃描 FIND_OVERDUE_UNNOTIFIED——以子查詢 X 包住 SELECT_BASE 後篩
+//           EMG_STATE_CODE＝'OVERDUE'（與列表同口徑、:now 綁基準時間點），並以 NOT EXISTS 排除 IM_ACCT_NOTIFY_LOG 已有
+//           （:eventCode、EMG、單號）任何紀錄者＝每案一次（與 J01 轉逾期信同作法）；依 DUE_DATE、EMG_ID 排序
 // ============================================================
 
 import java.time.LocalDate;
@@ -113,6 +118,22 @@ public class EmgDao {
 
 	public static final String FIND_BY_ID = SELECT_BASE + """
 			   AND E.EMG_ID = :emgId
+			""";
+
+	/**
+	 * J03 逾期掃描（S7-③）：計算狀態為 OVERDUE 且通知紀錄尚無（:eventCode、EMG、單號）任何紀錄者＝尚未寄過逾期信；
+	 * 寄過（不論 SUCCESS／FAIL／SKIP）就不再列出，每案一次
+	 */
+	public static final String FIND_OVERDUE_UNNOTIFIED = """
+			SELECT X.*
+			  FROM (""" + SELECT_BASE + """
+			       ) X
+			 WHERE X.EMG_STATE_CODE = 'OVERDUE'
+			   AND NOT EXISTS (SELECT 1 FROM IM_ACCT_NOTIFY_LOG N
+			                    WHERE N.EVENT_CODE = :eventCode
+			                      AND N.REF_TYPE_CODE = 'EMG'
+			                      AND N.REF_ID = X.EMG_ID)
+			 ORDER BY X.DUE_DATE, X.EMG_ID
 			""";
 
 	public static final String FIND_AFFECTS = """
@@ -215,6 +236,14 @@ public class EmgDao {
 		params.put("dateToNext", DaoSupport.ts(dateTo == null ? null : dateTo.plusDays(1)));
 		params.put("now", DaoSupport.ts(now));
 		return dbClient.query(itflowDb, FIND_LIST, params, Emg.class);
+	}
+
+	/** J03：以 now 為基準時間點算狀態，回逾期且尚未寄過 eventCode 通知的單（依期限、單號） */
+	public List<Emg> findOverdueUnnotified(String eventCode, LocalDateTime now) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("eventCode", eventCode);
+		params.put("now", DaoSupport.ts(now));
+		return dbClient.query(itflowDb, FIND_OVERDUE_UNNOTIFIED, params, Emg.class);
 	}
 
 	public EmgDetail findById(String emgId, LocalDateTime now) {

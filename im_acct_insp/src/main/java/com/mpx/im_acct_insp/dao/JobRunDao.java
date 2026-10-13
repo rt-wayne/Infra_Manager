@@ -9,9 +9,12 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 7 項：新增查同一排程停在 RUNNING 的紀錄、補記為 FAIL（帶 RESULT_CODE＝'RUNNING' 條件）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7（S7-①）：BASE_DATE 改收 LocalDateTime——J03 的基準是時間點（到秒），
+//           J01／J02 由 Service 傳當天 00:00，寫入值不變
 // ============================================================
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -70,7 +73,8 @@ public class JobRunDao {
 		return row.getId();
 	}
 
-	public int insertRunning(long runId, String jobCode, String runBy, LocalDate baseDate, LocalDateTime now, String createBy) {
+	/** baseDate：J01／J02 為基準日 00:00，J03 為基準時間點（到秒） */
+	public int insertRunning(long runId, String jobCode, String runBy, LocalDateTime baseDate, LocalDateTime now, String createBy) {
 		Map<String, Object> params = new HashMap<>();
 		params.put("runId", runId);
 		params.put("jobCode", jobCode);
