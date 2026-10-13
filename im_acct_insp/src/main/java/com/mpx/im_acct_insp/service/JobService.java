@@ -31,6 +31,16 @@ package com.mpx.im_acct_insp.service;
 //           AFFECTED_CNT＝寫入通知紀錄 >0 的單數（S7-⑧）；寫入 0 筆的單記「{單號}:未寫入通知紀錄」→ PARTIAL（S7-⑩）；查詢失敗整體 FAIL；
 //           分派改 switch、未知代碼丟 IllegalArgumentException（陷阱 A）；不重入鎖表改由 AcctConst.JOB_CODES 自動產生、
 //           run 對鎖表沒有的代碼明確丟例外（陷阱 B）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7 回合 2：J03 的 PARTIAL 判定改依 NotificationService.OverdueResult——
+//           SKIPPED（寄前重讀發現已處理／不存在）不計、不算失敗；SENT 計 1；ALL_FAILED 計 1 但記「{單號}:全部收件人寄送失敗」→ PARTIAL（裁示 (b)）；
+//           NOT_WRITTEN 記「{單號}:未寫入通知紀錄」→ PARTIAL（S7-⑩）。
+//           J03 的排程失敗信同一種失敗當天只寄一封（S7-⑤⑥⑦）：記憶體 Map〈排程代碼|失敗類別 → 最後寄送的台北日期〉，
+//           失敗類別＝「結果碼:例外類別名」（FAIL／開始紀錄寫入失敗；結束紀錄寫入失敗一律以該例外為準，不論結果碼），
+//           只有 PARTIAL 且結束紀錄寫成功不帶例外名、整天一封；只套 J03，J01／J02 照舊每次寄；
+//           寄到了（jobFail 回 true）才記為今天已寄，SMTP 故障期間下一輪再寄；
+//           recoverStale 的補記信已以 RUN_ID 去重、不套；重啟後當天可能多一封（接受）
 // ============================================================
 
 import java.time.Clock;
@@ -45,6 +55,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -81,10 +92,15 @@ public class JobService {
 	static final String START_WRITE_FAIL = "開始紀錄寫入失敗，排程未執行";
 	static final String FINISH_WRITE_FAIL = "結束紀錄寫入失敗";
 	/**
-	 * J03：該單未寫入任何通知紀錄（無收件人、紀錄全部寫入失敗、或寄前重讀發現已處理／不存在）時記在錯誤摘要的文字（S7-⑩）。
-	 * 注意：SMTP 寄送失敗會寫 FAIL 紀錄、算已寄，不會進這裡
+	 * J03：該單未寫入任何通知紀錄（無收件人、紀錄全部寫入失敗、或途中例外）時記在錯誤摘要的文字（S7-⑩）；該單下次掃描會再列出。
+	 * 寄前重讀發現已處理／不存在是「略過」，不進這裡（回合 2 裁示 (a)）；SMTP 寄送失敗會寫 FAIL 紀錄、算已寄，也不進這裡
 	 */
 	static final String J03_NOT_WRITTEN = "未寫入通知紀錄";
+	/**
+	 * J03：該單有寫入紀錄但沒有任何人寄成功、且至少一人 SMTP 失敗時記在錯誤摘要的文字（回合 2 裁示 (b)）。
+	 * 紀錄已在、不會重寄（S7-④），記 PARTIAL 只是讓系統管理員知道沒人收到這張單的逾期信；要補寄見 SETUP 第 6 節第 10 段
+	 */
+	static final String J03_ALL_FAILED = "全部收件人寄送失敗";
 	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
 	private static final DateTimeFormatter SHOW = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -109,6 +125,11 @@ public class JobService {
 	 */
 	private final Map<String, AtomicBoolean> running = AcctConst.JOB_CODES.stream()
 			.collect(Collectors.toUnmodifiableMap(c -> c, c -> new AtomicBoolean()));
+	/**
+	 * J03 排程失敗信「同一種失敗當天一封」的記憶（S7-⑤）：鍵＝排程代碼|失敗類別，值＝最後寄出那封的台北日期（依 clock）。
+	 * 每種類別只留一筆、跨日自動覆蓋，不用清理；只在本 JVM 內有效，重啟後當天可能多寄一封（接受）
+	 */
+	private final Map<String, LocalDate> jobFailSentOn = new ConcurrentHashMap<>();
 
 	public JobService(AcctDao acctDao, AcctHistDao acctHistDao, JobRunDao jobRunDao, NotifyLogDao notifyLogDao, EmgDao emgDao,
 			NotificationService notificationService, PermissionService perm, TransactionTemplate tx, Clock clock,
@@ -221,11 +242,14 @@ public class JobService {
 			} catch (RuntimeException e) {
 				// 不帶堆疊：例外照拋，由排程入口或全域錯誤處理印完整堆疊
 				log.error("排程開始紀錄寫入失敗、未執行 job={} runId={} 例外={}", code, runId, e.getClass().getSimpleName());
-				notificationService.jobFail(code, runId, AcctConst.JR_FAIL,
-						START_WRITE_FAIL + "（" + e.getClass().getSimpleName() + "）");
+				notifyJobFail(code, runId, AcctConst.JR_FAIL, START_WRITE_FAIL + "（" + e.getClass().getSimpleName() + "）",
+						e.getClass().getSimpleName());
 				throw e;
 			}
 			Outcome o;
+			// 失敗類別用的例外類別名：排程本身 FAIL 的例外；結束紀錄寫入失敗時一律改用那個例外（不論結果碼，回合 2 審查 ⑩B）；
+			// 只有「PARTIAL 且結束紀錄有寫成功」不帶例外名（S7-⑥）
+			String exName = null;
 			try {
 				o = switch (code) {
 				case AcctConst.JOB_J01 -> j01(base.toLocalDate());
@@ -235,7 +259,8 @@ public class JobService {
 				};
 			} catch (RuntimeException e) {
 				log.error("排程失敗 job={} runId={} 例外={}", code, runId, e.getClass().getSimpleName(), e);
-				o = new Outcome(AcctConst.JR_FAIL, 0, e.getClass().getSimpleName());
+				exName = e.getClass().getSimpleName();
+				o = new Outcome(AcctConst.JR_FAIL, 0, exName);
 			}
 			String err = Texts.truncate(o.errMsg(), ERR_MSG_MAX);
 			boolean finished = true;
@@ -247,9 +272,10 @@ public class JobService {
 						o.affected(), e.getClass().getSimpleName(), e);
 				String note = FINISH_WRITE_FAIL + "（" + e.getClass().getSimpleName() + "）";
 				err = Texts.truncate(err == null ? note : note + "; " + err, ERR_MSG_MAX);
+				exName = e.getClass().getSimpleName();
 			}
 			if (!finished || !AcctConst.JR_SUCCESS.equals(o.resultCode())) {
-				notificationService.jobFail(code, runId, o.resultCode(), err);
+				notifyJobFail(code, runId, o.resultCode(), err, exName);
 			}
 			JobRunResult r = new JobRunResult();
 			r.setRunId(runId);
@@ -259,6 +285,33 @@ public class JobService {
 		} finally {
 			flag.set(false);
 		}
+	}
+
+	/**
+	 * 寄排程失敗信；J03 同一種失敗當天只寄一封（S7-⑤⑥⑦），其他排程照舊每次寄。
+	 * 失敗類別＝「結果碼:例外類別名」；只有「PARTIAL 且結束紀錄寫成功」不帶例外名（exName 為 null）、不分原因整天一封。
+	 * 因此：開始紀錄寫入失敗與查詢失敗同屬 FAIL:例外（例外類別相同就互相擋）；排程成功只有結束紀錄寫入失敗是 SUCCESS:例外；
+	 * PARTIAL 或 FAIL 再加結束紀錄寫入失敗，一律以結束紀錄的例外為鍵（PARTIAL:例外、FAIL:例外，回合 2 審查 ⑩B），不被當天的 PARTIAL 擋掉。
+	 * 先查今天寄過沒；寄到了（至少一人成功或全部略過）才記下，SMTP 故障期間沒寄到的下一輪再試（⑧B）。
+	 * recoverStale 的補記信不經這裡（它已以 RUN_ID 去重）：被本規則擋下那輪若結束紀錄沒寫成功，下一輪補記時會寄「上次執行未正常結束」（⑨A，文件已註明）
+	 */
+	private void notifyJobFail(String code, Long runId, String resultCode, String errMsg, String exName) {
+		if (AcctConst.JOB_J03.equals(code)) {
+			String kind = exName == null ? resultCode : resultCode + ":" + exName;
+			String key = code + "|" + kind;
+			LocalDate today = LocalDate.now(clock);
+			if (today.equals(jobFailSentOn.get(key))) {
+				log.warn("排程失敗信今天已寄過同一種失敗、不再寄 job={} runId={} 類別={}", code, runId, kind);
+				return;
+			}
+			if (notificationService.jobFail(code, runId, resultCode, errMsg)) {
+				jobFailSentOn.put(key, today);
+			} else {
+				log.warn("排程失敗信沒有寄到任何人、不記為今天已寄 job={} runId={} 類別={}", code, runId, kind);
+			}
+			return;
+		}
+		notificationService.jobFail(code, runId, resultCode, errMsg);
 	}
 
 	/**
@@ -375,8 +428,10 @@ public class JobService {
 
 	/**
 	 * 以 base 為基準時間點，找計算狀態 OVERDUE 且尚未寄過 EMG_OVERDUE 的單，逐張寄給 EMG_DECIDE 持有人（每案一次）。
-	 * AFFECTED_CNT＝有寫入通知紀錄的單數（SMTP 寄送失敗會寫 FAIL 紀錄，算已寄、不重寄，S7-④）；
-	 * 寫入 0 筆（無收件人、紀錄全部寫入失敗、或寄前重讀發現已處理／不存在）記錯誤摘要 → PARTIAL，下次掃描會再嘗試；
+	 * AFFECTED_CNT＝有寫入通知紀錄的單數（S7-⑧；SMTP 寄送失敗會寫 FAIL 紀錄，算已寄、不重寄，S7-④）。依寄信結果：
+	 * SKIPPED（寄前重讀發現已處理／不存在）不計、不算失敗，這張單下次掃描不會再列出；
+	 * ALL_FAILED（有紀錄但沒人寄成功）計 1 但記「{單號}:全部收件人寄送失敗」→ PARTIAL，不會重寄；
+	 * NOT_WRITTEN（無收件人、紀錄全部寫入失敗或例外）記「{單號}:未寫入通知紀錄」→ PARTIAL，這張單下次掃描會再列出；
 	 * 單張例外記錄後繼續；查詢本身失敗由 run 的外層 catch 記 FAIL
 	 */
 	Outcome j03(LocalDateTime base) {
@@ -384,11 +439,18 @@ public class JobService {
 		List<String> errors = new ArrayList<>();
 		for (Emg e : emgDao.findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, base)) {
 			try {
-				if (notificationService.emgOverdue(e.getEmgId(), base) > 0) {
+				switch (notificationService.emgOverdue(e.getEmgId(), base)) {
+				case SENT -> affected++;
+				case SKIPPED -> log.info("J03 逾期通知略過（寄前重讀發現已處理或不存在）emgId={}", e.getEmgId());
+				case ALL_FAILED -> {
 					affected++;
-				} else {
+					log.warn("J03 逾期通知全部收件人寄送失敗 emgId={}，紀錄已寫入、不會重寄", e.getEmgId());
+					errors.add(e.getEmgId() + ":" + J03_ALL_FAILED);
+				}
+				case NOT_WRITTEN -> {
 					log.warn("J03 逾期通知未寫入任何紀錄 emgId={}，下次掃描再嘗試", e.getEmgId());
 					errors.add(e.getEmgId() + ":" + J03_NOT_WRITTEN);
+				}
 				}
 			} catch (RuntimeException ex) {
 				log.error("J03 逾期通知失敗 emgId={} 例外={}", e.getEmgId(), ex.getClass().getSimpleName());

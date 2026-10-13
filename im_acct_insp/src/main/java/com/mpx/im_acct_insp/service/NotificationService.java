@@ -46,6 +46,13 @@ package com.mpx.im_acct_insp.service;
 //           或不存在則回 0 不寄；寄給所有 EMG_DECIDE 持有人，主旨「已逾期未補核准（期限 …）」，本文＝送出信 8 列＋回報結果＋
 //           提醒「補核准須申請人先回報；逾期後仍可補核准或退回」；參照 EMG／單號、CREATE_BY＝SYSTEM；
 //           回寫入筆數（0＝已處理、不存在、無收件人或紀錄全部寫入失敗；SMTP 寄送失敗寫 FAIL 紀錄、仍計入）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7 回合 2：sendAll 改回 SendResult（寫入筆數＋成功／略過／失敗人數），既有呼叫端取 written()；
+//           emgOverdue 改回 OverdueResult 四值讓 J03 區分——SKIPPED（寄前重讀發現已處理或不存在：不寄、不計、不算失敗）、
+//           SENT（有寫入紀錄且不是全部寄送失敗）、ALL_FAILED（有寫入紀錄但沒有人寄成功且至少一人 SMTP 失敗：算已寄不重寄、J03 記 PARTIAL）、
+//           NOT_WRITTEN（一筆紀錄都沒寫入：無收件人、紀錄全部寫入失敗或例外；J03 記 PARTIAL 下次再試）；
+//           jobFail 改回 boolean＝SendResult.reached（至少一人成功或全部略過），J03 以此決定要不要記「今天已寄」
 // ============================================================
 
 import java.time.Clock;
@@ -86,6 +93,32 @@ public class NotificationService {
 	static final String U13 = "目前沒有已逾期未處理的帳號";
 	/** 不在寄送名單的 SKIP 寫入 ERR_MSG 的文字 */
 	static final String NOT_IN_ALLOW_LIST = "不在寄送名單";
+
+	/**
+	 * sendAll 的結果（收件人去重後）：written＝寫入的通知紀錄筆數（含 SKIP／FAIL），ok／skip／fail＝各結果人數。
+	 * 寫紀錄失敗的人仍計入 ok／skip／fail（結果已決定，只是沒寫進 DB），所以 written 可能小於三者之和
+	 */
+	record SendResult(int written, int ok, int skip, int fail) {
+		/**
+		 * 這封信「算寄到了」：至少一人寄成功，或沒有人失敗且至少一人略過（無 Email／名單外，S7-④ 把 SKIP 當已寄）。
+		 * 沒有收件人、或沒人成功且有人 SMTP 失敗 → false
+		 */
+		boolean reached() {
+			return ok > 0 || (fail == 0 && skip > 0);
+		}
+	}
+
+	/** emgOverdue 的結果；J03 據此決定 AFFECTED_CNT 與 PARTIAL（S7-⑧⑩、回合 2 裁示 (a)(b)） */
+	public enum OverdueResult {
+		/** 寄前重讀發現已處理（補核准或退回）或不存在：不寄、不計、不算失敗；下次掃描不會再列出這張單 */
+		SKIPPED,
+		/** 至少寫入一筆紀錄，且不是「全部寄送失敗」：算已寄（含收件人全部 SKIP 的情況，S7-④） */
+		SENT,
+		/** 有寫入紀錄、沒有任何人寄成功、且至少一人 SMTP 失敗：紀錄已在、算已寄不重寄，但 J03 記 PARTIAL 讓人知道沒人收到 */
+		ALL_FAILED,
+		/** 一筆紀錄都沒寫入（沒有收件人、紀錄全部寫入失敗、或途中例外）：J03 記 PARTIAL，該單下次掃描會再列出 */
+		NOT_WRITTEN
+	}
 
 	private final PermDao permDao;
 	private final AcctReqDao acctReqDao;
@@ -230,24 +263,29 @@ public class NotificationService {
 	}
 
 	/**
-	 * EMG_OVERDUE（J03 逾期通知，S7-⑨）：以排程基準時間點 base 重讀該單；不存在或主管已處理（補核准或退回）則不寄、回 0。
-	 * 收件人＝所有 EMG_DECIDE 持有人；參照 EMG／單號、CREATE_BY＝SYSTEM。
+	 * EMG_OVERDUE（J03 逾期通知，S7-⑨）：以排程基準時間點 base 重讀該單；不存在或主管已處理（補核准或退回）則不寄、回 SKIPPED。
+	 * 收件人＝所有 EMG_DECIDE 持有人；參照 EMG／單號、CREATE_BY＝SYSTEM。不外拋：途中例外回 NOT_WRITTEN。
 	 *
-	 * @return 寫入的通知紀錄筆數（0＝已處理、不存在、沒有收件人或紀錄全部寫入失敗；SMTP 寄失敗寫 FAIL 紀錄仍計入；呼叫端據此記 PARTIAL）
+	 * @return 四種結果的意義見 {@link OverdueResult}；SMTP 寄失敗寫 FAIL 紀錄、算已寄（S7-④），只有沒半個人寄成功才回 ALL_FAILED
 	 */
-	public int emgOverdue(String emgId, LocalDateTime base) {
+	public OverdueResult emgOverdue(String emgId, LocalDateTime base) {
 		try {
 			Emg e = emgDao.findById(emgId, base);
 			if (e == null || e.getDecideCode() != null) {
 				log.info("逾期通知略過（已處理或不存在）emgId={}", emgId);
-				return 0;
+				return OverdueResult.SKIPPED;
 			}
 			String subject = "【緊急存取】" + emgId + " 已逾期未補核准（期限 " + dateTimeText(e.getDueDate()) + "）";
-			return sendAll(AcctConst.EV_EMG_OVERDUE, AcctConst.REF_EMG, emgId, withPerm(AcctConst.PERM_EMG_DECIDE), subject,
+			SendResult s = sendAll(AcctConst.EV_EMG_OVERDUE, AcctConst.REF_EMG, emgId, withPerm(AcctConst.PERM_EMG_DECIDE), subject,
 					html.page(subject, emgOverdueBody(e), MailHtml.PATH_EMG), AcctConst.SYSTEM_USER);
+			if (s.written() == 0) {
+				return OverdueResult.NOT_WRITTEN;
+			}
+			// 「全部失敗」＝沒有人寄成功、且至少一人是 SMTP 失敗；全是 SKIP（無 Email／名單外）照 S7-④ 當已寄
+			return s.ok() == 0 && s.fail() > 0 ? OverdueResult.ALL_FAILED : OverdueResult.SENT;
 		} catch (RuntimeException ex) {
 			log.error("通知失敗 event={} emgId={} 例外={}", AcctConst.EV_EMG_OVERDUE, emgId, ex.getClass().getSimpleName());
-			return 0;
+			return OverdueResult.NOT_WRITTEN;
 		}
 	}
 
@@ -347,7 +385,7 @@ public class NotificationService {
 				rows.add(new String[] { "逾期天數", String.valueOf(ChronoUnit.DAYS.between(exp, today)) });
 			}
 			return sendAll(event, AcctConst.REF_ACCT, acctRefId(a.getAcctId(), exp), rcpts, subject,
-					html.page(subject, MailHtml.table(rows), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER);
+					html.page(subject, MailHtml.table(rows), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER).written();
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} acctId={} 例外={}", event, a.getAcctId(), e.getClass().getSimpleName());
 			return 0;
@@ -361,7 +399,7 @@ public class NotificationService {
 			blocks.add(expiredBlock(expired, today));
 			String subject = "【帳號到期】本週已逾期未處理帳號彙總（" + expired.size() + " 筆）";
 			return sendAll(AcctConst.EV_WEEKLY_SUMMARY, AcctConst.REF_WEEK, weekKey, inRole(AcctConst.MAIL_ROLE_EXPIRY), subject,
-					html.page(subject, String.join("", blocks), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER);
+					html.page(subject, String.join("", blocks), MailHtml.PATH_HOME), AcctConst.SYSTEM_USER).written();
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} week={} 例外={}", AcctConst.EV_WEEKLY_SUMMARY, weekKey, e.getClass().getSimpleName());
 			return 0;
@@ -386,9 +424,11 @@ public class NotificationService {
 
 	/**
 	 * 排程失敗信。runId 為空＝連執行序號都沒取到（參照鍵寫 0）；
-	 * resultCode 為 SUCCESS＝排程本身做完、只有結束紀錄寫入失敗
+	 * resultCode 為 SUCCESS＝排程本身做完、只有結束紀錄寫入失敗。
+	 * 回「算寄到了沒」（SendResult.reached）：J03 的「同一種失敗當天一封」只在 true 時記下，SMTP 故障期間沒寄到的不占名額（回合 2 審查 ⑧B）；
+	 * 查收件人或組信途中例外回 false
 	 */
-	public void jobFail(String jobCode, Long runId, String resultCode, String errMsg) {
+	public boolean jobFail(String jobCode, Long runId, String resultCode, String errMsg) {
 		try {
 			String what = AcctConst.JR_SUCCESS.equals(resultCode) ? "結束紀錄寫入失敗"
 					: AcctConst.JR_PARTIAL.equals(resultCode) ? "執行部分失敗" : "執行失敗";
@@ -396,10 +436,11 @@ public class NotificationService {
 			String body = html.page(subject, MailHtml.table(List.of(new String[] { "排程代碼", jobCode },
 					new String[] { "執行序號", runId == null ? "（未取得）" : String.valueOf(runId) }, new String[] { "結果", resultCode },
 					new String[] { "錯誤摘要", nvl(errMsg, "") })), MailHtml.PATH_HOME);
-			sendAll(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, runId == null ? "0" : String.valueOf(runId),
-					inRole(AcctConst.MAIL_ROLE_JOB_FAIL), subject, body, AcctConst.SYSTEM_USER);
+			return sendAll(AcctConst.EV_JOB_FAIL, AcctConst.REF_JOB, runId == null ? "0" : String.valueOf(runId),
+					inRole(AcctConst.MAIL_ROLE_JOB_FAIL), subject, body, AcctConst.SYSTEM_USER).reached();
 		} catch (RuntimeException e) {
 			log.error("通知失敗 event={} runId={} 例外={}", AcctConst.EV_JOB_FAIL, runId, e.getClass().getSimpleName());
+			return false;
 		}
 	}
 
@@ -407,8 +448,8 @@ public class NotificationService {
 	// 共用
 	// ------------------------------------------------------------
 
-	/** 去重後逐人寄送並寫通知紀錄；回寫入的紀錄筆數 */
-	int sendAll(String event, String refType, String refId, List<Recipient> rcpts, String subject, String body,
+	/** 去重後逐人寄送並寫通知紀錄；回寫入的紀錄筆數與成功／略過／失敗人數（SendResult） */
+	SendResult sendAll(String event, String refType, String refId, List<Recipient> rcpts, String subject, String body,
 			String createBy) {
 		Map<String, Recipient> unique = new LinkedHashMap<>();
 		for (Recipient r : rcpts) {
@@ -452,7 +493,7 @@ public class NotificationService {
 			}
 		}
 		log.info("通知 event={} ref={} 收件人數={} 成功={} 略過={} 失敗={}", event, refId, unique.size(), ok, skip, fail);
-		return written;
+		return new SendResult(written, ok, skip, fail);
 	}
 
 	private List<Recipient> withPerm(String permId) {

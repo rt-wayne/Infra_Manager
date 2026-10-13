@@ -46,6 +46,14 @@ package com.mpx.im_acct_insp.service;
 //           JOB_CODES 外的代碼丟 IllegalArgumentException、cron 預設每 15 分鐘；BASE_DATE 改收 LocalDateTime（J01／J02 仍寫 00:00）；
 //           原「J03 回 404」改用 J04；通知：emgOverdue 寄 EMG_DECIDE 持有人、主旨含期限、本文 8 列＋回報結果＋提醒句、
 //           以基準時間點重讀、已處理／查無／例外回 0 不寄、紀錄 EMG_OVERDUE／EMG／CREATE_BY SYSTEM
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S7 回合 2：emgOverdue 改回 OverdueResult——已處理／查無 SKIPPED（J03 不計、不算失敗）、
+//           沒人寄成功且有 SMTP 失敗 ALL_FAILED（紀錄照寫；J03 計 1 但記「單號:全部收件人寄送失敗」PARTIAL）、一人成功或全略過 SENT、
+//           無收件人／紀錄全部寫入失敗／例外 NOT_WRITTEN；sendAll 改回 SendResult（寫入筆數與成功／略過／失敗人數）；
+//           J03 排程失敗信同一種失敗當天只寄一封（PARTIAL 整天一封、FAIL 依例外類別名、開始／結束紀錄寫入失敗同規則、隔天再寄）、J01／J02 不受影響；
+//           審查修補：結束紀錄寫入失敗一律以該例外為類別（FAIL／PARTIAL＋結束失敗各自一種，⑩B）、沒寄到任何人不算已寄下一輪再寄（⑧B）、
+//           SendResult.reached 五種組合、開始紀錄寫入失敗段正向斷言、jobFail 回 boolean
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -63,6 +71,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -74,8 +83,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +109,8 @@ import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.JobRunResult;
 import com.mpx.im_acct_insp.model.Recipient;
+import com.mpx.im_acct_insp.service.NotificationService.OverdueResult;
+import com.mpx.im_acct_insp.service.NotificationService.SendResult;
 import com.mpx.im_acct_insp.support.TestFixture;
 
 class JobAndNotifyTest {
@@ -355,10 +368,12 @@ class JobAndNotifyTest {
 	// ------------------------------------------------------------
 
 	@Test
-	void J03_逐張寄逾期信_計數為有寫入紀錄的單數_查詢與寄信同一基準時間點_不碰J01J02() {
+	void J03_逐張寄逾期信_計數為有寫入紀錄的單數_略過不計不算失敗_查詢與寄信同一基準時間點_不碰J01J02() {
 		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any()))
-				.thenReturn(List.of(overdueEmg("EA20261006-001"), overdueEmg("EA20261006-002")));
-		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(2);
+				.thenReturn(List.of(overdueEmg("EA20261006-001"), overdueEmg("EA20261006-002"), overdueEmg("EA20261006-003")));
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.SENT);
+		// 掃描到寄信之間主管已處理：略過，不計也不算失敗（回合 2 裁示 (a)）
+		when(fx.notificationService.emgOverdue(eq("EA20261006-003"), any())).thenReturn(OverdueResult.SKIPPED);
 
 		JobRunResult r = job.runManual(id(HANK), "J03", null);
 		assertThat(r.getRunId()).isEqualTo(77L);
@@ -368,6 +383,7 @@ class JobAndNotifyTest {
 		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, NOW);
 		verify(fx.notificationService).emgOverdue("EA20261006-001", NOW);
 		verify(fx.notificationService).emgOverdue("EA20261006-002", NOW);
+		verify(fx.notificationService).emgOverdue("EA20261006-003", NOW);
 		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), eq(HANK), eq(NOW), any(), eq(HANK));
 		verify(fx.jobRunDao).finish(eq(77L), eq("SUCCESS"), eq(2), isNull(), any(), eq(HANK));
 		verify(fx.notificationService, never()).jobFail(any(), any(), any(), any());
@@ -380,19 +396,21 @@ class JobAndNotifyTest {
 	}
 
 	@Test
-	void J03_寫入0筆記PARTIAL並寄排程失敗信_單張例外記錄後繼續_查詢失敗整體FAIL() {
-		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any()))
-				.thenReturn(List.of(overdueEmg("EA20261006-001"), overdueEmg("EA20261006-002"), overdueEmg("EA20261006-003")));
-		when(fx.notificationService.emgOverdue(eq("EA20261006-001"), any())).thenReturn(1);
-		// 無收件人、寄前重讀發現已處理、或全部寫紀錄失敗都回 0 → 記 PARTIAL，下次掃描再試
-		when(fx.notificationService.emgOverdue(eq("EA20261006-002"), any())).thenReturn(0);
+	void J03_未寫入與全部寄送失敗記PARTIAL並寄排程失敗信_全部失敗仍計數_單張例外記錄後繼續_查詢失敗整體FAIL() {
+		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001"),
+				overdueEmg("EA20261006-002"), overdueEmg("EA20261006-003"), overdueEmg("EA20261006-004")));
+		when(fx.notificationService.emgOverdue(eq("EA20261006-001"), any())).thenReturn(OverdueResult.SENT);
+		// 無收件人或全部寫紀錄失敗 → 不計、記 PARTIAL，下次掃描再試（S7-⑩）
+		when(fx.notificationService.emgOverdue(eq("EA20261006-002"), any())).thenReturn(OverdueResult.NOT_WRITTEN);
 		when(fx.notificationService.emgOverdue(eq("EA20261006-003"), any())).thenThrow(new IllegalStateException("x"));
+		// 紀錄寫了但沒人寄成功 → 仍計 1（已寄、不重寄），記 PARTIAL 讓人知道（回合 2 裁示 (b)）
+		when(fx.notificationService.emgOverdue(eq("EA20261006-004"), any())).thenReturn(OverdueResult.ALL_FAILED);
 
 		JobRunResult r = job.runManual(id(HANK), "J03", null);
 		assertThat(r.getResultCode()).isEqualTo(AcctConst.JR_PARTIAL);
-		assertThat(r.getAffectedCnt()).isEqualTo(1);
-		String err = "EA20261006-002:未寫入通知紀錄; EA20261006-003:IllegalStateException";
-		verify(fx.jobRunDao).finish(eq(77L), eq("PARTIAL"), eq(1), eq(err), any(), eq(HANK));
+		assertThat(r.getAffectedCnt()).isEqualTo(2);
+		String err = "EA20261006-002:未寫入通知紀錄; EA20261006-003:IllegalStateException; EA20261006-004:全部收件人寄送失敗";
+		verify(fx.jobRunDao).finish(eq(77L), eq("PARTIAL"), eq(2), eq(err), any(), eq(HANK));
 		verify(fx.notificationService).jobFail("J03", 77L, AcctConst.JR_PARTIAL, err);
 
 		// 查詢本身失敗：整體 FAIL、0 筆、錯誤摘要為例外名稱
@@ -402,7 +420,129 @@ class JobAndNotifyTest {
 		assertThat(f.getAffectedCnt()).isZero();
 		verify(fx.jobRunDao).finish(eq(77L), eq("FAIL"), eq(0), eq("IllegalStateException"), any(), eq(HANK));
 		verify(fx.notificationService).jobFail("J03", 77L, AcctConst.JR_FAIL, "IllegalStateException");
-		verify(fx.notificationService, times(3)).emgOverdue(any(), any());
+		verify(fx.notificationService, times(4)).emgOverdue(any(), any());
+	}
+
+	@Test
+	void J03_排程失敗信同一種失敗當天只寄一封_PARTIAL整天一封_FAIL依例外類別_隔天再寄_J01J02照舊每次寄() {
+		MutableClock clock = new MutableClock(NOW);
+		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
+				fx.permissionService, fx.tx, clock, true, true);
+		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001")));
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.NOT_WRITTEN);
+		when(fx.notificationService.jobFail(any(), any(), any(), any())).thenReturn(true); // 失敗信都寄到了
+
+		// PARTIAL 連跑兩次：執行紀錄照寫兩筆、排程失敗信只寄一封（S7-⑤⑥）
+		j.scheduledJ03();
+		j.scheduledJ03();
+		String partialErr = "EA20261006-001:未寫入通知紀錄";
+		verify(fx.jobRunDao, times(2)).finish(eq(77L), eq("PARTIAL"), eq(0), eq(partialErr), any(), eq(AcctConst.SYSTEM_USER));
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "PARTIAL", partialErr);
+
+		// FAIL：同一例外類別一封、不同例外類別各一封（PARTIAL 那封不算同一種）
+		doThrow(new IllegalStateException("a")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		j.scheduledJ03();
+		j.scheduledJ03();
+		doThrow(new UnsupportedOperationException("b")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		j.scheduledJ03();
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "FAIL", "IllegalStateException");
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "FAIL", "UnsupportedOperationException");
+
+		// 開始紀錄寫入失敗也是「FAIL:例外類別」：跟剛才查詢失敗的 IllegalStateException 同一種 → 今天不再寄（DB 斷線每 15 分鐘只會收到一封）
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		j.scheduledJ03();
+		verify(fx.notificationService, never()).jobFail(eq("J03"), any(), any(), startsWith("開始紀錄寫入失敗"));
+		// 這一輪確實有跑到開始紀錄（第 6 次 insertRunning）且沒跑排程本體（finish 仍是前 5 輪）
+		verify(fx.jobRunDao, times(6)).insertRunning(anyLong(), any(), any(), any(), any(), any());
+		verify(fx.jobRunDao, times(5)).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		doReturn(1).when(fx.jobRunDao).insertRunning(anyLong(), any(), any(), any(), any(), any());
+
+		// 隔天：同一種失敗再寄一封
+		clock.set(NOW.plusDays(1));
+		doThrow(new IllegalStateException("a")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		j.scheduledJ03();
+		verify(fx.notificationService, times(2)).jobFail("J03", 77L, "FAIL", "IllegalStateException");
+
+		// 結束紀錄寫入失敗（結果 SUCCESS）：J03 同規則一封；J02 不套，兩次寄兩封（S7-⑦）
+		doReturn(List.of(overdueEmg("EA20261006-001"))).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.SENT);
+		doThrow(new IllegalStateException("db")).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		j.scheduledJ03();
+		j.scheduledJ03();
+		j.scheduledJ02();
+		j.scheduledJ02();
+		String finishErr = "結束紀錄寫入失敗（IllegalStateException）";
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "SUCCESS", finishErr);
+		verify(fx.notificationService, times(2)).jobFail("J02", 77L, "SUCCESS", finishErr);
+
+		// FAIL（查詢丟 IllegalStateException，今天已寄過）＋結束紀錄寫入失敗（UnsupportedOperationException）：
+		// 類別以結束紀錄的例外為準＝FAIL:UnsupportedOperationException（回合 2 審查 ⑩B）→ 今天沒寄過這種 → 寄；再跑一次被擋
+		doThrow(new IllegalStateException("a")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		doThrow(new UnsupportedOperationException("db2")).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		j.scheduledJ03();
+		j.scheduledJ03();
+		String failBoth = "結束紀錄寫入失敗（UnsupportedOperationException）; IllegalStateException";
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "FAIL", failBoth);
+
+		// PARTIAL 今天先寄過一封；之後 PARTIAL＋結束紀錄寫入失敗是另一種（PARTIAL:UnsupportedOperationException）→ 照寄、再跑被擋
+		doReturn(List.of(overdueEmg("EA20261006-001"))).when(fx.emgDao).findOverdueUnnotified(any(), any());
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.NOT_WRITTEN);
+		doReturn(1).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		j.scheduledJ03();
+		verify(fx.notificationService, times(2)).jobFail("J03", 77L, "PARTIAL", partialErr); // 昨天一封＋今天一封
+		doThrow(new UnsupportedOperationException("db2")).when(fx.jobRunDao).finish(anyLong(), any(), anyInt(), any(), any(), any());
+		j.scheduledJ03();
+		j.scheduledJ03();
+		String partialBoth = "結束紀錄寫入失敗（UnsupportedOperationException）; " + partialErr;
+		verify(fx.notificationService, times(1)).jobFail("J03", 77L, "PARTIAL", partialBoth);
+	}
+
+	@Test
+	void J03_排程失敗信沒寄到任何人不算今天已寄_下一輪同一種失敗再寄_寄到了才開始擋() {
+		JobService j = fx.jobService(true);
+		doThrow(new IllegalStateException("a")).when(fx.emgDao).findOverdueUnnotified(any(), any());
+
+		// SMTP 全掛（jobFail 回 false）：連跑兩輪，兩輪都寄（回合 2 審查 ⑧B）
+		when(fx.notificationService.jobFail(any(), any(), any(), any())).thenReturn(false);
+		j.scheduledJ03();
+		j.scheduledJ03();
+		verify(fx.notificationService, times(2)).jobFail("J03", 77L, "FAIL", "IllegalStateException");
+
+		// SMTP 恢復：這一輪寄到了，之後同一種失敗當天不再寄
+		when(fx.notificationService.jobFail(any(), any(), any(), any())).thenReturn(true);
+		j.scheduledJ03();
+		j.scheduledJ03();
+		verify(fx.notificationService, times(3)).jobFail("J03", 77L, "FAIL", "IllegalStateException");
+		// 執行紀錄四輪都照寫 FAIL
+		verify(fx.jobRunDao, times(4)).finish(eq(77L), eq("FAIL"), eq(0), eq("IllegalStateException"), any(), eq(AcctConst.SYSTEM_USER));
+	}
+
+	/** 可撥動的時鐘（當天一封的跨日測試用） */
+	static final class MutableClock extends Clock {
+		private Instant now;
+
+		MutableClock(LocalDateTime t) {
+			set(t);
+		}
+
+		void set(LocalDateTime t) {
+			now = t.atZone(AppConfig.ZONE).toInstant();
+		}
+
+		@Override
+		public ZoneId getZone() {
+			return AppConfig.ZONE;
+		}
+
+		@Override
+		public Clock withZone(ZoneId zone) {
+			return this;
+		}
+
+		@Override
+		public Instant instant() {
+			return now;
+		}
 	}
 
 	@Test
@@ -433,7 +573,7 @@ class JobAndNotifyTest {
 		JobService j = new JobService(fx.acctDao, fx.acctHistDao, fx.jobRunDao, fx.notifyLogDao, fx.emgDao, fx.notificationService,
 				fx.permissionService, fx.tx, millis, true, true);
 		when(fx.emgDao.findOverdueUnnotified(eq(AcctConst.EV_EMG_OVERDUE), any())).thenReturn(List.of(overdueEmg("EA20261006-001")));
-		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(1);
+		when(fx.notificationService.emgOverdue(anyString(), any())).thenReturn(OverdueResult.SENT);
 		j.scheduledJ03();
 		verify(fx.jobRunDao).insertRunning(eq(77L), eq("J03"), isNull(), eq(NOW), any(), eq(AcctConst.SYSTEM_USER));
 		verify(fx.emgDao).findOverdueUnnotified(AcctConst.EV_EMG_OVERDUE, NOW);
@@ -473,8 +613,15 @@ class JobAndNotifyTest {
 		Recipient noMail = rcpt("0000002", " ");
 		Recipient bad = rcpt("0000003", "bad@example.com");
 		doThrow(new IllegalStateException("smtp")).when(sender).send(eq("bad@example.com"), anyString(), anyString());
-		int written = n.sendAll("SUBMIT", "REQ", "AR20261007-001", List.of(a, dup, noMail, bad), "主旨", "本文", KEVIN);
-		assertThat(written).isEqualTo(3);
+		SendResult s = n.sendAll("SUBMIT", "REQ", "AR20261007-001", List.of(a, dup, noMail, bad), "主旨", "本文", KEVIN);
+		// 去重後 3 人：1 成功、1 略過（無 Email）、1 失敗（SMTP），三筆都有寫紀錄
+		assertThat(s).isEqualTo(new SendResult(3, 1, 1, 1));
+		// 「算寄到了」：至少一人成功、或全部略過；沒收件人或沒人成功且有人失敗都不算（⑧B 給 J03 當天一封用）
+		assertThat(s.reached()).isTrue();
+		assertThat(new SendResult(2, 0, 2, 0).reached()).isTrue();
+		assertThat(new SendResult(0, 0, 0, 0).reached()).isFalse();
+		assertThat(new SendResult(2, 0, 1, 1).reached()).isFalse();
+		assertThat(new SendResult(1, 0, 0, 1).reached()).isFalse();
 		verify(sender, times(1)).send(eq("a@example.com"), any(), any());
 		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("AR20261007-001"), eq("0000001"), eq("a@example.com"),
 				eq("SUCCESS"), isNull(), any(), eq(KEVIN));
@@ -485,7 +632,8 @@ class JobAndNotifyTest {
 
 		doThrow(new IllegalStateException("db")).when(fx.notifyLogDao).insert(any(), any(), any(), any(), any(), any(), any(),
 				any(), any());
-		assertThat(n.sendAll("SUBMIT", "REQ", "X", List.of(a), "s", "b", KEVIN)).isZero();
+		// 紀錄寫入失敗：寫入 0 筆，但寄送結果照算（信已經寄出去了）
+		assertThat(n.sendAll("SUBMIT", "REQ", "X", List.of(a), "s", "b", KEVIN)).isEqualTo(new SendResult(0, 1, 0, 0));
 	}
 
 	@Test
@@ -520,7 +668,7 @@ class JobAndNotifyTest {
 		verify(fx.notifyLogDao).insert(eq("WEEKLY_SUMMARY"), eq("WEEK"), eq("20261005"), eq("0000005"), isNull(), eq("SKIP"),
 				isNull(), any(), eq(AcctConst.SYSTEM_USER));
 
-		n.jobFail("J01", 77L, AcctConst.JR_PARTIAL, "x");
+		assertThat(n.jobFail("J01", 77L, AcctConst.JR_PARTIAL, "x")).isTrue(); // 寄到了（一人成功）
 		verify(sender).send(eq("s@example.com"), eq("【排程失敗】J01 執行部分失敗"), anyString());
 		verify(fx.notifyLogDao).insert(eq("JOB_FAIL"), eq("JOB"), eq("77"), eq("0000009"), eq("s@example.com"), eq("SUCCESS"),
 				isNull(), any(), eq(AcctConst.SYSTEM_USER));
@@ -536,6 +684,14 @@ class JobAndNotifyTest {
 		verify(sender).send(eq("s@example.com"), eq("【排程失敗】J02 執行失敗"), body.capture());
 		assertThat(body.getValue()).contains("（未取得）");
 		verify(fx.notifyLogDao).insert(eq("JOB_FAIL"), eq("JOB"), eq("0"), eq("0000009"), any(), any(), any(), any(), any());
+
+		// 沒寄到任何人回 false（⑧B，J03 據此不記「今天已寄」）：全部 SMTP 失敗、SYS_ADMIN 沒人、查收件人丟例外
+		doThrow(new IllegalStateException("smtp")).when(sender).send(eq("s@example.com"), anyString(), anyString());
+		assertThat(n.jobFail("J01", 79L, AcctConst.JR_FAIL, "x")).isFalse();
+		when(fx.permDao.findUsersInRoles(List.of("SYS_ADMIN"))).thenReturn(List.of());
+		assertThat(n.jobFail("J01", 80L, AcctConst.JR_FAIL, "x")).isFalse();
+		when(fx.permDao.findUsersInRoles(List.of("SYS_ADMIN"))).thenThrow(new IllegalStateException("db"));
+		assertThat(n.jobFail("J01", 81L, AcctConst.JR_FAIL, "x")).isFalse();
 
 		// 不再依賴 properties：建構子無字串參數
 		assertThat(NotificationService.class.getConstructors()).allSatisfy(
@@ -559,7 +715,7 @@ class JobAndNotifyTest {
 		Recipient outside = rcpt("0000003", "c@example.com");
 		Recipient outsideNoMail = rcpt("0000004", "");
 		assertThat(n.sendAll("SUBMIT", "REQ", "R1", List.of(listed, listedNoMail, outside, outsideNoMail), "主旨", "本文", KEVIN))
-				.isEqualTo(4);
+				.isEqualTo(new SendResult(4, 1, 3, 0));
 		verify(sender, times(1)).send(any(), any(), any());
 		verify(sender).send(eq("a@example.com"), eq("主旨"), eq("本文"));
 		verify(fx.notifyLogDao).insert(eq("SUBMIT"), eq("REQ"), eq("R1"), eq("0000001"), eq("a@example.com"), eq("SUCCESS"),
@@ -868,8 +1024,8 @@ class JobAndNotifyTest {
 		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE))
 				.thenReturn(List.of(rcpt("0000004", "t@example.com"), rcpt("0000005", null)));
 
-		int written = n.emgOverdue("EA20261006-001", base);
-		assertThat(written).isEqualTo(2);
+		// 一人成功、一人無 Email 略過：兩筆紀錄、算已寄
+		assertThat(n.emgOverdue("EA20261006-001", base)).isEqualTo(OverdueResult.SENT);
 		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
 		verify(sender).send(eq("t@example.com"), eq("【緊急存取】EA20261006-001 已逾期未補核准（期限 2026-10-08 10:30）"),
 				body.capture());
@@ -895,23 +1051,24 @@ class JobAndNotifyTest {
 	}
 
 	@Test
-	void 緊急存取_逾期通知_已處理或查無回0不寄_DAO例外回0不外拋() {
+	void 緊急存取_逾期通知_已處理或查無回SKIPPED不寄_DAO例外回NOT_WRITTEN不外拋() {
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = notifier(sender, SEND_ALL);
-		// 掃描到寄信之間主管已退回（或補核准）：重讀後 DECIDE_CODE 非空 → 不寄
+		// 掃描到寄信之間主管已退回（或補核准）：重讀後 DECIDE_CODE 非空 → 略過（J03 不計、不算失敗）
 		when(fx.emgDao.findById(eq("EA20261006-002"), any())).thenReturn(returnedEmg("EA20261006-002"));
-		assertThat(n.emgOverdue("EA20261006-002", NOW)).isZero();
-		assertThat(n.emgOverdue("EA-none", NOW)).isZero();
+		assertThat(n.emgOverdue("EA20261006-002", NOW)).isEqualTo(OverdueResult.SKIPPED);
+		assertThat(n.emgOverdue("EA-none", NOW)).isEqualTo(OverdueResult.SKIPPED);
+		// 重讀本身失敗：不是略過，是「沒寫入」（J03 記 PARTIAL、下次再試）
 		doThrow(new IllegalStateException("db")).when(fx.emgDao).findById(eq("EA-err"), any());
-		assertThat(n.emgOverdue("EA-err", NOW)).isZero();
+		assertThat(n.emgOverdue("EA-err", NOW)).isEqualTo(OverdueResult.NOT_WRITTEN);
 		verify(sender, never()).send(any(), any(), any());
 		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
 		verify(fx.permDao, never()).findUsersWithPerm(any());
 	}
 
 	@Test
-	void 緊急存取_逾期通知_沒有人持有補核准權限時回0不寄不記() {
-		// 這是 J03 記 PARTIAL 最常見的持續性來源：沒有收件人 → 0 筆紀錄 → 下次掃描再試
+	void 緊急存取_逾期通知_沒有人持有補核准權限時回NOT_WRITTEN不寄不記() {
+		// 這是 J03 記 PARTIAL 最常見的持續性來源：沒有收件人 → 0 筆紀錄 → 下次掃描再試（排程失敗信當天一封）
 		MailSender sender = mock(MailSender.class);
 		NotificationService n = notifier(sender, SEND_ALL);
 		EmgDetail e = returnedEmg("EA20261006-001");
@@ -919,10 +1076,43 @@ class JobAndNotifyTest {
 		when(fx.emgDao.findById("EA20261006-001", NOW)).thenReturn(e);
 		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of());
 
-		assertThat(n.emgOverdue("EA20261006-001", NOW)).isZero();
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.NOT_WRITTEN);
 		verify(fx.permDao).findUsersWithPerm("EMG_DECIDE");
 		verify(sender, never()).send(any(), any(), any());
 		verify(fx.notifyLogDao, never()).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 緊急存取_逾期通知_沒人寄成功且有SMTP失敗回ALL_FAILED紀錄照寫_一人成功或全部略過回SENT_紀錄全部寫入失敗回NOT_WRITTEN() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		EmgDetail e = returnedEmg("EA20261006-001");
+		e.setDecideCode(null);
+		when(fx.emgDao.findById(eq("EA20261006-001"), any())).thenReturn(e);
+		doThrow(new IllegalStateException("smtp")).when(sender).send(eq("bad@example.com"), anyString(), anyString());
+		Recipient bad = rcpt("0000004", "bad@example.com");
+		Recipient noMail = rcpt("0000005", null);
+		Recipient good = rcpt("0000006", "ok@example.com");
+
+		// 唯一收件人 SMTP 失敗：FAIL 紀錄照寫（之後不會重寄），回 ALL_FAILED 讓 J03 記 PARTIAL（回合 2 裁示 (b)）
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of(bad));
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.ALL_FAILED);
+		verify(fx.notifyLogDao).insert(eq("EMG_OVERDUE"), eq("EMG"), eq("EA20261006-001"), eq("0000004"), eq("bad@example.com"),
+				eq("FAIL"), eq("IllegalStateException"), any(), eq(AcctConst.SYSTEM_USER));
+		// 一人失敗＋一人無 Email 略過：還是沒人收到 → ALL_FAILED（略過的人不算收到）
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of(bad, noMail));
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.ALL_FAILED);
+		// 一人失敗＋一人成功：有人收到 → SENT
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of(bad, good));
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.SENT);
+		// 全部無 Email 略過、沒有 SMTP 失敗：照 S7-④ 當已寄 → SENT（SKIP 紀錄在，之後不重寄）
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of(noMail));
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.SENT);
+		// 紀錄全部寫入失敗：即使信寄成功也回 NOT_WRITTEN（沒紀錄擋不住下次重寄，J03 記 PARTIAL；BACKLOG 第 57 項）
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE)).thenReturn(List.of(good));
+		doThrow(new IllegalStateException("db")).when(fx.notifyLogDao).insert(any(), any(), any(), any(), any(), any(), any(), any(),
+				any());
+		assertThat(n.emgOverdue("EA20261006-001", NOW)).isEqualTo(OverdueResult.NOT_WRITTEN);
 	}
 
 	/** 已退回的緊急存取單（處理人 Gary、姓名與原因含 HTML 特殊字元；回報欄位由各測試自行設定） */
