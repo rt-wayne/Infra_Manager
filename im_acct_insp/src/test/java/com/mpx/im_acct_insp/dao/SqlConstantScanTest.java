@@ -30,6 +30,9 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S5：EmgDao.SELECT_BASE 須回 CREATE_BY 與四個實際操作人姓名（各自 LEFT JOIN IM_ACCT_USER）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：API 數 38 → 39（/close）；EmgDao.UPDATE_CLOSE 樂觀鎖、限已退回且未結案
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -191,6 +194,10 @@ class SqlConstantScanTest {
 		assertThat(EmgDao.UPDATE_DECIDE).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
 				.contains("DECIDE_CODE IS NULL").contains("STATUS = 1").contains("IS_SELF_DECIDE = :isSelfDecide")
 				.doesNotContain("DUE_DATE");
+		// 緊急存取異常結案（S6）：帶版本、限已退回且尚未結案
+		assertThat(EmgDao.UPDATE_CLOSE).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
+				.contains("DECIDE_CODE = 'RETURN'").contains("CLOSE_DATE IS NULL").contains("STATUS = 1")
+				.contains("IS_SELF_CLOSE = :isSelfClose");
 	}
 
 	@Test
@@ -237,7 +244,7 @@ class SqlConstantScanTest {
 				}
 			}
 		}
-		assertThat(apis).isEqualTo(38);
+		assertThat(apis).isEqualTo(39);
 		assertThat(missing).isEmpty();
 	}
 }

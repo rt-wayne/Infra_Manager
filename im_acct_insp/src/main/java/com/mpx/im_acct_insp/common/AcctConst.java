@@ -32,6 +32,9 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：歷史來源 EMG 與動作 EMG_MODIFY（S4-⑧）、審查異常旗標來源 EMG（S4-①）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：歷史動作 EMG_CLOSE_MODIFY、自核標籤「自行結案」（S6-③）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -108,11 +111,15 @@ public final class AcctConst {
 	public static final String ACT_EXPIRE = "EXPIRE";
 	/** 緊急存取異動：主管處理（補核准或退回）時依申請人回報的受影響帳號逐筆寫入（S4-⑧） */
 	public static final String ACT_EMG_MODIFY = "EMG_MODIFY";
+	/** 緊急存取結案登記異動：異常結案發現有異動時依結案登記的受影響帳號逐筆寫入，不覆蓋申請人回報（D13，S6） */
+	public static final String ACT_EMG_CLOSE_MODIFY = "EMG_CLOSE_MODIFY";
 	/** 判斷 IS_SELF_ACTION 的動作（spec §4.8） */
 	public static final List<String> SELF_CHECK_ACTIONS = List.of(ACT_APPROVE, ACT_REJECT, ACT_EXEC_DONE, ACT_VERIFY_OK,
 			ACT_VERIFY_REJECT);
 	public static final String SELF_LABEL_APPLICANT = "自行核准";
 	public static final String SELF_LABEL_SAME_PERSON = "同人兼任";
+	/** EMG_CLOSE_MODIFY 的結案人即申請人（S6-③） */
+	public static final String SELF_LABEL_CLOSE = "自行結案";
 
 	// 附件 ATTACH_TYPE_CODE
 	public static final String ATTACH_DOC = "DOC";

@@ -50,6 +50,9 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S2：到期日解析改用 Texts.parseDate（行為不變，呼叫前已確認非空），刪本類別的私有副本
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：selfLabel 對緊急存取結案登記異動（EMG_CLOSE_MODIFY）顯示「自行結案」（S6-③）；其餘動作不變
 // ============================================================
 
 import java.nio.file.Path;
@@ -752,13 +755,17 @@ public class RequestService {
 		return 0;
 	}
 
-	/** 顯示標籤：條件 ① 成立「自行核准」，否則「同人兼任」；非 1 為 null */
+	/** 顯示標籤：條件 ① 成立「自行核准」（緊急存取結案登記異動為「自行結案」，S6-③），否則「同人兼任」；非 1 為 null */
 	static String selfLabel(AcctHist h) {
 		if (!Integer.valueOf(1).equals(h.getIsSelfAction())) {
 			return null;
 		}
 		String eff = h.getActAsId() != null ? h.getActAsId() : h.getActBy();
-		return eff != null && eff.equals(h.getReqApplyBy()) ? AcctConst.SELF_LABEL_APPLICANT : AcctConst.SELF_LABEL_SAME_PERSON;
+		if (eff == null || !eff.equals(h.getReqApplyBy())) {
+			return AcctConst.SELF_LABEL_SAME_PERSON;
+		}
+		return AcctConst.ACT_EMG_CLOSE_MODIFY.equals(h.getActionCode()) ? AcctConst.SELF_LABEL_CLOSE
+				: AcctConst.SELF_LABEL_APPLICANT;
 	}
 
 	public static List<AcctHist> withLabels(List<AcctHist> rows) {

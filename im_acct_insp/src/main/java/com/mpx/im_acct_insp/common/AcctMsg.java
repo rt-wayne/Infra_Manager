@@ -14,6 +14,9 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：退回原因受詞；補核准前須有申請人回報的文案（S4-⑦）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：異常結案欄位的 E10／E11 受詞（結案發現、結案說明）
 // ============================================================
 
 import java.util.List;
@@ -65,6 +68,9 @@ public final class AcctMsg {
 	public static final String WHAT_EMG_AFFECT_DESCR = "帳號異動說明";
 	// 緊急存取主管處理欄位（BACKLOG 第 46 項 S4b）
 	public static final String WHAT_EMG_RETURN_REASON = "退回原因";
+	// 緊急存取異常結案欄位（BACKLOG 第 46 項 S6）
+	public static final String WHAT_EMG_CLOSE_RESULT = "結案發現";
+	public static final String WHAT_EMG_CLOSE_DESCR = "結案說明";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";

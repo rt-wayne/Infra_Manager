@@ -27,6 +27,10 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: BACKLOG 第 46 項 S5：SELECT_BASE 多回送出的實際操作人 CREATE_BY，並對四個實際操作人
 //           （CREATE_BY、REPORT_ACT_BY、DECIDE_ACT_BY、CLOSE_ACT_BY）各 LEFT JOIN IM_ACCT_USER 取姓名（UX／URA／UDA／UCA），
 //           供詳情彈窗在實際操作人≠有效身分時顯示「{代理}（實際操作人：{實際}）」（S3 審查第 4 項、S5 裁示①）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：異常結案 UPDATE_CLOSE（條件：版本相符、已退回、尚未結案；CLOSE_BY 有效身分、
+//           CLOSE_ACT_BY／UPDATE_BY 實際操作人、IS_SELF_CLOSE 由 Service 算；VERSION_NO＋1）
 // ============================================================
 
 import java.time.LocalDate;
@@ -156,6 +160,19 @@ public class EmgDao {
 			   AND DECIDE_CODE IS NULL
 			""";
 
+	/** 異常結案（S6）：已退回、尚未結案、版本相符才更新；VERSION_NO＋1（樂觀鎖，0 筆＝409） */
+	public static final String UPDATE_CLOSE = """
+			UPDATE IM_EMG_ACCESS
+			   SET CLOSE_RESULT_CODE = :closeResultCode, CLOSE_DESCR = :closeDescr, CLOSE_BY = :closeBy, CLOSE_DATE = :now,
+			       CLOSE_ACT_BY = :actBy, IS_SELF_CLOSE = :isSelfClose, VERSION_NO = VERSION_NO + 1,
+			       UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE EMG_ID = :emgId
+			   AND STATUS = 1
+			   AND VERSION_NO = :versionNo
+			   AND DECIDE_CODE = 'RETURN'
+			   AND CLOSE_DATE IS NULL
+			""";
+
 	/** 受影響帳號（只增不改）：RECORD_BY＝有效身分、CREATE_BY＝實際操作人 */
 	public static final String INSERT_AFFECT = """
 			INSERT INTO IM_EMG_AFFECT_ACCT (EMG_ID, AFFECT_TYPE_CODE, ACCT_ID, AFFECT_DESCR, RECORD_BY, RECORD_DATE,
@@ -243,6 +260,24 @@ public class EmgDao {
 		params.put("now", DaoSupport.ts(now));
 		params.put("actBy", actBy);
 		return dbClient.update(itflowDb, UPDATE_DECIDE, params);
+	}
+
+	/**
+	 * 異常結案；closeBy＝有效身分，actBy＝實際操作人；isSelfClose 1＝結案人即申請人；
+	 * 回傳更新筆數（0＝未退回、已結案或版本不符）
+	 */
+	public int close(String emgId, int versionNo, String closeResultCode, String closeDescr, String closeBy, int isSelfClose,
+			LocalDateTime now, String actBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("emgId", emgId);
+		params.put("versionNo", versionNo);
+		params.put("closeResultCode", closeResultCode);
+		params.put("closeDescr", closeDescr);
+		params.put("closeBy", closeBy);
+		params.put("isSelfClose", isSelfClose);
+		params.put("now", DaoSupport.ts(now));
+		params.put("actBy", actBy);
+		return dbClient.update(itflowDb, UPDATE_CLOSE, params);
 	}
 
 	public int insertAffect(String emgId, String affectTypeCode, String acctId, String affectDescr, String recordBy,

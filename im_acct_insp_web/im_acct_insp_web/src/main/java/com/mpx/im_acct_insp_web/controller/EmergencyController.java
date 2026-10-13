@@ -11,6 +11,9 @@ package com.mpx.im_acct_insp_web.controller;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：/emergencies/{id}/approve（主管補核准）、/emergencies/{id}/return（主管退回）轉送
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：/emergencies/{id}/close（異常結案）轉送
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,5 +73,11 @@ public class EmergencyController {
 	@PostMapping("/emergencies/{id}/return")
 	public ResponseEntity<byte[]> returnEmg(@PathVariable("id") String id, HttpServletRequest request) {
 		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/return", request);
+	}
+
+	/** 異常結案：POST <backend>/emergencies/{id}/close，JSON {closeResultCode, closeDescr, versionNo, affectAccts} */
+	@PostMapping("/emergencies/{id}/close")
+	public ResponseEntity<byte[]> close(@PathVariable("id") String id, HttpServletRequest request) {
+		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/close", request);
 	}
 }

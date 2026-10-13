@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp_web.controller;
 //           驗：7.2 清單 32 條路徑（JobController 帶與不帶 baseDate 各一，共 33 案）各自轉到後端同路徑同方法、Authorization 原樣帶到後端；
 //           經 Controller 的 multipart 送出（Content-Type 含 boundary、本文 byte 原樣）、11 MB 超過回 413 不轉送、
 //           附件下載回瀏覽器的 Content-Type／Content-Disposition 照抄、Content-Length 為殼 jar 依實際本文重算
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：補 EmergencyController 7 條路徑（送出、列表、明細、回報、補核准、退回、異常結案；S2 起漏測）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,7 +58,7 @@ class ControllerRoutingTest {
 		BackendForwarder fw = new BackendForwarder(restTemplate, BACKEND);
 		mvc = MockMvcBuilders.standaloneSetup(new AuthController(fw), new HomeController(fw),
 				new AccountController(fw), new RequestController(fw), new AttachmentController(fw),
-				new InspectionController(fw), new JobController(fw)).build();
+				new InspectionController(fw), new JobController(fw), new EmergencyController(fw)).build();
 	}
 
 	/** 方法、殼 jar 路徑（/api/v1 之後）、後端路徑；開發文件 7.2 全部路徑 */
@@ -100,7 +103,15 @@ class ControllerRoutingTest {
 				Arguments.of("POST", "/inspections/IN1/items/3/fix", "/inspections/IN1/items/3/fix"),
 				// JobController
 				Arguments.of("POST", "/jobs/J01/run?baseDate=2026-10-09", "/jobs/J01/run?baseDate=2026-10-09"),
-				Arguments.of("POST", "/jobs/J02/run", "/jobs/J02/run"));
+				Arguments.of("POST", "/jobs/J02/run", "/jobs/J02/run"),
+				// EmergencyController（BACKLOG 第 46 項）
+				Arguments.of("POST", "/emergencies", "/emergencies"),
+				Arguments.of("GET", "/emergencies?stateCode=PENDING&keyword=a", "/emergencies?stateCode=PENDING&keyword=a"),
+				Arguments.of("GET", "/emergencies/EA1", "/emergencies/EA1"),
+				Arguments.of("POST", "/emergencies/EA1/report", "/emergencies/EA1/report"),
+				Arguments.of("POST", "/emergencies/EA1/approve", "/emergencies/EA1/approve"),
+				Arguments.of("POST", "/emergencies/EA1/return", "/emergencies/EA1/return"),
+				Arguments.of("POST", "/emergencies/EA1/close", "/emergencies/EA1/close"));
 	}
 
 	@ParameterizedTest(name = "{0} {1}")

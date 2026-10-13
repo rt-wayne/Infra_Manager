@@ -154,7 +154,7 @@ COMMENT ON COLUMN IM_EMG_ACCESS.IS_SELF_DECIDE IS '處理自核旗標：1＝處�
 COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_BY IS '異常結案人工號（有效身分）；只有已退回的單可結案';
 COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_DATE IS '異常結案時間；有值＝已結案';
 COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_ACT_BY IS '結案的實際操作人工號；切換身分時與 CLOSE_BY 不同';
-COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_DESCR IS '結案說明';
+COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_DESCR IS '結案說明；兩種結案發現都必填';
 COMMENT ON COLUMN IM_EMG_ACCESS.CLOSE_RESULT_CODE IS '結案發現：NO_CHANGE＝確認沒有帳號異動、CHANGED＝有帳號異動（受影響帳號記 IM_EMG_AFFECT_ACCT，AFFECT_TYPE_CODE＝CLOSE）；結案時必填';
 COMMENT ON COLUMN IM_EMG_ACCESS.IS_SELF_CLOSE IS '結案自核旗標：1＝結案人即申請人、0＝否。default 0';
 COMMENT ON COLUMN IM_EMG_ACCESS.VERSION_NO IS '樂觀鎖版本號，每次狀態變更＋1；更新時 WHERE 帶原值，影響 0 筆即回 409。default 0';
@@ -167,7 +167,7 @@ COMMENT ON COLUMN IM_EMG_ACCESS.UPDATE_BY IS '最後更新人員工號（實際�
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.EMG_ID IS '緊急存取單號，參照 IM_EMG_ACCESS.EMG_ID';
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.AFFECT_TYPE_CODE IS '登記來源：REPORT＝申請人回報、CLOSE＝異常結案登記';
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.ACCT_ID IS '受影響帳號，參照 IM_ACCT.ACCT_ID';
-COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.AFFECT_DESCR IS '該帳號的異動說明';
+COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.AFFECT_DESCR IS '該帳號的異動說明；REPORT 與 CLOSE 皆選填';
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.RECORD_BY IS '記錄人工號（有效身分；REPORT＝申請人、CLOSE＝結案人）';
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.RECORD_DATE IS '記錄時間';
 COMMENT ON COLUMN IM_EMG_AFFECT_ACCT.STATUS IS '資料狀態：固定 1。default 1';
@@ -193,12 +193,12 @@ COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG�
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_DATE IS '審查異常標記時間';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有效身分）';
 
--- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯；只改說明、不動結構；重覆執行無害）
--- 與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
+-- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯）；S6 異常結案再補 EMG_CLOSE_MODIFY 的寫法
+-- （只改說明、不動結構；重覆執行無害）。與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
 COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
 COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
-COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明）';
-COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人（有效身分相同）。default 0';
+COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明；EMG_CLOSE_MODIFY 帶單號、結案人、結案說明與該帳號異動說明）';
+COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對）。default 0';
 
 -- ===== PUBLIC SYNONYM 與授權給 AP_USER（synonym 已存在就略過；GRANT 重覆執行無害）
 -- 依 2026-10-13 以 RD_USER 查詢的結果（backlog/46-緊急存取.md 3.6）：第一階段 21 張表與 5 個序列全部是

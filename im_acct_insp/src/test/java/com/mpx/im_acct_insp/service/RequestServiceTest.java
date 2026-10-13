@@ -36,6 +36,9 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-10
 // 變更說明: 新增重送帳號類別以原申請單為準：表單帶別的類別或空值仍寫原類別（申請單與主表），原類別關閉回 E05；
 //           門禁卡單表單改一般類別仍依門禁卡規則
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：selfLabel 對 EMG_CLOSE_MODIFY 回「自行結案」，其他動作的標籤不變
 // ============================================================
 
 import static com.mpx.im_acct_insp.support.TestFixture.ALAN;
@@ -711,6 +714,26 @@ class RequestServiceTest {
 		assertThat(h.getIsSelfAction()).isEqualTo(1);
 		h.setReqApplyBy(KEVIN);
 		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_SAME_PERSON);
+	}
+
+	@Test
+	void selfLabel_異常結案為自行結案_其他動作標籤不變_非申請人為同人兼任_非自核無標籤() {
+		AcctHist h = new AcctHist();
+		h.setIsSelfAction(1);
+		h.setActBy(KEVIN);
+		h.setReqApplyBy(KEVIN);
+		h.setActionCode(AcctConst.ACT_EMG_CLOSE_MODIFY);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_CLOSE);
+		h.setActionCode(AcctConst.ACT_EMG_MODIFY);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_APPLICANT);
+		h.setActionCode("APPROVE");
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_APPLICANT);
+		// 有效身分不是申請人 → 同人兼任，與動作無關
+		h.setActionCode(AcctConst.ACT_EMG_CLOSE_MODIFY);
+		h.setReqApplyBy(TERRY);
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_SAME_PERSON);
+		h.setIsSelfAction(0);
+		assertThat(RequestService.selfLabel(h)).isNull();
 	}
 
 	@Test

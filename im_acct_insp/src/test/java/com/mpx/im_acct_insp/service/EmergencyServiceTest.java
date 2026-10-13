@@ -18,6 +18,11 @@ package com.mpx.im_acct_insp.service;
 //           沒有異動或未回報不寫歷史不標旗標、退回原因必填／500 字／版本號必填、404／403、兩位主管並發與回報並發皆 409、
 //           自核（處理人即申請人、含切換成申請人）IS_SELF_DECIDE＝1 且歷史標籤「自行核准」、逾期後仍可處理；
 //           審查補強：標旗標 0 筆→500 回滾、交易中途例外整筆回滾且不寄信
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S6：異常結案測試——沒有異動只寫主表、有異動寫子表 CLOSE 列＋EMG_CLOSE_MODIFY 歷史＋旗標
+//           （原因格式、截斷、REPORT 列不動）、驗證順序（結案說明兩種都必填）、帳號不符同一句、404／403、
+//           未退回／已補核准／已結案／版本不符／UPDATE 0 筆皆 409、旗標 0 筆 500 回滾、自核標籤「自行結案」、不寄信
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -64,6 +69,7 @@ import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.EmgActionResult;
 import com.mpx.im_acct_insp.model.EmgAffectAcct;
 import com.mpx.im_acct_insp.model.EmgDetail;
+import com.mpx.im_acct_insp.model.request.EmgCloseForm;
 import com.mpx.im_acct_insp.model.request.EmgForm;
 import com.mpx.im_acct_insp.model.request.EmgReportForm;
 import com.mpx.im_acct_insp.model.request.ReasonForm;
@@ -590,6 +596,278 @@ class EmergencyServiceTest {
 		assertThat(h3.getIsSelfAction()).isZero();
 		h3.setReqApplyBy(MICHAEL);
 		assertThat(RequestService.selfLabel(h3)).isNull();
+	}
+
+	// ------------------------------------------------------------
+	// 異常結案（S6）：close
+	// ------------------------------------------------------------
+
+	@Test
+	void 結案_沒有異動_寫主表_不寫子表歷史旗標_不寄信_回傳新版本() {
+		EmgDetail d = returned(emg(MICHAEL, 2));
+		d.setDueDate(NOW.minusDays(1));
+		EmgActionResult r = svc.close(id(TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_NO_CHANGE, " 查無異動 ", 2));
+		assertThat(r.getEmgId()).isEqualTo(EMG_ID);
+		assertThat(r.getVersionNo()).isEqualTo(3);
+		verify(fx.emgDao).close(EMG_ID, 2, AcctConst.EMG_CLOSE_NO_CHANGE, "查無異動", TERRY, 0, NOW, TERRY);
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.hists).isEmpty();
+		// 既有旗標不清（S10 才處理）、也不新標
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 結案_有異動_子表CLOSE列_EMG_CLOSE_MODIFY歷史_標旗標_切換身分時ACT_BY實際操作人_REPORT列不動() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		fx.acct("A2", "DB", AcctConst.AS_DISABLED);
+		EmgActionResult r = svc.close(impersonate(HANK, TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_CHANGED, " 稽核發現改權限 ", 2,
+				affect(" A1 ", " acct_A1 ", " 加了 DBA "), affect("A2", "acct_A2", " ")));
+		assertThat(r.getVersionNo()).isEqualTo(3);
+
+		InOrder order = inOrder(fx.emgDao);
+		order.verify(fx.emgDao).close(EMG_ID, 2, AcctConst.EMG_CLOSE_CHANGED, "稽核發現改權限", TERRY, 0, NOW, HANK);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_CLOSE, "A1", "加了 DBA", TERRY, NOW, HANK);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_CLOSE, "A2", null, TERRY, NOW, HANK);
+		// 申請人回報的 REPORT 列不改不刪：結案只新增 CLOSE 列
+		verify(fx.emgDao, never()).insertAffect(any(), eq(AcctConst.AFFECT_REPORT), any(), any(), any(), any(), any());
+
+		assertThat(fx.hists).extracting(AcctHist::getAcctId).containsExactly("A1", "A2");
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getEmgId()).isEqualTo(EMG_ID);
+		assertThat(h.getReqId()).isNull();
+		assertThat(h.getSourceCode()).isEqualTo(AcctConst.HIST_SRC_EMG);
+		assertThat(h.getActionCode()).isEqualTo(AcctConst.ACT_EMG_CLOSE_MODIFY);
+		assertThat(h.getActBy()).isEqualTo(HANK);
+		assertThat(h.getActByName()).isEqualTo(NAMES.get(HANK));
+		assertThat(h.getActAsId()).isEqualTo(TERRY);
+		assertThat(h.getActAsName()).isEqualTo(NAMES.get(TERRY));
+		assertThat(h.getActDate()).isEqualTo(NOW);
+		assertThat(h.getIsSelfAction()).isZero();
+		assertThat(h.getCreateBy()).isEqualTo(HANK);
+		assertThat(h.getResultDescr()).isEqualTo("緊急存取 " + EMG_ID + " 異常結案：有帳號異動；結案人 " + NAMES.get(TERRY)
+				+ "；結案說明：稽核發現改權限；本帳號：加了 DBA");
+		assertThat(fx.hists.get(1).getResultDescr()).endsWith("結案說明：稽核發現改權限");
+
+		// S6-②：旗標原因「{單號} 異常結案發現異動：{結案說明}」；FLAG_BY 有效身分、UPDATE_BY 實際操作人
+		String flag = EMG_ID + " 異常結案發現異動：稽核發現改權限";
+		verify(fx.acctDao).flagReview("A1", flag, AcctConst.FLAG_SRC_EMG, TERRY, NOW, HANK);
+		verify(fx.acctDao).flagReview("A2", flag, AcctConst.FLAG_SRC_EMG, TERRY, NOW, HANK);
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 結案_上限20個帳號可送_旗標原因超過500字截斷_歷史說明超過1000字截斷() {
+		returned(emg(MICHAEL, 2));
+		EmgReportForm.AffectAcct[] list = new EmgReportForm.AffectAcct[AcctConst.EMG_AFFECT_MAX];
+		for (int i = 0; i < list.length; i++) {
+			fx.acct("A" + i, "DB", AcctConst.AS_APPROVED);
+			list[i] = affect("A" + i, "acct_A" + i, "改".repeat(500));
+		}
+		svc.close(id(TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_CHANGED, "因".repeat(500), 2, list));
+		verify(fx.emgDao, times(AcctConst.EMG_AFFECT_MAX)).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		ArgumentCaptor<String> flag = ArgumentCaptor.forClass(String.class);
+		verify(fx.acctDao).flagReview(eq("A0"), flag.capture(), eq(AcctConst.FLAG_SRC_EMG), eq(TERRY), eq(NOW), eq(TERRY));
+		assertThat(flag.getValue()).hasSize(500).startsWith(EMG_ID + " 異常結案發現異動：因因");
+		assertThat(fx.hists.get(0).getResultDescr()).hasSize(1000).startsWith("緊急存取 " + EMG_ID + " 異常結案：有帳號異動；");
+	}
+
+	@Test
+	void 結案驗證_結案發現_受影響帳號數量與重複_結案說明兩種都必填與欄寬_版本號必填_查帳號前擋下() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		String res = AcctMsg.WHAT_EMG_CLOSE_RESULT;
+		String aff = AcctMsg.WHAT_EMG_AFFECT;
+		String descr = AcctMsg.WHAT_EMG_CLOSE_DESCR;
+		String none = AcctConst.EMG_CLOSE_NO_CHANGE;
+		String chg = AcctConst.EMG_CLOSE_CHANGED;
+		assertCloseBad(null, AcctMsg.E10_PREFIX + res);
+		assertCloseBad(closeForm(" ", "說明", 2), AcctMsg.E10_PREFIX + res);
+		// 回報的值域不通用
+		assertCloseBad(closeForm(AcctConst.EMG_REPORT_MODIFIED, "說明", 2), AcctMsg.BAD_CODE_PREFIX + res);
+		assertCloseBad(closeForm(chg, "說明", 2), AcctMsg.E10_PREFIX + aff);
+		assertCloseBad(closeForm(none, "說明", 2, affect("A1", "acct_A1", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		EmgReportForm.AffectAcct[] over = new EmgReportForm.AffectAcct[AcctConst.EMG_AFFECT_MAX + 1];
+		for (int i = 0; i < over.length; i++) {
+			fx.acct("A" + i, "DB", AcctConst.AS_APPROVED);
+			over[i] = affect("A" + i, "acct_A" + i, null);
+		}
+		assertCloseBad(closeForm(chg, "說明", 2, over), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("A1", "acct_A1", null), affect(" A1", "acct_A1", null)),
+				AcctMsg.BAD_CODE_PREFIX + aff);
+		assertCloseBad(closeForm(chg, "說明", 2, (EmgReportForm.AffectAcct) null), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertCloseBad(closeForm(chg, "說明", 2, affect(" ", "acct_A1", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("A1", " ", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		// S6-①：結案說明兩種結果都必填
+		assertCloseBad(closeForm(none, " ", 2), AcctMsg.E10_PREFIX + descr);
+		assertCloseBad(closeForm(none, null, 2), AcctMsg.E10_PREFIX + descr);
+		assertCloseBad(closeForm(chg, "", 2, affect("A1", "acct_A1", null)), AcctMsg.E10_PREFIX + descr);
+		assertCloseBad(closeForm(none, "x".repeat(501), 2), AcctMsg.E11_PREFIX + descr);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("A1", "acct_A1", "x".repeat(501))),
+				AcctMsg.E11_PREFIX + AcctMsg.WHAT_EMG_AFFECT_DESCR);
+		assertCloseBad(closeForm(none, "說明", null), AcctMsg.E02_PREFIX + "版本號");
+		assertNothingClosed();
+		verify(fx.acctDao, never()).findById(any());
+
+		// 500 字整為上限內
+		svc.close(id(TERRY), EMG_ID, closeForm(none, "x".repeat(500), 2));
+		verify(fx.emgDao).close(EMG_ID, 2, none, "x".repeat(500), TERRY, 0, NOW, TERRY);
+	}
+
+	@Test
+	void 結案驗證_帳號單號與名稱須同時相符_狀態限三種_不符一律同一句() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		fx.acct("R1", "DB", AcctConst.AS_REVIEW);
+		String msg = AcctMsg.BAD_CODE_PREFIX + AcctMsg.WHAT_EMG_AFFECT;
+		String chg = AcctConst.EMG_CLOSE_CHANGED;
+		assertCloseBad(closeForm(chg, "說明", 2, affect("NOPE", "acct_NOPE", null)), msg);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("A1", "acct_a1", null)), msg);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("R1", "acct_R1", null)), msg);
+		assertCloseBad(closeForm(chg, "說明", 2, affect("A1", "acct_A1", null), affect("R1", "acct_R1", null)), msg);
+		// 順序：帳號格式 400 先於結案說明 E10；帳號查無 400 先於版本號 E02
+		assertCloseBad(closeForm(chg, " ", 2, affect(" ", "acct_A1", null)), msg);
+		assertCloseBad(closeForm(chg, "說明", null, affect("NOPE", "acct_NOPE", null)), msg);
+		assertNothingClosed();
+	}
+
+	@Test
+	void 結案_帳號照單號排序寫入_與退回同一上鎖順序_已逾期帳號可收() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_EXPIRED);
+		fx.acct("A2", "DB", AcctConst.AS_APPROVED);
+		svc.close(id(TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_CHANGED, "說明", 2, affect("A2", "acct_A2", null),
+				affect("A1", "acct_A1", null)));
+		InOrder order = inOrder(fx.emgDao, fx.acctDao);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_CLOSE, "A1", null, TERRY, NOW, TERRY);
+		order.verify(fx.acctDao).flagReview(eq("A1"), any(), any(), any(), any(), any());
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_CLOSE, "A2", null, TERRY, NOW, TERRY);
+		order.verify(fx.acctDao).flagReview(eq("A2"), any(), any(), any(), any(), any());
+		assertThat(fx.hists).extracting(AcctHist::getAcctId).containsExactly("A1", "A2");
+	}
+
+	@Test
+	void 結案權限_查無或無權看404_無EMG_DECIDE者403_申請人本人沒權限也403() {
+		returned(emg(MICHAEL, 2));
+		EmgCloseForm ok = closeForm(AcctConst.EMG_CLOSE_NO_CHANGE, "說明", 2);
+		assertStatus(() -> svc.close(id(KEVIN), EMG_ID, ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.close(id(TERRY), "EA20261007-999", ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.close(id(TERRY), null, ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.close(idWith(TERRY, Set.of(AcctConst.PERM_EMG_VIEW_ALL), List.of()), EMG_ID, ok),
+				HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertStatus(() -> svc.close(id(MICHAEL), EMG_ID, ok), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		// 權限在欄位驗證前：沒權限者送空表單也是 403
+		assertStatus(() -> svc.close(id(MICHAEL), EMG_ID, null), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertNothingClosed();
+	}
+
+	@Test
+	void 結案並發_未處理_已補核准_已結案_版本不符409_UPDATE零筆409回滾不寫子表歷史旗標() {
+		EmgDetail d = emg(MICHAEL, 2);
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		EmgCloseForm ok = closeForm(AcctConst.EMG_CLOSE_NO_CHANGE, "說明", 2);
+		// D13：只有已退回的單能結案
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, ok), HttpStatus.CONFLICT, AcctMsg.E08);
+		d.setDecideCode(AcctConst.EMG_DECIDE_APPROVE);
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, ok), HttpStatus.CONFLICT, AcctMsg.E08);
+		returned(d);
+		d.setCloseDate(NOW.minusMinutes(5));
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, ok), HttpStatus.CONFLICT, AcctMsg.E08);
+		d.setCloseDate(null);
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_NO_CHANGE, "說明", 1)),
+				HttpStatus.CONFLICT, AcctMsg.E08);
+		assertNothingClosed();
+
+		// 讀取時沒人動、寫入時被另一位主管搶先 → UPDATE 0 筆 → 409，整筆回滾
+		when(fx.emgDao.close(any(), anyInt(), any(), any(), any(), anyInt(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID,
+				closeForm(AcctConst.EMG_CLOSE_CHANGED, "說明", 2, affect("A1", "acct_A1", null))), HttpStatus.CONFLICT,
+				AcctMsg.E08);
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	@Test
+	void 結案_標旗標零筆_500整筆回滾() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		fx.acct("A2", "DB", AcctConst.AS_APPROVED);
+		when(fx.acctDao.flagReview(eq("A2"), any(), any(), any(), any(), any())).thenReturn(0);
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, closeForm(AcctConst.EMG_CLOSE_CHANGED, "說明", 2,
+				affect("A1", "acct_A1", null), affect("A2", "acct_A2", null))), HttpStatus.INTERNAL_SERVER_ERROR,
+				"資料寫入未完成（單號 " + EMG_ID + "），請聯絡系統管理員");
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	@Test
+	void 自核_結案人即申請人_IS_SELF_CLOSE與歷史IS_SELF_ACTION為1_標籤自行結案_切換成申請人也算() {
+		returned(emg(MICHAEL, 2));
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		EmgCloseForm f = closeForm(AcctConst.EMG_CLOSE_CHANGED, "說明", 2, affect("A1", "acct_A1", null));
+		svc.close(idWith(MICHAEL, Set.of(AcctConst.PERM_EMG_DECIDE), List.of()), EMG_ID, f);
+		verify(fx.emgDao).close(EMG_ID, 2, AcctConst.EMG_CLOSE_CHANGED, "說明", MICHAEL, 1, NOW, MICHAEL);
+		AcctHist h = fx.hists.get(0);
+		assertThat(h.getIsSelfAction()).isEqualTo(1);
+		h.setReqApplyBy(MICHAEL);
+		// S6-③：結案的自核標籤是「自行結案」，不是「自行核准」
+		assertThat(RequestService.selfLabel(h)).isEqualTo(AcctConst.SELF_LABEL_CLOSE);
+
+		// HANK 切換成申請人 MICHAEL 結案：有效身分是申請人 → 自核
+		fx.hists.clear();
+		Identity asApplicant = new Identity("hash-" + HANK, HANK, NAMES.get(HANK), MICHAEL, NAMES.get(MICHAEL), true,
+				Set.of(AcctConst.PERM_EMG_DECIDE), List.of(), List.of(), null, null, null);
+		svc.close(asApplicant, EMG_ID, f);
+		verify(fx.emgDao).close(EMG_ID, 2, AcctConst.EMG_CLOSE_CHANGED, "說明", MICHAEL, 1, NOW, HANK);
+		AcctHist h2 = fx.hists.get(0);
+		assertThat(h2.getActBy()).isEqualTo(HANK);
+		assertThat(h2.getActAsId()).isEqualTo(MICHAEL);
+		assertThat(h2.getIsSelfAction()).isEqualTo(1);
+		h2.setReqApplyBy(MICHAEL);
+		assertThat(RequestService.selfLabel(h2)).isEqualTo(AcctConst.SELF_LABEL_CLOSE);
+
+		// 非申請人結案：不是自核、沒有標籤
+		fx.hists.clear();
+		svc.close(id(TERRY), EMG_ID, f);
+		AcctHist h3 = fx.hists.get(0);
+		assertThat(h3.getIsSelfAction()).isZero();
+		h3.setReqApplyBy(MICHAEL);
+		assertThat(RequestService.selfLabel(h3)).isNull();
+	}
+
+	/** 已回報異動並被退回、尚未結案；close() 預設寫入 1 筆 */
+	EmgDetail returned(EmgDetail d) {
+		reported(d, AcctConst.EMG_REPORT_MODIFIED, "改了密碼", affectRow("A1", "重設密碼"));
+		d.setDecideCode(AcctConst.EMG_DECIDE_RETURN);
+		when(fx.emgDao.close(any(), anyInt(), any(), any(), any(), anyInt(), any(), any())).thenReturn(1);
+		return d;
+	}
+
+	void assertCloseBad(EmgCloseForm f, String msg) {
+		assertStatus(() -> svc.close(id(TERRY), EMG_ID, f), HttpStatus.BAD_REQUEST, msg);
+	}
+
+	void assertNothingClosed() {
+		verify(fx.emgDao, never()).close(any(), anyInt(), any(), any(), any(), anyInt(), any(), any());
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.hists).isEmpty();
+		verify(fx.acctDao, never()).flagReview(any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.commits).isZero();
+	}
+
+	static EmgCloseForm closeForm(String result, String descr, Integer versionNo, EmgReportForm.AffectAcct... accts) {
+		EmgCloseForm f = new EmgCloseForm();
+		f.setCloseResultCode(result);
+		f.setCloseDescr(descr);
+		f.setVersionNo(versionNo);
+		f.setAffectAccts(accts.length == 0 ? null : java.util.Arrays.asList(accts));
+		return f;
 	}
 
 	/** 待回報、未處理的單；report()／decide() 預設寫入 1 筆 */
