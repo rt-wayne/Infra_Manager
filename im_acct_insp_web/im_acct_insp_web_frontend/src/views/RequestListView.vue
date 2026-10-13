@@ -15,6 +15,14 @@
             ② 在途者只有查看、歷史，其餘依 allowedReqTypes
             ③ 狀態篩選（全部／審核中／待執行／待複驗／已核准／已退件）；審核中顯示 U10「審核中：待 ○○」；
             已退件顯示退件原因與「重新送出」（canResubmit）；異動按鈕只對有 ACC_APPLY 者顯示
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-14
+  變更說明: 使用者 2026-10-14 要求：① 區塊順序改為 查詢 → 我的申請單 → 我曾申請新增的帳號（原本申請單在最下）
+            ② 後兩區塊標題列加展開／收合鈕（v-show 只藏內容，資料照常載入，篩選與頁碼在收合期間保留）；
+            預設「我的申請單」展開、「我曾申請新增的帳號」收合；收合狀態不記住、每次進頁回預設；
+            查詢區塊不加收合（只有一行輸入框，收不到空間）。以上皆使用者 2026-10-14 裁示
+            收合鈕無障礙（code-reviewer 建議）：鈕名固定（aria-label）、狀態交給 aria-expanded、
+            ▲▼ 對讀屏隱藏（aria-hidden）、aria-controls 指向內容區
 -->
 <template>
   <main>
@@ -46,80 +54,90 @@
       </template>
     </div>
 
-    <div class="module-card">
-      <h2>⭐ 我曾申請新增的帳號</h2>
-      <template v-if="mine !== null">
-        <div v-if="mine.length === 0" class="hint">目前沒有您送出過的新增申請。</div>
-        <div v-for="a in mine" :key="a.acctId" class="kv mine-row">
-          <div class="k">{{ a.acctName || (a.catgId === DOOR_CATG_ID ? '（門禁卡，待發卡）' : a.acctId) }}（{{ catgNameOf(codes, a.catgId, a.catgName) }}）－ {{ label(ACCT_STATE_LABEL, a.acctStateCode) }}　單號 {{ a.acctId }}</div>
-          <div class="v item">
-            <span>{{ a.sysName || '—' }}　·　{{ a.holderName || '—' }}</span>
-            <span v-if="a.inFlight" class="ops">
-              <span class="hint">申請處理中</span>
-              <button type="button" class="btn-link" @click="viewId = a.acctId">查看</button>
-              <button type="button" class="btn-link" @click="openHistory(a.acctId, a.acctName)">歷史</button>
-            </span>
-            <AcctOpButtons
-              v-else
-              :acct-id="a.acctId"
-              :acct-name="a.acctName"
-              :ops="can('ACC_APPLY') ? accountOps(a) : []"
-              @view="viewId = a.acctId"
-              @history="openHistory(a.acctId, a.acctName)"
-            />
-          </div>
+    <div class="module-card" data-sec="reqs">
+      <h2 class="sec-head">
+        <span>📄 我的申請單</span>
+        <button type="button" class="btn-link sec-toggle" aria-label="我的申請單" aria-controls="sec-reqs-body" :aria-expanded="showReqs" @click="showReqs = !showReqs">{{ showReqs ? '收合' : '展開' }}<span aria-hidden="true">{{ showReqs ? ' ▲' : ' ▼' }}</span></button>
+      </h2>
+      <div v-show="showReqs" id="sec-reqs-body" class="sec-body">
+        <div class="filters">
+          <input v-model="reqKeyword" type="text" placeholder="搜尋單號／帳號名稱" aria-label="搜尋單號或帳號名稱" autocomplete="off" />
+          <select v-model="reqState" aria-label="申請單狀態" @change="loadRequests">
+            <option v-for="o in REQ_STATE_FILTER" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
         </div>
-      </template>
+        <template v-if="reqs !== null">
+          <div v-if="reqView.length > 0">
+            <p class="res-head">共 {{ reqView.length }} 筆，第 {{ page }} / {{ totalPages }} 頁</p>
+            <table class="tbl">
+              <colgroup>
+                <col style="width: 18%" />
+                <col />
+                <col style="width: 24%" />
+                <col style="width: 15%" />
+                <col style="width: 15%" />
+              </colgroup>
+              <thead>
+                <tr><th>單號</th><th>類別／申請類型／帳號名稱</th><th>狀態</th><th>送出時間</th><th>操作</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in pageRows" :key="r.reqId" :data-req="r.reqId">
+                  <td>{{ r.reqId }}</td>
+                  <td>{{ catgNameOf(codes, r.catgId, r.catgName) }} {{ label(REQ_TYPE_LABEL, r.reqTypeCode) }} — {{ r.acctName || (r.catgId === DOOR_CATG_ID ? '（門禁卡，待發卡）' : '—') }}</td>
+                  <td>
+                    <span class="tag req-state" :class="stateTagClass(r.reqStateCode)">{{ reqStateText(r.reqStateCode, r.stageName, r.currStageId) }}</span>
+                    <div v-if="r.reqStateCode === 'REJECTED' && r.rejectReason" class="hint warn reject-reason">退件原因：{{ r.rejectReason }}</div>
+                  </td>
+                  <td>{{ r.submitDate }}</td>
+                  <td>
+                    <span class="ops">
+                      <button type="button" class="btn-link" @click="detailId = r.reqId">查看明細</button>
+                      <RouterLink
+                        v-if="r.reqStateCode === 'REJECTED' && r.canResubmit !== false && can('ACC_APPLY')"
+                        class="btn-link warn resubmit"
+                        :to="{ path: '/requests/new', query: { resubmit: r.reqId } }"
+                      >重新送出</RouterLink>
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <PagerBar v-model:page="page" :total-pages="totalPages" />
+          </div>
+          <div v-else class="empty">目前沒有符合條件的申請單</div>
+        </template>
+      </div>
     </div>
 
-    <div class="module-card">
-      <h2>📄 我的申請單</h2>
-      <div class="filters">
-        <input v-model="reqKeyword" type="text" placeholder="搜尋單號／帳號名稱" aria-label="搜尋單號或帳號名稱" autocomplete="off" />
-        <select v-model="reqState" aria-label="申請單狀態" @change="loadRequests">
-          <option v-for="o in REQ_STATE_FILTER" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
+    <div class="module-card" data-sec="mine">
+      <h2 class="sec-head">
+        <span>⭐ 我曾申請新增的帳號</span>
+        <button type="button" class="btn-link sec-toggle" aria-label="我曾申請新增的帳號" aria-controls="sec-mine-body" :aria-expanded="showMine" @click="showMine = !showMine">{{ showMine ? '收合' : '展開' }}<span aria-hidden="true">{{ showMine ? ' ▲' : ' ▼' }}</span></button>
+      </h2>
+      <div v-show="showMine" id="sec-mine-body" class="sec-body">
+        <template v-if="mine !== null">
+          <div v-if="mine.length === 0" class="hint">目前沒有您送出過的新增申請。</div>
+          <div v-for="a in mine" :key="a.acctId" class="kv mine-row">
+            <div class="k">{{ a.acctName || (a.catgId === DOOR_CATG_ID ? '（門禁卡，待發卡）' : a.acctId) }}（{{ catgNameOf(codes, a.catgId, a.catgName) }}）－ {{ label(ACCT_STATE_LABEL, a.acctStateCode) }}　單號 {{ a.acctId }}</div>
+            <div class="v item">
+              <span>{{ a.sysName || '—' }}　·　{{ a.holderName || '—' }}</span>
+              <span v-if="a.inFlight" class="ops">
+                <span class="hint">申請處理中</span>
+                <button type="button" class="btn-link" @click="viewId = a.acctId">查看</button>
+                <button type="button" class="btn-link" @click="openHistory(a.acctId, a.acctName)">歷史</button>
+              </span>
+              <AcctOpButtons
+                v-else
+                :acct-id="a.acctId"
+                :acct-name="a.acctName"
+                :ops="can('ACC_APPLY') ? accountOps(a) : []"
+                @view="viewId = a.acctId"
+                @history="openHistory(a.acctId, a.acctName)"
+              />
+            </div>
+          </div>
+        </template>
       </div>
-      <template v-if="reqs !== null">
-        <div v-if="reqView.length > 0">
-          <p class="res-head">共 {{ reqView.length }} 筆，第 {{ page }} / {{ totalPages }} 頁</p>
-          <table class="tbl">
-            <colgroup>
-              <col style="width: 18%" />
-              <col />
-              <col style="width: 24%" />
-              <col style="width: 15%" />
-              <col style="width: 15%" />
-            </colgroup>
-            <thead>
-              <tr><th>單號</th><th>類別／申請類型／帳號名稱</th><th>狀態</th><th>送出時間</th><th>操作</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in pageRows" :key="r.reqId" :data-req="r.reqId">
-                <td>{{ r.reqId }}</td>
-                <td>{{ catgNameOf(codes, r.catgId, r.catgName) }} {{ label(REQ_TYPE_LABEL, r.reqTypeCode) }} — {{ r.acctName || (r.catgId === DOOR_CATG_ID ? '（門禁卡，待發卡）' : '—') }}</td>
-                <td>
-                  <span class="tag req-state" :class="stateTagClass(r.reqStateCode)">{{ reqStateText(r.reqStateCode, r.stageName, r.currStageId) }}</span>
-                  <div v-if="r.reqStateCode === 'REJECTED' && r.rejectReason" class="hint warn reject-reason">退件原因：{{ r.rejectReason }}</div>
-                </td>
-                <td>{{ r.submitDate }}</td>
-                <td>
-                  <span class="ops">
-                    <button type="button" class="btn-link" @click="detailId = r.reqId">查看明細</button>
-                    <RouterLink
-                      v-if="r.reqStateCode === 'REJECTED' && r.canResubmit !== false && can('ACC_APPLY')"
-                      class="btn-link warn resubmit"
-                      :to="{ path: '/requests/new', query: { resubmit: r.reqId } }"
-                    >重新送出</RouterLink>
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <PagerBar v-model:page="page" :total-pages="totalPages" />
-        </div>
-        <div v-else class="empty">目前沒有符合條件的申請單</div>
-      </template>
     </div>
 
     <AccountDetailModal v-if="viewId" :acct-id="viewId" @close="viewId = ''" />
@@ -171,6 +189,11 @@ const lookupRows = ref<AccountLookup[] | null>(null)
 const lookupLoading = ref(false)
 
 const mine = ref<Account[] | null>(null)
+
+// 區塊展開／收合（使用者 2026-10-14 裁示：預設「我的申請單」展開、「我曾申請新增的帳號」收合；
+// 狀態不記住，每次進頁回預設。收合只藏內容（v-show），資料照常載入、篩選與頁碼保留）
+const showReqs = ref(true)
+const showMine = ref(false)
 
 const reqKeyword = ref('')
 const reqState = ref('')
@@ -240,6 +263,8 @@ onMounted(() => {
 .lookup { display: flex; gap: 10px; }
 .lookup input { flex: 1; min-width: 0; }
 .lookup-hint { margin: 4px 0 10px; }
+.sec-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sec-toggle { min-height: 48px; flex: none; }
 .filters { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
 .filters input { flex: 1 1 260px; min-width: 0; }
 .item { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; flex-wrap: wrap; }

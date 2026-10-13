@@ -14,6 +14,12 @@
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S10：帳號列表「審查異常」標籤（title 帶原因）；
 //           帳號詳情彈窗：審查異常標籤與原因／標記日期／標記人一列、未掛旗標不顯示
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-14
+// 變更說明: 申請單列表：區塊順序（我的申請單在我曾申請新增的帳號上方）、
+//           預設展開／收合與切換鈕（使用者 2026-10-14 要求）；
+//           釘住收合只藏不拆（收合中內容在 DOM、API 照常呼叫）、搜尋關鍵字收合後保留、
+//           aria-expanded 值（code-reviewer 建議）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -308,6 +314,44 @@ describe('帳號申請單列表', () => {
     expect(w.find('tr[data-req=AR2] .reject-reason').text()).toContain('名稱不符')
     expect(w.find('tr[data-req=AR2] .resubmit').exists()).toBe(true)
     expect(w.findAll('select[aria-label=申請單狀態] option').map(o => o.text())).toEqual(['全部', '審核中', '待執行', '待複驗', '已核准', '已退件'])
+    w.unmount()
+  })
+
+  it('區塊順序：我的申請單在我曾申請新增的帳號上方；預設前者展開、後者收合；鈕可切換；收合只藏不拆', async () => {
+    const w = await mountView(RequestListView, '/requests')
+    const heads = w.findAll('.module-card h2').map(h => h.text())
+    expect(heads[1]).toContain('我的申請單')
+    expect(heads[2]).toContain('我曾申請新增的帳號')
+
+    const reqsSec = w.find('[data-sec=reqs]')
+    const mineSec = w.find('[data-sec=mine]')
+    // v-show 只動行內樣式；jsdom 的 getComputedStyle 會回傳切換前的舊值（isVisible 因此誤判），直接斷言行內樣式
+    const bodyShown = (sec: typeof reqsSec) => (sec.find('.sec-body').element as HTMLElement).style.display !== 'none'
+    expect(bodyShown(reqsSec)).toBe(true)
+    expect(bodyShown(mineSec)).toBe(false)
+    expect(reqsSec.find('.sec-toggle').text()).toContain('收合')
+    expect(mineSec.find('.sec-toggle').text()).toContain('展開')
+    expect(reqsSec.find('.sec-toggle').attributes('aria-expanded')).toBe('true')
+    expect(mineSec.find('.sec-toggle').attributes('aria-expanded')).toBe('false')
+
+    // 收合只藏不拆（v-show）：收合中資料照常載入、內容節點仍在 DOM（mock 回空陣列 → 空狀態提示已渲染）
+    expect(listMyAccounts).toHaveBeenCalled()
+    expect(mineSec.find('.sec-body .hint').text()).toBe('目前沒有您送出過的新增申請。')
+
+    // 收合期間保留篩選狀態：輸入關鍵字 → 收合 → 展開，值還在
+    await reqsSec.find('input[aria-label=搜尋單號或帳號名稱]').setValue('AR9')
+    await reqsSec.find('.sec-toggle').trigger('click')
+    expect(bodyShown(reqsSec)).toBe(false)
+    expect(reqsSec.find('.sec-toggle').text()).toContain('展開')
+    expect(reqsSec.find('.sec-toggle').attributes('aria-expanded')).toBe('false')
+    await reqsSec.find('.sec-toggle').trigger('click')
+    expect(bodyShown(reqsSec)).toBe(true)
+    expect((reqsSec.find('input[aria-label=搜尋單號或帳號名稱]').element as HTMLInputElement).value).toBe('AR9')
+
+    await mineSec.find('.sec-toggle').trigger('click')
+    expect(bodyShown(mineSec)).toBe(true)
+    expect(mineSec.find('.sec-toggle').text()).toContain('收合')
+    expect(mineSec.find('.sec-toggle').attributes('aria-expanded')).toBe('true')
     w.unmount()
   })
 })
