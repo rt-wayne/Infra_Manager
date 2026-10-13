@@ -193,6 +193,13 @@ COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG�
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_DATE IS '審查異常標記時間';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有效身分）';
 
+-- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯；只改說明、不動結構；重覆執行無害）
+-- 與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
+COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
+COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
+COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明）';
+COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人（有效身分相同）。default 0';
+
 -- ===== PUBLIC SYNONYM 與授權給 AP_USER（synonym 已存在就略過；GRANT 重覆執行無害）
 -- 依 2026-10-13 以 RD_USER 查詢的結果（backlog/46-緊急存取.md 3.6）：第一階段 21 張表與 5 個序列全部是
 -- PUBLIC synonym（同名、指向 RD_USER），被授權帳號是 AP_USER；RD_USER 本身有 CREATE PUBLIC SYNONYM 權限，不需 DBA。

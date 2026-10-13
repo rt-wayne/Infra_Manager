@@ -33,9 +33,15 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 46 項 S2：NotificationService 建構子加 EmgDao；新增緊急存取送出通知測試——收件人為 EMG_DECIDE
 //           持有人、主旨含補核准期限、本文值跳脫與換行、連結到緊急存取頁、通知紀錄事件 EMG_SUBMIT／參照 EMG、
 //           查無單號不寄、未知事件與 DAO 例外不外拋
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4b-2：新增緊急存取退回通知測試——只寄原申請人、主旨「已退回」、本文含送出信 8 列與
+//           處理人（有效身分姓名）／退回原因／回報結果（有異動帶回報說明、無異動、未回報、不明代碼）、信末提醒句、值跳脫、
+//           連結到緊急存取頁、通知紀錄事件 EMG_RETURN；申請人無 Email 記 SKIP 不寄
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
+import static com.mpx.im_acct_insp.support.TestFixture.GARY;
 import static com.mpx.im_acct_insp.support.TestFixture.HANK;
 import static com.mpx.im_acct_insp.support.TestFixture.KEVIN;
 import static com.mpx.im_acct_insp.support.TestFixture.NOW;
@@ -648,6 +654,92 @@ class JobAndNotifyTest {
 		n.emgEvent(AcctConst.EV_EMG_SUBMIT, "EA-err", KEVIN);
 		verify(sender, times(1)).send(any(), any(), any());
 		verify(fx.notifyLogDao, times(2)).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 緊急存取_退回通知只寄申請人_主旨已退回_本文含處理人退回原因回報結果與提醒_值跳脫_紀錄事件EMG_RETURN() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		EmgDetail e = returnedEmg("EA20261007-002");
+		e.setReportTypeCode(AcctConst.EMG_REPORT_MODIFIED);
+		e.setReportDescr("改了 <root> 密碼\n並新增帳號");
+		when(fx.emgDao.findById(eq("EA20261007-002"), any())).thenReturn(e);
+		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, "k@example.com"));
+
+		n.emgEvent(AcctConst.EV_EMG_RETURN, "EA20261007-002", HANK);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("k@example.com"), eq("【緊急存取】EA20261007-002 已退回"), body.capture());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				// 送出信 8 列照舊
+				.contains("資料庫", "prod-db &lt;root&gt;", "凱文 &amp; 測試", "第一行<br>&lt;i&gt;斜體&lt;/i&gt;", "4 小時",
+						"2026-10-07 10:30", "2026-10-08 10:30", "補核准期限")
+				// 處理人顯示有效身分姓名（代理時為被代理主管），不是工號
+				.contains("處理人", "許 &lt;永成&gt;").doesNotContain("0000010")
+				.contains("退回原因", "事由不符 &amp; 需補件")
+				.contains("回報結果", "有異動：改了 &lt;root&gt; 密碼<br>並新增帳號")
+				.contains("<p>後續由主管異常結案，若有帳號異動請告知處理主管</p>")
+				.doesNotContain("<root>")
+				.contains("<a href=\"http://h/ctx/#/emergency\"", "前往「緊急存取」", FOOTER);
+		// 只查申請人、不查補核准權限持有人；通知紀錄事件 EMG_RETURN、參照 EMG、CREATE_BY 為實際操作人
+		verify(fx.permDao).findActiveUser(KEVIN);
+		verify(fx.permDao, never()).findUsersWithPerm(any());
+		verify(fx.notifyLogDao).insert(eq("EMG_RETURN"), eq("EMG"), eq("EA20261007-002"), eq(KEVIN), eq("k@example.com"),
+				eq("SUCCESS"), isNull(), any(), eq(HANK));
+		verify(fx.notifyLogDao, times(1)).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void 緊急存取_退回通知_回報結果三種文字與不明代碼_處理人無姓名顯示工號_申請人無Email記SKIP不寄() {
+		// 無異動
+		EmgDetail none = returnedEmg("EA20261007-003");
+		none.setReportTypeCode(AcctConst.EMG_REPORT_NONE);
+		none.setReportDescr("有填說明也不顯示");
+		assertThat(NotificationService.reportResultText(none)).isEqualTo("無異動");
+		// 有異動但說明空白
+		none.setReportTypeCode(AcctConst.EMG_REPORT_MODIFIED);
+		none.setReportDescr("  ");
+		assertThat(NotificationService.reportResultText(none)).isEqualTo("有異動");
+		// 代碼被手動改壞：不得寫成「無異動」
+		none.setReportTypeCode("WHAT");
+		assertThat(NotificationService.reportResultText(none)).isEqualTo("（不明：WHAT）");
+		// 未回報即退回
+		EmgDetail unreported = returnedEmg("EA20261007-004");
+		assertThat(NotificationService.reportResultText(unreported)).isEqualTo("未回報");
+		// 處理人沒有姓名快照時退回工號；退回原因空白顯示空字串、不出現 null
+		unreported.setDecideByName(null);
+		unreported.setReturnReason(null);
+		assertThat(NotificationService.emgReturnBody(unreported)).contains("0000010", "未回報").doesNotContain("null");
+
+		// 申請人無 Email：記 SKIP、不寄
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		when(fx.emgDao.findById(eq("EA20261007-004"), any())).thenReturn(unreported);
+		when(fx.permDao.findActiveUser(KEVIN)).thenReturn(rcpt(KEVIN, null));
+		n.emgEvent(AcctConst.EV_EMG_RETURN, "EA20261007-004", HANK);
+		verify(sender, never()).send(any(), any(), any());
+		verify(fx.notifyLogDao).insert(eq("EMG_RETURN"), eq("EMG"), eq("EA20261007-004"), eq(KEVIN), isNull(), eq("SKIP"),
+				isNull(), any(), eq(HANK));
+	}
+
+	/** 已退回的緊急存取單（處理人 Gary、姓名與原因含 HTML 特殊字元；回報欄位由各測試自行設定） */
+	static EmgDetail returnedEmg(String emgId) {
+		EmgDetail e = new EmgDetail();
+		e.setEmgId(emgId);
+		e.setCatgId("DB");
+		e.setCatgName("資料庫");
+		e.setTargetDescr("prod-db <root>");
+		e.setApplyBy(KEVIN);
+		e.setApplyByName("凱文 & 測試");
+		e.setApplyReason("第一行\n<i>斜體</i>");
+		e.setExpectHourQty(4);
+		e.setSubmitDate(NOW);
+		e.setDueDate(NOW.plusHours(24));
+		e.setDecideCode(AcctConst.EMG_DECIDE_RETURN);
+		e.setDecideBy(GARY);
+		e.setDecideByName("許 <永成>");
+		e.setDecideDate(NOW.plusHours(2));
+		e.setReturnReason("事由不符 & 需補件");
+		return e;
 	}
 
 	/** 帳號名稱與申請人姓名含 HTML 特殊字元的申請單（目前關卡＝第一關），並放進模擬的申請單表 */
