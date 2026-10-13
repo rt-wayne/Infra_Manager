@@ -16,6 +16,10 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S2：掃描清單加 EmgDao、EmergencyController；API 數 32 → 35；
 //           緊急存取人名取 IM_ACCT_USER（申請人／處理人／結案人三個 LEFT JOIN）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: 新增：DAO SQL 常數的 CASE END 不得與下一個字黏在一起（EmgDao 曾拼出 ENDAS，S3 瀏覽器實測發現）；
+//           掃描清單 DAOS 須與 dao 套件的 @Repository 類別一致（防新增 DAO 漏列）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +34,10 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.stereotype.Repository;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,6 +72,8 @@ class SqlConstantScanTest {
 	static final Pattern ABOLISHED_CODE = Pattern.compile("'(EXTEND|VOID|CONFIRM|NA|TO_EXEC|EXTEND_DONE|FLAG_CLEAR|IMPORT\\w*)'");
 	static final Pattern ABOLISHED_COLUMN = Pattern.compile(
 			"\\b(ORIG_REQ_ID|ORIG_ACCT_ID|NEW_ACCT_ID|IMPORT_ID|DISABLE_TYPE_CODE|REVIEW_BASIS_CODE|IS_DIRECT|IS_SHOW|APPLY_TEL_NO|APPLY_EMAIL|EXCPT_CNT\\s*,\\s*INSP_STATE_CODE)\\b");
+	/** END 後面直接接英文字母（END_DATE 之類有底線的欄名不算） */
+	static final Pattern GLUED_END = Pattern.compile("\\bEND[A-Z]");
 
 	static Map<String, String> constants(List<Class<?>> classes) throws IllegalAccessException {
 		Map<String, String> m = new LinkedHashMap<>();
@@ -99,6 +109,29 @@ class SqlConstantScanTest {
 			}
 			if (ABOLISHED_COLUMN.matcher(s).find()) {
 				bad.add(e.getKey() + " 含已刪欄位");
+			}
+		}
+		assertThat(bad).isEmpty();
+	}
+
+	/** 掃描清單 DAOS 須涵蓋 dao 套件所有 @Repository（新增 DAO 忘了列進來就整支不會被掃） */
+	@Test
+	void 掃描清單涵蓋dao套件所有Repository() {
+		ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
+		scanner.addIncludeFilter(new AnnotationTypeFilter(Repository.class));
+		List<String> found = scanner.findCandidateComponents(SqlConstantScanTest.class.getPackageName()).stream()
+				.map(BeanDefinition::getBeanClassName).sorted().toList();
+		List<String> listed = DAOS.stream().map(Class::getName).sorted().toList();
+		assertThat(found).hasSizeGreaterThan(10).isEqualTo(listed);
+	}
+
+	/** CASE 的 END 與下一個字黏在一起（例 ENDAS）：text block 串接片段時前導空白被剝掉，Oracle 回 ORA-00905 */
+	@Test
+	void DAO_SQL常數_END不與下一個字黏在一起() throws Exception {
+		List<String> bad = new ArrayList<>();
+		for (Map.Entry<String, String> e : constants(DAOS).entrySet()) {
+			if (GLUED_END.matcher(e.getValue()).find()) {
+				bad.add(e.getKey());
 			}
 		}
 		assertThat(bad).isEmpty();

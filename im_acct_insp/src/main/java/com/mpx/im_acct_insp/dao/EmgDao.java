@@ -10,6 +10,10 @@ package com.mpx.im_acct_insp.dao;
 //           關鍵字比對單號、申請人姓名（英中文）、帳號或系統，LIKE 加 ESCAPE '\'（關鍵字由 Service 跳脫）；
 //           日期區間依 SUBMIT_DATE 含頭尾（:dateFrom ≤ SUBMIT_DATE < :dateToNext）；:applyBy 為空＝不限申請人（EMG_VIEW_ALL）
 //           INSERT 只寫送出欄位：IS_SELF_DECIDE／IS_SELF_CLOSE＝0、VERSION_NO＝0、STATUS＝1；時間一律綁參數
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: 修正：人名與狀態欄改用 AcctReqDao 的「"       " + 片段 + " AS 別名,\n"」串接寫法；
+//           原寫法讓「 AS 別名」那行成為 text block 最短縮排，前導空白被剝掉而拼出 ENDAS（ORA-00905，S3 瀏覽器實測發現）
 // ============================================================
 
 import java.time.LocalDate;
@@ -42,21 +46,17 @@ public class EmgDao {
 	/** 主表全欄＋類別名、三種人名、計算狀態；列表、明細共用 */
 	public static final String SELECT_BASE = """
 			SELECT E.EMG_ID, E.CATG_ID, C.CATG_NAME, E.TARGET_DESCR, E.APPLY_BY,
-			       """ + AcctReqDao.nameExpr("UA") + """
-			 AS APPLY_BY_NAME,
+			""" + "       " + AcctReqDao.nameExpr("UA") + " AS APPLY_BY_NAME,\n" + """
 			       E.APPLY_REASON, E.EXPECT_HOUR_QTY, E.SUBMIT_DATE, E.DUE_DATE,
 			       E.REPORT_TYPE_CODE, E.REPORT_DESCR, E.REPORT_DATE, E.REPORT_ACT_BY,
 			       E.DECIDE_CODE, E.DECIDE_BY,
-			       """ + AcctReqDao.nameExpr("UD") + """
-			 AS DECIDE_BY_NAME,
+			""" + "       " + AcctReqDao.nameExpr("UD") + " AS DECIDE_BY_NAME,\n" + """
 			       E.DECIDE_DATE, E.DECIDE_ACT_BY, E.RETURN_REASON, E.IS_SELF_DECIDE,
 			       E.CLOSE_BY,
-			       """ + AcctReqDao.nameExpr("UC") + """
-			 AS CLOSE_BY_NAME,
+			""" + "       " + AcctReqDao.nameExpr("UC") + " AS CLOSE_BY_NAME,\n" + """
 			       E.CLOSE_DATE, E.CLOSE_ACT_BY, E.CLOSE_DESCR, E.CLOSE_RESULT_CODE, E.IS_SELF_CLOSE,
 			       E.VERSION_NO,
-			       """ + STATE_EXPR + """
-			 AS EMG_STATE_CODE
+			""" + "       " + STATE_EXPR + " AS EMG_STATE_CODE\n" + """
 			  FROM IM_EMG_ACCESS E
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = E.CATG_ID
 			  LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY
@@ -87,8 +87,7 @@ public class EmgDao {
 	public static final String FIND_AFFECTS = """
 			SELECT A.EMG_ID, A.AFFECT_TYPE_CODE, A.ACCT_ID, T.ACCT_NAME, T.SYS_NAME, T.CATG_ID, A.AFFECT_DESCR,
 			       A.RECORD_BY,
-			       """ + AcctReqDao.nameExpr("UR") + """
-			 AS RECORD_BY_NAME,
+			""" + "       " + AcctReqDao.nameExpr("UR") + " AS RECORD_BY_NAME,\n" + """
 			       A.RECORD_DATE
 			  FROM IM_EMG_AFFECT_ACCT A
 			  LEFT JOIN IM_ACCT T ON T.ACCT_ID = A.ACCT_ID

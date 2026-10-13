@@ -14,6 +14,10 @@ package com.mpx.im_acct_insp.dao;
 //           寫入 INSP_BY_NAME、ACT_AS_ID／ACT_AS_NAME、ITEM_NAME_SNAP／SECT_NAME_SNAP、FIX_BY_NAME、FIX_ACT_AS_*（快照，不 JOIN 使用者表）；
 //           關鍵字比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME；日期區間依 INSP_DATE 含頭尾（:dateFrom ≤ INSP_DATE < :dateToNext）；
 //           刪 FIXED 狀態轉換 SQL；時間一律綁定參數
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: INSP_SUMMARY 的狀態欄改用 AcctReqDao 的「"   " + 片段 + " AS 別名\n"」串接寫法（原寫法靠結尾 """ 那行撐住最短縮排，
+//           結尾一移就會拼出 ENDAS；同 EmgDao 修正，BACKLOG 第 46 項 S3 實測發現），SQL 只差空白
 // ============================================================
 
 import java.time.LocalDate;
@@ -67,8 +71,7 @@ public class InspDao {
 			  FROM (SELECT I.INSP_ID, I.INSP_DATE, I.INSP_BY, I.INSP_BY_NAME, I.ACT_AS_ID, I.ACT_AS_NAME, I.SIGN_DATE,
 			               SUM(CASE WHEN R.RESULT_CODE = 'EXCPT' THEN 1 ELSE 0 END) AS EXCPT_CNT,
 			               SUM(CASE WHEN R.RESULT_CODE = 'EXCPT' AND R.IS_FIXED = 0 THEN 1 ELSE 0 END) AS UNFIXED_CNT,
-			       """ + STATE_EXPR + """
-			 AS INSP_STATE_CODE
+			""" + "               " + STATE_EXPR + " AS INSP_STATE_CODE\n" + """
 			          FROM IM_INSP I
 			          JOIN IM_INSP_RESULT R ON R.INSP_ID = I.INSP_ID AND R.STATUS = 1
 			         WHERE I.STATUS = 1
