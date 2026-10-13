@@ -21,7 +21,8 @@ vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
-  listTodos: vi.fn()
+  listTodos: vi.fn(),
+  listEmgReturned: vi.fn().mockResolvedValue([])
 }))
 vi.mock('../src/api/request', () => ({ getRequest: vi.fn() }))
 vi.mock('../src/api/attachment', () => ({

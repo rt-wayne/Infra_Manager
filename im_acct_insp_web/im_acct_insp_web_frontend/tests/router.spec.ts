@@ -36,7 +36,8 @@ vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
   getHomeStats: vi.fn(),
   listExpiring: vi.fn().mockResolvedValue([]),
-  listTodos: vi.fn().mockResolvedValue([])
+  listTodos: vi.fn().mockResolvedValue([]),
+  listEmgReturned: vi.fn().mockResolvedValue([])
 }))
 
 const Stub = defineComponent({ render: () => h('div') })

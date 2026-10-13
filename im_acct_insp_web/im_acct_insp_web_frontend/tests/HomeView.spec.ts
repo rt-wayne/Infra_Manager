@@ -19,7 +19,8 @@ vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
-  listTodos: vi.fn()
+  listTodos: vi.fn(),
+  listEmgReturned: vi.fn().mockResolvedValue([])
 }))
 
 const statsMock = vi.mocked(getHomeStats)

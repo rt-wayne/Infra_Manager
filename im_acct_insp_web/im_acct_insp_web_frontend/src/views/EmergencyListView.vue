@@ -13,6 +13,10 @@
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S8：網址 ?state= 為下拉有的值時當預設狀態篩選（首頁兩張卡導入：UNDECIDED／RETURNED）；
             日期維持預設全部，筆數才會與首頁卡一致
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S9 審查第 2 項：彈窗處理成功（changed）除重查清單外同步重算鈴鐺徽章，
+            結案的單即時從鈴鐺類別 3 消失（與 TodoView 做法一致）
 -->
 <template>
   <main>
@@ -77,7 +81,7 @@
       <div v-else class="empty">查無資料，請換個條件再試一次</div>
     </template>
 
-    <EmergencyDetailModal v-if="detailId" :emg-id="detailId" @close="detailId = ''" @changed="load" />
+    <EmergencyDetailModal v-if="detailId" :emg-id="detailId" @close="detailId = ''" @changed="onDetailChanged" />
     <ToastHost />
   </main>
 </template>
@@ -98,7 +102,7 @@ import { daysAgo, fmtDate, toMinute } from '../utils/date'
 import { EMG_STATE_FILTER, EMG_STATE_LABEL, label, stateTagClass } from '../utils/labels'
 
 const { toast } = useToast()
-const { can } = useSession()
+const { can, refreshBadges } = useSession()
 
 const route = useRoute()
 
@@ -148,6 +152,12 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+/** 彈窗處理成功（補核准／退回／結案）：重查清單並重算鈴鐺徽章，結案的單即時從鈴鐺類別 3 消失 */
+function onDetailChanged(): void {
+  void load()
+  void refreshBadges()
 }
 
 onMounted(load)

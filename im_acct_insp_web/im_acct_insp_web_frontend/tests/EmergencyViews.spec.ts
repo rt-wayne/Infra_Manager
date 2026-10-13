@@ -22,6 +22,10 @@
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S8：清單讀網址 ?state=（合法值當預設篩選、首查即帶、日期維持全部；不合法視為全部，皆只查一次）；
 //           PENDING 文字改「待補核准（未逾期）」
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S9 審查第 3(b) 項：釘住 listEmgReturned 實際請求（/emergencies、stateCode=RETURNED）；
+//           mock 工廠補 listEmgReturned
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -48,7 +52,8 @@ vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
   getHomeStats: vi.fn(),
   listExpiring: vi.fn(),
-  listTodos: vi.fn()
+  listTodos: vi.fn(),
+  listEmgReturned: vi.fn().mockResolvedValue([])
 }))
 vi.mock('../src/api/emergency', () => ({
   submitEmergency: vi.fn(),
@@ -441,6 +446,13 @@ describe('緊急存取 API', () => {
     expect(get).toHaveBeenLastCalledWith('/emergencies', { params: { stateCode: 'PENDING', dateTo: '2026-10-13' } })
     await api.getEmergency('EM/1?x')
     expect(get).toHaveBeenLastCalledWith('/emergencies/EM%2F1%3Fx')
+  })
+
+  it('鈴鐺類別 3 查詢（S9）：固定帶 stateCode=RETURNED', async () => {
+    const api = await vi.importActual<typeof import('../src/api/common')>('../src/api/common')
+    const get = vi.spyOn(http, 'get').mockResolvedValue({ data: [] })
+    await api.listEmgReturned()
+    expect(get).toHaveBeenLastCalledWith('/emergencies', { params: { stateCode: 'RETURNED' } })
   })
 
   it('回報、補核准、退回：路徑帶編碼單號，本文帶版本號', async () => {

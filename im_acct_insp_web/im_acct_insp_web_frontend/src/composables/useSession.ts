@@ -20,13 +20,18 @@
 // 修改日期: 2026-10-12
 // 變更說明: BACKLOG 第 43 項：resetSession 一併釋放本頁以新分頁開過的附件 blob 網址（登出不整頁重新載入，
 //           不釋放的話共用電腦的下一位可從瀏覽紀錄重開；使用者裁示）
+// AI版本  : Claude Fable 5 (claude-fable-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S9（SA §7.2）：鈴鐺分類化——refreshBadges 多查鈴鐺類別 3（緊急存取已退回未結案，
+//           emgReturned；相關性由後端依 EMG_VIEW_ALL／本人過濾），與到期清單、待辦數並行查、失敗不擋畫面
 // ============================================================
 import { computed, ref } from 'vue'
 import { endImpersonate as apiEndImpersonate, getMe, impersonate as apiImpersonate, login as apiLogin, logout as apiLogout } from '../api/auth'
 import { revokeOpenedAttachments } from '../api/attachment'
-import { getCodes, listExpiring, listTodos } from '../api/common'
+import { getCodes, listEmgReturned, listExpiring, listTodos } from '../api/common'
 import { clearToken, getToken, notifyOtherTabs, setToken } from '../api/tokenStore'
 import type { Codes, ExpiringItem, Me } from '../types/common'
+import type { Emg } from '../types/emergency'
 import { hasPerm } from '../utils/perms'
 import type { PermCode } from '../utils/perms'
 
@@ -36,6 +41,8 @@ const meFailed = ref(false)
 const codes = ref<Codes | null>(null)
 const todoCount = ref<number | null>(null)
 const expiring = ref<ExpiringItem[]>([])
+/** 鈴鐺類別 3：緊急存取已退回未結案（只含與我相關的；SA §7.2） */
+const emgReturned = ref<Emg[]>([])
 const bellOpen = ref(false)
 /** 切換身分後遞增；版面以它當 router-view 的 key，讓畫面重新載入資料 */
 const viewKey = ref(0)
@@ -56,12 +63,13 @@ async function loadMe(): Promise<void> {
   }
 }
 
-/** 頁首鈴鐺與側欄待辦數；失敗時不擋畫面（待辦數顯示空白） */
+/** 頁首鈴鐺（到期＋緊急存取已退回）與側欄待辦數；失敗時不擋畫面（待辦數顯示空白、該類別當作空） */
 async function refreshBadges(): Promise<void> {
   if (!getToken()) return
-  const [t, e] = await Promise.allSettled([listTodos(), listExpiring()])
+  const [t, e, g] = await Promise.allSettled([listTodos(), listExpiring(), listEmgReturned()])
   todoCount.value = t.status === 'fulfilled' && Array.isArray(t.value) ? t.value.length : null
   expiring.value = e.status === 'fulfilled' && Array.isArray(e.value) ? e.value : []
+  emgReturned.value = g.status === 'fulfilled' && Array.isArray(g.value) ? g.value : []
 }
 
 /** 有 token 時載 /me；只跑一次，路由守衛與版面共用（登出、401 後由 resetSession 重來） */
@@ -139,6 +147,7 @@ export function resetSession(): void {
   codes.value = null
   todoCount.value = null
   expiring.value = []
+  emgReturned.value = []
   bellOpen.value = false
   viewKey.value = 0
   initPromise = null
@@ -163,6 +172,7 @@ export function useSession() {
     codes,
     todoCount,
     expiring,
+    emgReturned,
     bellOpen,
     viewKey,
     loginNotice,

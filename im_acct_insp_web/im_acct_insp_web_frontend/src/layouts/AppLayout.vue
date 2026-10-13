@@ -27,6 +27,12 @@
   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S3：「帳號權限管理」區塊在「新增申請」之後加「緊急存取」（登入即可見，S3 裁示①A）
+  AI版本  : Claude Fable 5 (claude-fable-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S9（SA §7.2）：鈴鐺分類化——徽章＝兩類合計；面板分兩節（類別 1 到期提醒行為不變、
+            類別 3 緊急存取已退回未結案），空的類別整節不顯示、兩類都空顯示「目前沒有與您相關的通知」；
+            類別 3 一筆點擊（D18）：有 EMG_VIEW_ALL → 緊急存取清單（已退回篩選），否則（原申請人）開該單明細彈窗
+            （彈窗動作自行依權限顯示；申請人對已退回單沒有可用動作＝唯讀）
 -->
 <template>
   <div class="app">
@@ -59,17 +65,26 @@
           </span>
           <button v-else-if="canImpersonate" type="button" class="btn imp-start" @click="showImp = true">切換身分</button>
           <div ref="bellWrap" class="bell-wrap">
-            <button type="button" class="bell-btn" aria-label="到期提醒" @click="bellOpen = !bellOpen">
-              🔔<span v-if="expiring.length > 0" class="bell-badge">{{ expiring.length }}</span>
+            <button type="button" class="bell-btn" aria-label="通知" @click="bellOpen = !bellOpen">
+              🔔<span v-if="bellCount > 0" class="bell-badge">{{ bellCount }}</span>
             </button>
             <div v-if="bellOpen" class="bell-panel">
-              <div class="bell-panel-title">⚠️ 30 天內到期或已逾期</div>
-              <button v-for="x in expiring" :key="x.acctId" type="button" class="bell-item" @click="onBellItem(x)">
-                <span><b>{{ x.acctName || x.acctId }}</b>（{{ x.catgName }}）{{ dateOnly(x.expiryDate) }}</span>
-                <span class="bell-days">{{ daysLeftText(x.daysLeft) }}</span>
-              </button>
-              <div v-if="expiring.length === 0" class="hint">目前沒有與您相關的到期帳號</div>
-              <button v-if="can('ACC_LIST_FULL') && expiring.length > 0" type="button" class="btn full" @click="goExpiring">查看全部到期清單</button>
+              <template v-if="expiring.length > 0">
+                <div class="bell-panel-title">⚠️ 30 天內到期或已逾期</div>
+                <button v-for="x in expiring" :key="x.acctId" type="button" class="bell-item" @click="onBellItem(x)">
+                  <span><b>{{ x.acctName || x.acctId }}</b>（{{ x.catgName }}）{{ dateOnly(x.expiryDate) }}</span>
+                  <span class="bell-days">{{ daysLeftText(x.daysLeft) }}</span>
+                </button>
+                <button v-if="can('ACC_LIST_FULL')" type="button" class="btn full" @click="goExpiring">查看全部到期清單</button>
+              </template>
+              <template v-if="emgReturned.length > 0">
+                <div class="bell-panel-title">🚨 緊急存取已退回未結案</div>
+                <button v-for="g in emgReturned" :key="g.emgId" type="button" class="bell-item bell-emg" @click="onBellEmg(g)">
+                  <span><b>{{ g.emgId }}</b>（{{ g.applyByName || g.applyBy }}）</span>
+                  <span class="bell-days">退回 {{ dateOnly(g.decideDate) }}</span>
+                </button>
+              </template>
+              <div v-if="bellCount === 0" class="hint">目前沒有與您相關的通知</div>
             </div>
           </div>
           <span class="who">👤 {{ realUserName }}</span>
@@ -84,6 +99,7 @@
 
     <ImpersonateModal v-if="showImp" :busy="switching" @close="showImp = false" @select="onImpersonate" />
     <AccountDetailModal v-if="bellAcctId" :acct-id="bellAcctId" readonly @close="bellAcctId = ''" />
+    <EmergencyDetailModal v-if="bellEmgId" :emg-id="bellEmgId" @close="bellEmgId = ''" @changed="onBellEmgChanged" />
   </div>
 </template>
 
@@ -92,19 +108,21 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import '../assets/app.css'
 import AccountDetailModal from '../components/AccountDetailModal.vue'
+import EmergencyDetailModal from '../components/EmergencyDetailModal.vue'
 import ImpersonateModal from '../components/ImpersonateModal.vue'
 import { errorMessage } from '../api/errors'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { ExpiringItem } from '../types/common'
+import type { Emg } from '../types/emergency'
 import { dateOnly } from '../utils/date'
-import { daysLeftText } from '../utils/labels'
+import { daysLeftText, EMG_RETURNED } from '../utils/labels'
 
 const route = useRoute()
 const router = useRouter()
 const { toast } = useToast()
 const {
-  userName, realUserName, impersonating, canImpersonate, todoCount, expiring, bellOpen, viewKey, meFailed,
+  userName, realUserName, impersonating, canImpersonate, todoCount, expiring, emgReturned, bellOpen, viewKey, meFailed,
   can, initSession, impersonate, endImpersonate, logout, refreshBadges
 } = useSession()
 
@@ -113,6 +131,10 @@ const bellWrap = ref<HTMLElement | null>(null)
 const showImp = ref(false)
 const switching = ref(false)
 const bellAcctId = ref('')
+const bellEmgId = ref('')
+
+/** 鈴鐺徽章＝兩類合計（到期提醒＋緊急存取已退回未結案） */
+const bellCount = computed(() => expiring.value.length + emgReturned.value.length)
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : ''))
 
@@ -171,6 +193,21 @@ function onBellItem(x: ExpiringItem): void {
     bellOpen.value = false
     bellAcctId.value = x.acctId
   }
+}
+
+/** 鈴鐺類別 3 一筆（D18）：有 EMG_VIEW_ALL → 緊急存取清單（已退回篩選）；否則（原申請人）開該單明細彈窗 */
+function onBellEmg(g: Emg): void {
+  bellOpen.value = false
+  if (can('EMG_VIEW_ALL')) {
+    void router.push({ path: '/emergency', query: { state: EMG_RETURNED } })
+  } else {
+    bellEmgId.value = g.emgId
+  }
+}
+
+/** 從鈴鐺開的明細有異動（理論上限主管身分）：重算徽章，讓已結案的單從鈴鐺消失 */
+function onBellEmgChanged(): void {
+  void refreshBadges()
 }
 
 function onDocClick(ev: MouseEvent): void {
