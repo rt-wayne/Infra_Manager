@@ -7,6 +7,9 @@
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S5：Emg 加送出的實際操作人 createBy 與四個實際操作人姓名；
 //           新增回報本文 EmgReportPayload／EmgAffectInput、處理與回報共用的回傳 EmgVersionResult
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5 回合 2：新增帳號選取器已加入列 EmgPickedAcct
 // ============================================================
 
 /** 緊急存取狀態（計算值）：待補核准／逾期未補核准／已補核准／已退回／已退回（已結案） */
@@ -97,6 +100,13 @@ export interface EmgAffectInput {
   acctId: string
   acctName: string
   affectDescr: string
+}
+
+/** 帳號選取器已加入的一列：送出用的三欄＋畫面顯示用的類別、系統、狀態（送出時只取 EmgAffectInput 三欄） */
+export interface EmgPickedAcct extends EmgAffectInput {
+  catgName: string
+  sysName: string | null
+  acctStateCode: string
 }
 
 /** POST /emergencies/{id}/report 本文：NONE 不帶帳號、說明選填；MODIFIED 帳號 1～20 個、說明必填 */
