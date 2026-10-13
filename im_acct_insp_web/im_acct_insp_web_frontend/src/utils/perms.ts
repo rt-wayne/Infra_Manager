@@ -6,6 +6,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S3：加緊急存取 EMG_APPLY（申請頁與「申請」鈕）、EMG_VIEW_ALL（清單提示是否只看自己）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5：加 EMG_DECIDE（詳情彈窗的補核准／退回鈕）
 // ============================================================
 
 /** 畫面會用到的權限碼（第一階段＋緊急存取） */
@@ -26,6 +29,7 @@ export type PermCode =
   | 'SYS_JOB_RUN'
   | 'EMG_APPLY'
   | 'EMG_VIEW_ALL'
+  | 'EMG_DECIDE'
 
 /** permissions[] 是否含指定權限碼 */
 export function hasPerm(permissions: readonly string[] | null | undefined, code: PermCode): boolean {

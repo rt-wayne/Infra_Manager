@@ -6,6 +6,9 @@
             送出日期（全部（預設，S3 裁示②A：逾期未處理的舊單不被藏起來）／近 7／30／90 天／自訂區間）
             無 EMG_VIEW_ALL 者顯示「只顯示您送出的緊急存取單」（實際範圍由後端限制）；
             「＋ 緊急存取申請」只對有 EMG_APPLY 者顯示；「查看」開唯讀詳情彈窗；查詢失敗只 toast
+  AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S5：詳情彈窗內補核准／退回成功後（changed）重查清單，狀態欄即時更新
 -->
 <template>
   <main>
@@ -70,7 +73,7 @@
       <div v-else class="empty">查無資料，請換個條件再試一次</div>
     </template>
 
-    <EmergencyDetailModal v-if="detailId" :emg-id="detailId" @close="detailId = ''" />
+    <EmergencyDetailModal v-if="detailId" :emg-id="detailId" @close="detailId = ''" @changed="load" />
     <ToastHost />
   </main>
 </template>

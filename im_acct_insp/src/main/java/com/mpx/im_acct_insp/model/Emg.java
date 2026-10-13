@@ -5,6 +5,10 @@ package com.mpx.im_acct_insp.model;
 // 修改日期: 2026-10-13
 // 變更說明: 新增：緊急存取 IM_EMG_ACCESS 全欄位（BACKLOG 第 46 項 S2）＋類別名稱、申請人／處理人／結案人姓名（JOIN）、
 //           即時計算的 emgStateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED，由 EmgDao.STATE_EXPR 算出，不存欄位）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5：加送出的實際操作人 createBy 與四個實際操作人姓名（createByName、reportActByName、
+//           decideActByName、closeActByName；JOIN 取得），供前端在實際操作人≠有效身分時顯示
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -19,6 +23,9 @@ public class Emg {
 	private String targetDescr;
 	private String applyBy;
 	private String applyByName;
+	/** 送出的實際操作人（IM_EMG_ACCESS.CREATE_BY；切換身分代送時與 applyBy 不同） */
+	private String createBy;
+	private String createByName;
 	private String applyReason;
 	private Integer expectHourQty;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
@@ -30,12 +37,14 @@ public class Emg {
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime reportDate;
 	private String reportActBy;
+	private String reportActByName;
 	private String decideCode;
 	private String decideBy;
 	private String decideByName;
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime decideDate;
 	private String decideActBy;
+	private String decideActByName;
 	private String returnReason;
 	private Integer isSelfDecide;
 	private String closeBy;
@@ -43,6 +52,7 @@ public class Emg {
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime closeDate;
 	private String closeActBy;
+	private String closeActByName;
 	private String closeDescr;
 	private String closeResultCode;
 	private Integer isSelfClose;
@@ -287,5 +297,45 @@ public class Emg {
 
 	public void setEmgStateCode(String emgStateCode) {
 		this.emgStateCode = emgStateCode;
+	}
+
+	public String getCreateBy() {
+		return createBy;
+	}
+
+	public void setCreateBy(String createBy) {
+		this.createBy = createBy;
+	}
+
+	public String getCreateByName() {
+		return createByName;
+	}
+
+	public void setCreateByName(String createByName) {
+		this.createByName = createByName;
+	}
+
+	public String getReportActByName() {
+		return reportActByName;
+	}
+
+	public void setReportActByName(String reportActByName) {
+		this.reportActByName = reportActByName;
+	}
+
+	public String getDecideActByName() {
+		return decideActByName;
+	}
+
+	public void setDecideActByName(String decideActByName) {
+		this.decideActByName = decideActByName;
+	}
+
+	public String getCloseActByName() {
+		return closeActByName;
+	}
+
+	public void setCloseActByName(String closeActByName) {
+		this.closeActByName = closeActByName;
 	}
 }

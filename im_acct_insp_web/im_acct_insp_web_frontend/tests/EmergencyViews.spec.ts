@@ -7,6 +7,14 @@
 //           詳情：尚未回報／尚未處理、退回才有異常結案段、自核與逾期後處理標記、受影響帳號列表
 //           S3 審查：沒有回應或 5xx 時提示先查清單（toast＋常駐提示）；不設 maxlength、字數按字元且不含頭尾空白；
 //           切換中申請人文字；狀態下拉重查；API 空值不送
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5 回合 1：四個節點的實際操作人文字（相同不顯示、不同顯示「{代理}（實際操作人：{實際}）」）；
+//           退回／補核准按鈕只對 EMG_DECIDE 且尚未處理顯示、尚未回報時補核准停用並提示；
+//           補核准確認框、退回原因必填與 500 字上限；成功 toast＋重載明細＋emit changed；409 關子彈窗並重載；
+//           清單收到 changed 重查；API：report／approve／return 路徑與本文
+//           S5 審查：退回原因字數按碼點（501 個 emoji 擋、500 個可送）；退回 409 同樣關原因框並重載；
+//           子彈窗取消只關子彈窗、不 emit close；送出中主、子彈窗的關閉都被忽略
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -17,10 +25,17 @@ import EmergencyListView from '../src/views/EmergencyListView.vue'
 import EmergencyFormView from '../src/views/EmergencyFormView.vue'
 import EmergencyDetailModal from '../src/components/EmergencyDetailModal.vue'
 import { getCodes } from '../src/api/common'
-import { getEmergency, listEmergencies, submitEmergency } from '../src/api/emergency'
+import { approveEmergency, getEmergency, listEmergencies, returnEmergency, submitEmergency } from '../src/api/emergency'
 import { resetSession, useSession } from '../src/composables/useSession'
+import { useToast } from '../src/composables/useToast'
 import type { Emg, EmgAffectAcct, EmgDetail } from '../src/types/emergency'
 import { CODES, GENERAL_PERMS, httpError, lastToast, makeMe, makeRouter } from './helpers'
+
+/** 單獨掛載彈窗時沒有 ToastHost，直接讀 toast 狀態的最後一則 */
+function lastToastMsg(): string {
+  const list = useToast().toasts.value
+  return list.length ? list[list.length - 1].msg : ''
+}
 
 vi.mock('../src/api/common', () => ({
   getCodes: vi.fn(),
@@ -31,21 +46,29 @@ vi.mock('../src/api/common', () => ({
 vi.mock('../src/api/emergency', () => ({
   submitEmergency: vi.fn(),
   listEmergencies: vi.fn(),
-  getEmergency: vi.fn()
+  getEmergency: vi.fn(),
+  reportEmergency: vi.fn(),
+  approveEmergency: vi.fn(),
+  returnEmergency: vi.fn()
 }))
 
 const listMock = vi.mocked(listEmergencies)
 const getMock = vi.mocked(getEmergency)
 const submitMock = vi.mocked(submitEmergency)
+const approveMock = vi.mocked(approveEmergency)
+const returnMock = vi.mocked(returnEmergency)
 
 function emg(over: Partial<Emg> = {}): Emg {
   return {
     emgId: 'EM20261013-001', catgId: 'DB', catgName: '資料庫帳號', targetDescr: 'ERP 正式機 DB 的 sys 帳號',
-    applyBy: '0000001', applyByName: 'Kevin (李凱鈞)', applyReason: '月結批次卡住\n需人工處理', expectHourQty: 2,
+    applyBy: '0000001', applyByName: 'Kevin (李凱鈞)', createBy: '0000001', createByName: 'Kevin (李凱鈞)',
+    applyReason: '月結批次卡住\n需人工處理', expectHourQty: 2,
     submitDate: '2026-10-13 09:30:15', dueDate: '2026-10-14 09:30:15',
-    reportTypeCode: null, reportDescr: null, reportDate: null, reportActBy: null,
-    decideCode: null, decideBy: null, decideByName: null, decideDate: null, decideActBy: null, returnReason: null, isSelfDecide: null,
-    closeBy: null, closeByName: null, closeDate: null, closeActBy: null, closeDescr: null, closeResultCode: null, isSelfClose: null,
+    reportTypeCode: null, reportDescr: null, reportDate: null, reportActBy: null, reportActByName: null,
+    decideCode: null, decideBy: null, decideByName: null, decideDate: null, decideActBy: null, decideActByName: null,
+    returnReason: null, isSelfDecide: null,
+    closeBy: null, closeByName: null, closeDate: null, closeActBy: null, closeActByName: null,
+    closeDescr: null, closeResultCode: null, isSelfClose: null,
     versionNo: 1, emgStateCode: 'PENDING', ...over
   }
 }
@@ -386,12 +409,29 @@ describe('緊急存取 API', () => {
     await api.getEmergency('EM/1?x')
     expect(get).toHaveBeenLastCalledWith('/emergencies/EM%2F1%3Fx')
   })
+
+  it('回報、補核准、退回：路徑帶編碼單號，本文帶版本號', async () => {
+    const api = await vi.importActual<typeof import('../src/api/emergency')>('../src/api/emergency')
+    const post = vi.spyOn(http, 'post').mockResolvedValue({ data: { emgId: 'EM/1', versionNo: 2 } })
+    await api.approveEmergency('EM/1', 1)
+    expect(post).toHaveBeenLastCalledWith('/emergencies/EM%2F1/approve', { versionNo: 1 })
+    await api.returnEmergency('EM/1', 1, '事由不足')
+    expect(post).toHaveBeenLastCalledWith('/emergencies/EM%2F1/return', { versionNo: 1, reason: '事由不足' })
+    const payload = { reportTypeCode: 'NONE' as const, reportDescr: '', versionNo: 1, affectAccts: [] }
+    await expect(api.reportEmergency('EM/1', payload)).resolves.toEqual({ emgId: 'EM/1', versionNo: 2 })
+    expect(post).toHaveBeenLastCalledWith('/emergencies/EM%2F1/report', payload)
+  })
 })
 
 describe('緊急存取詳情彈窗', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    resetSession()
+    useSession().me.value = makeMe()
+    useToast().toasts.value = []
     getMock.mockReset()
+    approveMock.mockReset()
+    returnMock.mockReset()
   })
 
   afterEach(() => {
@@ -471,6 +511,240 @@ describe('緊急存取詳情彈窗', () => {
 
     w = await mountDetail(httpError(404, { message: '查無此緊急存取單' }))
     expect(w.text()).toContain('無法載入此緊急存取單')
+    w.unmount()
+  })
+
+  it('實際操作人與有效身分相同（或舊資料沒有）時不顯示；不同時四個節點都顯示「{代理}（實際操作人：{實際}）」', async () => {
+    let w = await mountDetail(detail({
+      emgStateCode: 'CLOSED', reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001', reportActByName: 'Kevin (李凱鈞)',
+      decideCode: 'RETURN', decideBy: '0000009', decideByName: '主管', decideDate: '2026-10-13 15:00:00', decideActBy: null, decideActByName: null,
+      returnReason: '事由不足', isSelfDecide: 0,
+      closeBy: '0000009', closeByName: '主管', closeDate: '2026-10-13 16:00:00', closeActBy: '0000009', closeActByName: '主管', closeResultCode: 'NO_CHANGE', isSelfClose: 1
+    }))
+    expect(w.find('.applicant').text()).toBe('Kevin (李凱鈞)')
+    expect(w.find('.report-actor').exists()).toBe(false)
+    expect(w.find('.decide-actor').text()).toBe('主管')
+    expect(w.find('.close-actor').text()).toBe('主管')
+    expect(w.text()).not.toContain('實際操作人')
+    w.unmount()
+
+    w = await mountDetail(detail({
+      emgStateCode: 'CLOSED', createBy: '0000002', createByName: 'Hank (王漢克)',
+      reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000002', reportActByName: 'Hank (王漢克)',
+      decideCode: 'RETURN', decideBy: '0000009', decideByName: '主管', decideDate: '2026-10-13 15:00:00', decideActBy: '0000003', decideActByName: 'Terry (陳泰瑞)',
+      returnReason: '事由不足', isSelfDecide: 0,
+      closeBy: '0000009', closeByName: '主管', closeDate: '2026-10-13 16:00:00', closeActBy: '0000004', closeActByName: null, closeResultCode: 'NO_CHANGE', isSelfClose: 0
+    }))
+    expect(w.find('.applicant').text()).toBe('Kevin (李凱鈞)（實際操作人：Hank (王漢克)）')
+    expect(w.find('.report-actor').text()).toContain('Kevin (李凱鈞)（實際操作人：Hank (王漢克)）')
+    expect(w.find('.decide-actor').text()).toBe('主管（實際操作人：Terry (陳泰瑞)）')
+    // 實際操作人查不到姓名時退回顯示工號
+    expect(w.find('.close-actor').text()).toBe('主管（實際操作人：0000004）')
+    w.unmount()
+  })
+
+  it('沒有 EMG_DECIDE 或已處理：沒有退回／補核准按鈕；有 EMG_DECIDE 且尚未處理：兩鈕出現，尚未回報時補核准停用並提示', async () => {
+    let w = await mountDetail(detail())
+    expect(w.find('.act-return').exists()).toBe(false)
+    expect(w.find('.act-approve').exists()).toBe(false)
+    expect(w.find('.approve-hint').exists()).toBe(false)
+    w.unmount()
+
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE', 'EMG_VIEW_ALL'] })
+    w = await mountDetail(detail({ emgStateCode: 'APPROVED', decideCode: 'APPROVE', decideBy: '0000009', decideByName: '主管', decideDate: '2026-10-13 15:00:00', isSelfDecide: 0 }))
+    expect(w.find('.act-return').exists()).toBe(false)
+    expect(w.find('.act-approve').exists()).toBe(false)
+    w.unmount()
+
+    w = await mountDetail(detail({ emgStateCode: 'OVERDUE' }))
+    expect(w.find('.act-return').attributes('disabled')).toBeUndefined()
+    expect(w.find('.act-approve').attributes('disabled')).toBeDefined()
+    expect(w.find('.approve-hint').text()).toContain('申請人尚未回報')
+    w.unmount()
+
+    w = await mountDetail(detail({ reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001' }))
+    expect(w.find('.act-approve').attributes('disabled')).toBeUndefined()
+    expect(w.find('.approve-hint').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('補核准：確認框說明有異動時會寫歷史；確認後送單號與版本號，成功 toast、重載明細、emit changed', async () => {
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE'] })
+    const before = detail({ reportTypeCode: 'MODIFIED', reportDescr: '重設密碼', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001', versionNo: 1 })
+    const after = detail({ ...before, emgStateCode: 'APPROVED', decideCode: 'APPROVE', decideBy: '0000001', decideByName: 'Kevin (李凱鈞)', decideDate: '2026-10-13 12:00:00', isSelfDecide: 1, versionNo: 2 })
+    getMock.mockResolvedValueOnce(before).mockResolvedValueOnce(after)
+    approveMock.mockResolvedValue({ emgId: 'EM20261013-001', versionNo: 2 })
+    const w = mount(EmergencyDetailModal, { props: { emgId: 'EM20261013-001' } })
+    await flushPromises()
+
+    await w.find('.act-approve').trigger('click')
+    expect(w.find('.confirm-approve').exists()).toBe(true)
+    expect(w.text()).toContain('將寫入各帳號的歷史紀錄')
+    await w.find('.confirm-approve').trigger('click')
+    await flushPromises()
+
+    expect(approveMock).toHaveBeenCalledWith('EM20261013-001', 1)
+    expect(lastToastMsg()).toContain('EM20261013-001 已補核准')
+    expect(w.find('.confirm-approve').exists()).toBe(false)
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(w.find('.sub').text()).toBe('狀態：已補核准')
+    expect(w.find('.self-decide').exists()).toBe(true)
+    expect(w.find('.act-approve').exists()).toBe(false)
+    expect(w.emitted('changed')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('退回：原因空白或超過 500 字擋下不送；成功送去頭尾空白的原因、toast、重載、emit changed', async () => {
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE'] })
+    const before = detail({ versionNo: 3 })
+    const after = detail({ ...before, emgStateCode: 'RETURNED', decideCode: 'RETURN', decideBy: '0000001', decideByName: 'Kevin (李凱鈞)', decideDate: '2026-10-13 12:00:00', returnReason: '事由不足', isSelfDecide: 1, versionNo: 4 })
+    getMock.mockResolvedValueOnce(before).mockResolvedValueOnce(after)
+    returnMock.mockResolvedValue({ emgId: 'EM20261013-001', versionNo: 4 })
+    const w = mount(EmergencyDetailModal, { props: { emgId: 'EM20261013-001' } })
+    await flushPromises()
+
+    await w.find('.act-return').trigger('click')
+    expect(w.find('.confirm-return').exists()).toBe(true)
+    await w.find('.confirm-return').trigger('click')
+    expect(lastToastMsg()).toBe('請填寫退回原因')
+    expect(returnMock).not.toHaveBeenCalled()
+
+    await w.find('#emg-return-reason').setValue('長'.repeat(501))
+    await w.find('.confirm-return').trigger('click')
+    expect(lastToastMsg()).toContain('不可超過 500 字')
+    // 字數按碼點算（與後端 codePointCount 一致）：501 個 emoji 擋下、500 個可送
+    await w.find('#emg-return-reason').setValue('😀'.repeat(501))
+    await w.find('.confirm-return').trigger('click')
+    expect(lastToastMsg()).toContain('不可超過 500 字')
+    expect(returnMock).not.toHaveBeenCalled()
+
+    returnMock.mockRejectedValueOnce(httpError(500, { message: '資料寫入未完成' }))
+    await w.find('#emg-return-reason').setValue('😀'.repeat(500))
+    await w.find('.confirm-return').trigger('click')
+    await flushPromises()
+    expect(returnMock).toHaveBeenCalledWith('EM20261013-001', 3, '😀'.repeat(500))
+    expect(w.find('.confirm-return').exists()).toBe(true)
+
+    await w.find('#emg-return-reason').setValue('  事由不足  ')
+    await w.find('.confirm-return').trigger('click')
+    await flushPromises()
+    expect(returnMock).toHaveBeenLastCalledWith('EM20261013-001', 3, '事由不足')
+    expect(lastToastMsg()).toContain('EM20261013-001 已退回')
+    expect(w.find('.confirm-return').exists()).toBe(false)
+    expect(w.find('.sec-decide').text()).toContain('退回：事由不足')
+    expect(w.find('.sec-close').text()).toBe('尚未結案')
+    expect(w.emitted('changed')).toHaveLength(1)
+    w.unmount()
+  })
+
+  it('處理失敗：一般錯誤只 toast、子彈窗留著；409 關子彈窗、重載明細並 emit changed', async () => {
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE'] })
+    const before = detail({ reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001' })
+    getMock.mockResolvedValue(before)
+    approveMock.mockRejectedValueOnce(httpError(500, { message: '資料寫入未完成' }))
+    const w = mount(EmergencyDetailModal, { props: { emgId: 'EM20261013-001' } })
+    await flushPromises()
+
+    await w.find('.act-approve').trigger('click')
+    await w.find('.confirm-approve').trigger('click')
+    await flushPromises()
+    expect(lastToastMsg()).toBe('資料寫入未完成')
+    expect(w.find('.confirm-approve').exists()).toBe(true)
+    expect(getMock).toHaveBeenCalledTimes(1)
+    expect(w.emitted('changed')).toBeUndefined()
+
+    approveMock.mockRejectedValueOnce(httpError(409, { code: 'E08', message: '此申請已由他人處理，請重新整理' }))
+    await w.find('.confirm-approve').trigger('click')
+    await flushPromises()
+    expect(lastToastMsg()).toBe('此申請已由他人處理，請重新整理')
+    expect(w.find('.confirm-approve').exists()).toBe(false)
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(w.emitted('changed')).toHaveLength(1)
+
+    // 退回走同一條 run()：409 同樣關原因框、重載、emit changed
+    returnMock.mockRejectedValueOnce(httpError(409, { code: 'E08', message: '此申請已由他人處理，請重新整理' }))
+    await w.find('.act-return').trigger('click')
+    await w.find('#emg-return-reason').setValue('事由不足')
+    await w.find('.confirm-return').trigger('click')
+    await flushPromises()
+    expect(w.find('.confirm-return').exists()).toBe(false)
+    expect(getMock).toHaveBeenCalledTimes(3)
+    expect(w.emitted('changed')).toHaveLength(2)
+    w.unmount()
+  })
+
+  it('子彈窗按取消只關子彈窗：主彈窗還在、不 emit close；送出中主、子彈窗的關閉都被忽略', async () => {
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE'] })
+    getMock.mockResolvedValue(detail({ reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001' }))
+    const w = mount(EmergencyDetailModal, { props: { emgId: 'EM20261013-001' } })
+    await flushPromises()
+
+    await w.find('.act-approve').trigger('click')
+    const cancelOf = (sel: string) => w.findAll('.modal').find(m => m.find(sel).exists())!.findAll('.actions .btn').at(-1)!
+    await cancelOf('.confirm-approve').trigger('click')
+    expect(w.find('.confirm-approve').exists()).toBe(false)
+    expect(w.find('.act-approve').exists()).toBe(true)
+    expect(w.emitted('close')).toBeUndefined()
+
+    await w.find('.act-return').trigger('click')
+    await cancelOf('.confirm-return').trigger('click')
+    expect(w.find('.confirm-return').exists()).toBe(false)
+    expect(w.find('.act-return').exists()).toBe(true)
+    expect(w.emitted('close')).toBeUndefined()
+
+    // 請求懸著：取消子彈窗、關主彈窗都無效；請求回來後才能關
+    let settle: (v: { emgId: string; versionNo: number }) => void = () => undefined
+    approveMock.mockReturnValueOnce(new Promise(resolve => { settle = resolve }))
+    await w.find('.act-approve').trigger('click')
+    await w.find('.confirm-approve').trigger('click')
+    await cancelOf('.confirm-approve').trigger('click')
+    expect(w.find('.confirm-approve').exists()).toBe(true)
+    await w.findAll('.modal')[0].findAll('.actions .btn').at(-1)!.trigger('click')
+    expect(w.emitted('close')).toBeUndefined()
+    // 點遮罩與按關閉鈕走同一個 close 事件，送出中同樣被忽略
+    await w.findAll('.modal-overlay')[0].trigger('click')
+    expect(w.emitted('close')).toBeUndefined()
+    await w.findAll('.modal-overlay').at(-1)!.trigger('click')
+    expect(w.find('.confirm-approve').exists()).toBe(true)
+
+    settle({ emgId: 'EM20261013-001', versionNo: 2 })
+    await flushPromises()
+    expect(w.find('.confirm-approve').exists()).toBe(false)
+    expect(w.emitted('changed')).toHaveLength(1)
+    await w.findAll('.modal')[0].findAll('.actions .btn').at(-1)!.trigger('click')
+    expect(w.emitted('close')).toHaveLength(1)
+    w.unmount()
+  })
+})
+
+describe('緊急存取清單 × 詳情彈窗', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    resetSession()
+    useSession().me.value = makeMe({ permissions: ['EMG_DECIDE', 'EMG_VIEW_ALL'] })
+    listMock.mockReset().mockResolvedValue([emg()])
+    getMock.mockReset().mockResolvedValue(detail({ reportTypeCode: 'NONE', reportDate: '2026-10-13 11:00:00', reportActBy: '0000001' }))
+    approveMock.mockReset().mockResolvedValue({ emgId: 'EM20261013-001', versionNo: 2 })
+  })
+
+  afterEach(() => {
+    vi.runAllTimers()
+    vi.useRealTimers()
+  })
+
+  it('詳情內補核准成功後清單重查', async () => {
+    const router = await makeRouter('/emergency')
+    const w = mount(EmergencyListView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(listMock).toHaveBeenCalledTimes(1)
+
+    await w.find('tbody tr button').trigger('click')
+    await flushPromises()
+    await w.find('.act-approve').trigger('click')
+    await w.find('.confirm-approve').trigger('click')
+    await flushPromises()
+    expect(approveMock).toHaveBeenCalledTimes(1)
+    expect(listMock).toHaveBeenCalledTimes(2)
     w.unmount()
   })
 })

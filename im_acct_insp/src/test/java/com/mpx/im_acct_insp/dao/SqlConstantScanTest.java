@@ -27,6 +27,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：API 數 36 → 38（/approve、/return）；EmgDao.UPDATE_DECIDE 樂觀鎖與不看 DUE_DATE；
 //           AcctHistDao 寫入帶 EMG_ID、查詢 COALESCE 兩種來源單的申請人；AcctDao.UPDATE_REVIEW_FLAG 欄位
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5：EmgDao.SELECT_BASE 須回 CREATE_BY 與四個實際操作人姓名（各自 LEFT JOIN IM_ACCT_USER）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -151,7 +154,12 @@ class SqlConstantScanTest {
 		assertThat(InspDao.INSP_SUMMARY).contains("I.INSP_BY_NAME").doesNotContain("IM_ACCT_USER");
 		assertThat(EmgDao.SELECT_BASE).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY")
 				.contains("LEFT JOIN IM_ACCT_USER UD ON UD.USER_ID = E.DECIDE_BY")
-				.contains("LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY");
+				.contains("LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY")
+				// S5：四個實際操作人也回姓名（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）
+				.contains("E.CREATE_BY,").contains("AS CREATE_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UX ON UX.USER_ID = E.CREATE_BY")
+				.contains("AS REPORT_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER URA ON URA.USER_ID = E.REPORT_ACT_BY")
+				.contains("AS DECIDE_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UDA ON UDA.USER_ID = E.DECIDE_ACT_BY")
+				.contains("AS CLOSE_ACT_BY_NAME").contains("LEFT JOIN IM_ACCT_USER UCA ON UCA.USER_ID = E.CLOSE_ACT_BY");
 	}
 
 	@Test

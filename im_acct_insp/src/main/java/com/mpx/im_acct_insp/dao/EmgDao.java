@@ -22,6 +22,11 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：主管處理 UPDATE_DECIDE（補核准與退回共用；條件：版本相符、尚未處理；不看逾期；
 //           DECIDE_BY 有效身分、DECIDE_ACT_BY／UPDATE_BY 實際操作人、IS_SELF_DECIDE 由 Service 算；VERSION_NO＋1）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S5：SELECT_BASE 多回送出的實際操作人 CREATE_BY，並對四個實際操作人
+//           （CREATE_BY、REPORT_ACT_BY、DECIDE_ACT_BY、CLOSE_ACT_BY）各 LEFT JOIN IM_ACCT_USER 取姓名（UX／URA／UDA／UCA），
+//           供詳情彈窗在實際操作人≠有效身分時顯示「{代理}（實際操作人：{實際}）」（S3 審查第 4 項、S5 裁示①）
 // ============================================================
 
 import java.time.LocalDate;
@@ -51,25 +56,39 @@ public class EmgDao {
 			         ELSE 'CLOSED'
 			       END""";
 
-	/** 主表全欄＋類別名、三種人名、計算狀態；列表、明細共用 */
+	/**
+	 * 主表全欄＋類別名、三種有效身分人名、四種實際操作人（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）及其姓名、計算狀態；
+	 * 列表、明細共用。姓名一律 LEFT JOIN IM_ACCT_USER：UA 申請人、UD 處理人、UC 結案人、UX 送出操作人、URA／UDA／UCA 三個節點的實際操作人
+	 */
 	public static final String SELECT_BASE = """
 			SELECT E.EMG_ID, E.CATG_ID, C.CATG_NAME, E.TARGET_DESCR, E.APPLY_BY,
 			""" + "       " + AcctReqDao.nameExpr("UA") + " AS APPLY_BY_NAME,\n" + """
+			       E.CREATE_BY,
+			""" + "       " + AcctReqDao.nameExpr("UX") + " AS CREATE_BY_NAME,\n" + """
 			       E.APPLY_REASON, E.EXPECT_HOUR_QTY, E.SUBMIT_DATE, E.DUE_DATE,
 			       E.REPORT_TYPE_CODE, E.REPORT_DESCR, E.REPORT_DATE, E.REPORT_ACT_BY,
+			""" + "       " + AcctReqDao.nameExpr("URA") + " AS REPORT_ACT_BY_NAME,\n" + """
 			       E.DECIDE_CODE, E.DECIDE_BY,
 			""" + "       " + AcctReqDao.nameExpr("UD") + " AS DECIDE_BY_NAME,\n" + """
-			       E.DECIDE_DATE, E.DECIDE_ACT_BY, E.RETURN_REASON, E.IS_SELF_DECIDE,
+			       E.DECIDE_DATE, E.DECIDE_ACT_BY,
+			""" + "       " + AcctReqDao.nameExpr("UDA") + " AS DECIDE_ACT_BY_NAME,\n" + """
+			       E.RETURN_REASON, E.IS_SELF_DECIDE,
 			       E.CLOSE_BY,
 			""" + "       " + AcctReqDao.nameExpr("UC") + " AS CLOSE_BY_NAME,\n" + """
-			       E.CLOSE_DATE, E.CLOSE_ACT_BY, E.CLOSE_DESCR, E.CLOSE_RESULT_CODE, E.IS_SELF_CLOSE,
+			       E.CLOSE_DATE, E.CLOSE_ACT_BY,
+			""" + "       " + AcctReqDao.nameExpr("UCA") + " AS CLOSE_ACT_BY_NAME,\n" + """
+			       E.CLOSE_DESCR, E.CLOSE_RESULT_CODE, E.IS_SELF_CLOSE,
 			       E.VERSION_NO,
 			""" + "       " + STATE_EXPR + " AS EMG_STATE_CODE\n" + """
 			  FROM IM_EMG_ACCESS E
 			  LEFT JOIN IM_ACCT_CATG C ON C.CATG_ID = E.CATG_ID
 			  LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY
+			  LEFT JOIN IM_ACCT_USER UX ON UX.USER_ID = E.CREATE_BY
+			  LEFT JOIN IM_ACCT_USER URA ON URA.USER_ID = E.REPORT_ACT_BY
 			  LEFT JOIN IM_ACCT_USER UD ON UD.USER_ID = E.DECIDE_BY
+			  LEFT JOIN IM_ACCT_USER UDA ON UDA.USER_ID = E.DECIDE_ACT_BY
 			  LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY
+			  LEFT JOIN IM_ACCT_USER UCA ON UCA.USER_ID = E.CLOSE_ACT_BY
 			 WHERE E.STATUS = 1
 			""";
 
