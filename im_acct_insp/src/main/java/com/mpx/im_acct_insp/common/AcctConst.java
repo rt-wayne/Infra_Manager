@@ -26,6 +26,9 @@ package com.mpx.im_acct_insp.common;
 // 變更說明: BACKLOG 第 46 項 S2（緊急存取）：單號 EA；計算狀態碼 5 種（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）；
 //           回報、處理、結案、受影響帳號登記來源代碼；補核准期限 24 小時與預估時長 1～24；
 //           通知事件 EMG_SUBMIT／EMG_OVERDUE／EMG_RETURN、參照 EMG；權限碼 EMG_APPLY／EMG_VIEW_ALL／EMG_DECIDE
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：回報受影響帳號上限 EMG_AFFECT_MAX＝20（S4-③）
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -221,6 +224,8 @@ public final class AcctConst {
 	/** 預估時長（小時，整數）的範圍（裁示②） */
 	public static final int EMG_HOUR_MIN = 1;
 	public static final int EMG_HOUR_MAX = 24;
+	/** 回報「異動了既有帳號」時受影響帳號的上限（S4-③；下限 1） */
+	public static final int EMG_AFFECT_MAX = 20;
 
 	// 系統寫入
 	/** 系統排程寫入時的 CREATE_BY／UPDATE_BY（Table 第 2 節） */

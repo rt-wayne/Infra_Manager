@@ -243,7 +243,7 @@ public class TestFixture {
 	public final InspectionService inspectionService = new InspectionService(permissionService, docSeqService, inspDao, tx,
 			clock);
 	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
-			notificationService, tx, clock);
+			acctDao, notificationService, tx, clock);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;

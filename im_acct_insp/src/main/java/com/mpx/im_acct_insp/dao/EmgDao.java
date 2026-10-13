@@ -14,6 +14,10 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: 修正：人名與狀態欄改用 AcctReqDao 的「"       " + 片段 + " AS 別名,\n"」串接寫法；
 //           原寫法讓「 AS 別名」那行成為 text block 最短縮排，前導空白被剝掉而拼出 ENDAS（ORA-00905，S3 瀏覽器實測發現）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：回報 UPDATE_REPORT（條件：版本相符、APPLY_BY＝本人、尚未回報、尚未處理；VERSION_NO＋1）、
+//           受影響帳號 INSERT_AFFECT（只增不改；RECORD_BY 有效身分、CREATE_BY 實際操作人）
 // ============================================================
 
 import java.time.LocalDate;
@@ -104,6 +108,27 @@ public class EmgDao {
 			       0, 0, 0, 1, :now, :createBy)
 			""";
 
+	/** 回報（S4a）：本人、尚未回報、主管尚未處理、版本相符才更新；VERSION_NO＋1（樂觀鎖，0 筆＝409） */
+	public static final String UPDATE_REPORT = """
+			UPDATE IM_EMG_ACCESS
+			   SET REPORT_TYPE_CODE = :reportTypeCode, REPORT_DESCR = :reportDescr, REPORT_DATE = :now,
+			       REPORT_ACT_BY = :actBy, VERSION_NO = VERSION_NO + 1, UPDATE_DATE = :now, UPDATE_BY = :actBy
+			 WHERE EMG_ID = :emgId
+			   AND STATUS = 1
+			   AND VERSION_NO = :versionNo
+			   AND APPLY_BY = :applyBy
+			   AND REPORT_TYPE_CODE IS NULL
+			   AND DECIDE_CODE IS NULL
+			""";
+
+	/** 受影響帳號（只增不改）：RECORD_BY＝有效身分、CREATE_BY＝實際操作人 */
+	public static final String INSERT_AFFECT = """
+			INSERT INTO IM_EMG_AFFECT_ACCT (EMG_ID, AFFECT_TYPE_CODE, ACCT_ID, AFFECT_DESCR, RECORD_BY, RECORD_DATE,
+			       STATUS, CREATE_DATE, CREATE_BY)
+			VALUES (:emgId, :affectTypeCode, :acctId, :affectDescr, :recordBy, :now,
+			       1, :now, :createBy)
+			""";
+
 	private final DbClient dbClient;
 	private final String itflowDb;
 
@@ -151,5 +176,32 @@ public class EmgDao {
 		Map<String, Object> params = new HashMap<>();
 		params.put("emgId", emgId);
 		return dbClient.query(itflowDb, FIND_AFFECTS, params, EmgAffectAcct.class);
+	}
+
+	/** 回報；applyBy＝有效身分（須等於單上 APPLY_BY），actBy＝實際操作人；回傳更新筆數（0＝版本或狀態不符） */
+	public int report(String emgId, int versionNo, String applyBy, String reportTypeCode, String reportDescr,
+			LocalDateTime now, String actBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("emgId", emgId);
+		params.put("versionNo", versionNo);
+		params.put("applyBy", applyBy);
+		params.put("reportTypeCode", reportTypeCode);
+		params.put("reportDescr", reportDescr);
+		params.put("now", DaoSupport.ts(now));
+		params.put("actBy", actBy);
+		return dbClient.update(itflowDb, UPDATE_REPORT, params);
+	}
+
+	public int insertAffect(String emgId, String affectTypeCode, String acctId, String affectDescr, String recordBy,
+			LocalDateTime now, String createBy) {
+		Map<String, Object> params = new HashMap<>();
+		params.put("emgId", emgId);
+		params.put("affectTypeCode", affectTypeCode);
+		params.put("acctId", acctId);
+		params.put("affectDescr", affectDescr);
+		params.put("recordBy", recordBy);
+		params.put("now", DaoSupport.ts(now));
+		params.put("createBy", createBy);
+		return dbClient.update(itflowDb, INSERT_AFFECT, params);
 	}
 }

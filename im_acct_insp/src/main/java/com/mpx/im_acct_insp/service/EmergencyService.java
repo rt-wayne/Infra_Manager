@@ -9,12 +9,20 @@ package com.mpx.im_acct_insp.service;
 //           DUE_DATE＝＋24 小時、APPLY_BY＝有效身分、CREATE_BY＝實際操作人；交易提交後寄 EMG_SUBMIT 給所有 EMG_DECIDE 持有人
 //           列表與明細登入即可：有 EMG_VIEW_ALL 看全部，否則只看 APPLY_BY＝有效身分的單；明細查無或無權看一律 404（裁示①A）；
 //           狀態篩選值不在五種計算狀態回 400；日期篩選用 Texts.parseDate
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：申請人回報 report（本人即可、只一次、主管處理前、逾期後仍可）：「異動」須 1～20 個受影響帳號、
+//           回報說明必填，帳號說明選填；「沒有異動」不得帶帳號；帳號以單號＋完整名稱＋三種狀態驗證（S4-⑥，R8）；
+//           樂觀鎖帶 versionNo（S4-⑰）；子表 REPORT 列與主表回報同一交易；回報不寄信；明細與回報共用 load（404）
 // ============================================================
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,11 +34,15 @@ import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.DocSeqService;
 import com.mpx.im_acct_insp.common.Identity;
 import com.mpx.im_acct_insp.common.Texts;
+import com.mpx.im_acct_insp.dao.AcctDao;
 import com.mpx.im_acct_insp.dao.EmgDao;
+import com.mpx.im_acct_insp.model.Acct;
 import com.mpx.im_acct_insp.model.Emg;
+import com.mpx.im_acct_insp.model.EmgActionResult;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.EmgIdResult;
 import com.mpx.im_acct_insp.model.request.EmgForm;
+import com.mpx.im_acct_insp.model.request.EmgReportForm;
 
 @Service
 public class EmergencyService {
@@ -40,21 +52,29 @@ public class EmergencyService {
 	static final int TARGET_MAX = 200;
 	static final int REASON_MAX = 500;
 	static final String LABEL_STATE = "狀態";
+	static final int REPORT_DESCR_MAX = 500;
+	static final int AFFECT_DESCR_MAX = 500;
+	static final String LABEL_VERSION = "版本號";
+	static final List<String> REPORT_TYPES = List.of(AcctConst.EMG_REPORT_NONE, AcctConst.EMG_REPORT_MODIFIED);
+	/** 受影響帳號可選的帳號狀態（D29＋㉑；與 AcctDao.FIND_LOOKUP 同範圍） */
+	static final List<String> AFFECT_STATES = List.of(AcctConst.AS_APPROVED, AcctConst.AS_EXPIRED, AcctConst.AS_DISABLED);
 
 	private final PermissionService perm;
 	private final CodeService codeService;
 	private final DocSeqService docSeqService;
 	private final EmgDao emgDao;
+	private final AcctDao acctDao;
 	private final NotificationService notificationService;
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
 	public EmergencyService(PermissionService perm, CodeService codeService, DocSeqService docSeqService, EmgDao emgDao,
-			NotificationService notificationService, TransactionTemplate tx, Clock clock) {
+			AcctDao acctDao, NotificationService notificationService, TransactionTemplate tx, Clock clock) {
 		this.perm = perm;
 		this.codeService = codeService;
 		this.docSeqService = docSeqService;
 		this.emgDao = emgDao;
+		this.acctDao = acctDao;
 		this.notificationService = notificationService;
 		this.tx = tx;
 		this.clock = clock;
@@ -127,12 +147,114 @@ public class EmergencyService {
 
 	/** 明細（登入即可）：查無或無權看一律 404 */
 	public EmgDetail detail(Identity id, String emgId) {
+		EmgDetail d = load(id, emgId);
+		d.setAffectAccts(emgDao.findAffects(emgId));
+		return d;
+	}
+
+	/**
+	 * 申請人回報（本人即可，不需 EMG_APPLY，S4-⑬）；只能一次、主管處理前，逾期後仍可回報。
+	 * 驗證順序（S4-⑭）：404 → 403 非本人 → E10 回報結果 → 值域 400 → E10 受影響帳號 → 400（「沒有異動」帶帳號、超過上限、
+	 * 單號或名稱空白、重複）→ E10 回報說明 → E11 → 帳號驗證 400 → E02 版本號 → 409 E08（已回報、已處理、版本不符）→ 交易
+	 */
+	public EmgActionResult report(Identity id, String emgId, EmgReportForm form) {
+		EmgDetail d = load(id, emgId);
+		if (!id.getUserId().equals(d.getApplyBy())) {
+			throw AcctMsg.forbidden();
+		}
+		EmgReportForm f = form == null ? new EmgReportForm() : form;
+		String type = Texts.trimToNull(f.getReportTypeCode());
+		if (type == null) {
+			throw AcctMsg.fillIn(AcctMsg.WHAT_EMG_REPORT_TYPE);
+		}
+		if (!REPORT_TYPES.contains(type)) {
+			throw AcctMsg.badCode(AcctMsg.WHAT_EMG_REPORT_TYPE);
+		}
+		boolean modified = AcctConst.EMG_REPORT_MODIFIED.equals(type);
+		List<EmgReportForm.AffectAcct> accts = f.getAffectAccts() == null ? List.of() : f.getAffectAccts();
+		if (modified && accts.isEmpty()) {
+			throw AcctMsg.fillIn(AcctMsg.WHAT_EMG_AFFECT);
+		}
+		// 「沒有異動」不得帶帳號（S4-②）
+		if (!modified && !accts.isEmpty()) {
+			throw AcctMsg.badCode(AcctMsg.WHAT_EMG_AFFECT);
+		}
+		// 上限 20，查帳號前先擋（S4-③）
+		if (accts.size() > AcctConst.EMG_AFFECT_MAX) {
+			throw AcctMsg.badCode(AcctMsg.WHAT_EMG_AFFECT);
+		}
+		// 重複由 Service 先擋（S4-③），不讓子表複合主鍵擋成 500
+		List<EmgReportForm.AffectAcct> picked = new ArrayList<>();
+		Set<String> seen = new HashSet<>();
+		for (EmgReportForm.AffectAcct a : accts) {
+			String acctId = a == null ? null : Texts.trimToNull(a.getAcctId());
+			String acctName = a == null ? null : Texts.trimToNull(a.getAcctName());
+			if (acctId == null || acctName == null || !seen.add(acctId)) {
+				throw AcctMsg.badCode(AcctMsg.WHAT_EMG_AFFECT);
+			}
+			EmgReportForm.AffectAcct p = new EmgReportForm.AffectAcct();
+			p.setAcctId(acctId);
+			p.setAcctName(acctName);
+			p.setAffectDescr(Texts.trimToNull(a.getAffectDescr()));
+			picked.add(p);
+		}
+		// 「異動」時整體說明必填、各帳號說明選填；「沒有異動」皆選填（S4-②）
+		String descr = Texts.trimToNull(f.getReportDescr());
+		if (modified && descr == null) {
+			throw AcctMsg.fillIn(AcctMsg.WHAT_EMG_REPORT_DESCR);
+		}
+		Texts.maxChars(AcctMsg.WHAT_EMG_REPORT_DESCR, descr, REPORT_DESCR_MAX);
+		for (EmgReportForm.AffectAcct p : picked) {
+			Texts.maxChars(AcctMsg.WHAT_EMG_AFFECT_DESCR, p.getAffectDescr(), AFFECT_DESCR_MAX);
+		}
+		// S4-⑥（R8）：單號＋完整名稱同時相符且狀態屬 D29 三種，與選取器 /accounts/lookup 同範圍；
+		// 不符一律同一句、不指出哪一筆或為何不符，避免以連號單號列舉帳號名稱
+		for (EmgReportForm.AffectAcct p : picked) {
+			Acct a = acctDao.findById(p.getAcctId());
+			if (a == null || !p.getAcctName().equals(a.getAcctName()) || !AFFECT_STATES.contains(a.getAcctStateCode())) {
+				throw AcctMsg.badCode(AcctMsg.WHAT_EMG_AFFECT);
+			}
+		}
+		Integer v = requireVersion(f.getVersionNo());
+		if (d.getReportTypeCode() != null || d.getDecideCode() != null || !v.equals(d.getVersionNo())) {
+			throw AcctMsg.concurrent();
+		}
+
+		LocalDateTime now = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+		tx.executeWithoutResult(s -> {
+			if (emgDao.report(emgId, v, id.getUserId(), type, descr, now, id.getRealUserId()) != 1) {
+				throw AcctMsg.concurrent();
+			}
+			for (EmgReportForm.AffectAcct p : picked) {
+				emgDao.insertAffect(emgId, AcctConst.AFFECT_REPORT, p.getAcctId(), p.getAffectDescr(), id.getUserId(), now,
+						id.getRealUserId());
+			}
+		});
+		log.info("緊急存取回報 emgId={} type={} accts={} realUser={}", emgId, type, picked.size(), id.getRealUserId());
+		return result(emgId, v + 1);
+	}
+
+	/** 查無或無權看一律 404（裁示①A） */
+	EmgDetail load(Identity id, String emgId) {
 		EmgDetail d = emgId == null ? null : emgDao.findById(emgId, LocalDateTime.now(clock));
 		if (d == null || !canView(id, d)) {
 			throw AcctMsg.notFound();
 		}
-		d.setAffectAccts(emgDao.findAffects(emgId));
 		return d;
+	}
+
+	private static Integer requireVersion(Integer versionNo) {
+		if (versionNo == null) {
+			throw AcctMsg.required(LABEL_VERSION);
+		}
+		return versionNo;
+	}
+
+	private static EmgActionResult result(String emgId, int versionNo) {
+		EmgActionResult r = new EmgActionResult();
+		r.setEmgId(emgId);
+		r.setVersionNo(versionNo);
+		return r;
 	}
 
 	/** 有 EMG_VIEW_ALL、或申請人就是有效身分 */

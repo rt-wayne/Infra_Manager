@@ -20,6 +20,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: 新增：DAO SQL 常數的 CASE END 不得與下一個字黏在一起（EmgDao 曾拼出 ENDAS，S3 瀏覽器實測發現）；
 //           掃描清單 DAOS 須與 dao 套件的 @Repository 類別一致（防新增 DAO 漏列）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：API 數 35 → 36（POST /emergencies/{id}/report）；EmgDao.UPDATE_REPORT 須帶樂觀鎖與前置條件
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -168,6 +171,10 @@ class SqlConstantScanTest {
 		assertThat(AcctReqDao.UPDATE_REJECT).contains("REJECT_CNT = REJECT_CNT + 1");
 		assertThat(AcctReqDao.UPDATE_VERIFY_REJECT).contains("VERIFY_REJECT_CNT = VERIFY_REJECT_CNT + 1");
 		assertThat(AcctReqDao.UPDATE_RESUBMIT).doesNotContain("APPLY_DATE");
+		// 緊急存取回報（S4a）：帶版本、限本人、限尚未回報且主管未處理
+		assertThat(EmgDao.UPDATE_REPORT).contains("VERSION_NO = :versionNo").contains("VERSION_NO = VERSION_NO + 1")
+				.contains("APPLY_BY = :applyBy").contains("REPORT_TYPE_CODE IS NULL").contains("DECIDE_CODE IS NULL")
+				.contains("STATUS = 1");
 	}
 
 	@Test
@@ -205,7 +212,7 @@ class SqlConstantScanTest {
 				}
 			}
 		}
-		assertThat(apis).isEqualTo(35);
+		assertThat(apis).isEqualTo(36);
 		assertThat(missing).isEmpty();
 	}
 }

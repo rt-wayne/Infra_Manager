@@ -7,6 +7,10 @@ package com.mpx.im_acct_insp.service;
 //           EMG_APPLY 權限、必填 E10、欄寬 E11、預估時長 1～24 與類別不存在 BAD_CODE、取號 EA 與 DUE_DATE＝＋24 小時、
 //           有效身分（APPLY_BY）與實際操作人（CREATE_BY／取號）、通知在交易提交後呼叫、列表資料範圍（EMG_VIEW_ALL 不限／否則本人）、
 //           狀態篩選非法 400、關鍵字跳脫、明細查無或無權看一律 404
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：回報測試——沒有異動／異動（子表 REPORT 列、有效身分與實際操作人）、上限 20、逾期後仍可、
+//           404／非本人 403、欄位驗證順序、帳號單號＋名稱＋狀態不符同一句、已回報／已處理／版本不符／UPDATE 0 筆皆 409
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -18,9 +22,11 @@ import static com.mpx.im_acct_insp.support.TestFixture.NOW;
 import static com.mpx.im_acct_insp.support.TestFixture.TERRY;
 import static com.mpx.im_acct_insp.support.TestFixture.TODAY;
 import static com.mpx.im_acct_insp.support.TestFixture.id;
+import static com.mpx.im_acct_insp.support.TestFixture.idWith;
 import static com.mpx.im_acct_insp.support.TestFixture.impersonate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -43,8 +49,10 @@ import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.Identity;
 import com.mpx.im_acct_insp.model.Emg;
+import com.mpx.im_acct_insp.model.EmgActionResult;
 import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.request.EmgForm;
+import com.mpx.im_acct_insp.model.request.EmgReportForm;
 import com.mpx.im_acct_insp.support.TestFixture;
 
 class EmergencyServiceTest {
@@ -182,6 +190,195 @@ class EmergencyServiceTest {
 		assertStatus(() -> svc.detail(id(KEVIN), EMG_ID), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		assertStatus(() -> svc.detail(id(TERRY), "EA20261007-999"), HttpStatus.NOT_FOUND, AcctMsg.N01);
 		assertStatus(() -> svc.detail(id(TERRY), null), HttpStatus.NOT_FOUND, AcctMsg.N01);
+	}
+
+	@Test
+	void 回報_沒有異動_寫主表不寫子表_不寄信_回傳新版本_逾期後仍可() {
+		EmgDetail d = emg(MICHAEL, 3);
+		d.setDueDate(NOW.minusHours(1));
+		EmgActionResult r = svc.report(id(MICHAEL), EMG_ID, reportForm(AcctConst.EMG_REPORT_NONE, "  ", 3));
+		assertThat(r.getEmgId()).isEqualTo(EMG_ID);
+		assertThat(r.getVersionNo()).isEqualTo(4);
+		// 「沒有異動」說明選填，空白存 null
+		verify(fx.emgDao).report(EMG_ID, 3, MICHAEL, AcctConst.EMG_REPORT_NONE, null, NOW, MICHAEL);
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		verify(fx.notificationService, never()).emgEvent(anyString(), anyString(), anyString());
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 回報_異動_子表REPORT列_RECORD_BY有效身分_CREATE_BY實際操作人_同一交易() {
+		emg(KEVIN, 0);
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		fx.acct("A2", "DB", AcctConst.AS_EXPIRED);
+		fx.acct("A3", "DB", AcctConst.AS_DISABLED);
+		svc.report(impersonate(HANK, KEVIN), EMG_ID, reportForm(AcctConst.EMG_REPORT_MODIFIED, " 改了密碼 ", 0,
+				affect(" A1 ", " acct_A1 ", " 重設密碼 "), affect("A2", "acct_A2", null), affect("A3", "acct_A3", "")));
+
+		InOrder order = inOrder(fx.emgDao);
+		order.verify(fx.emgDao).report(EMG_ID, 0, KEVIN, AcctConst.EMG_REPORT_MODIFIED, "改了密碼", NOW, HANK);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_REPORT, "A1", "重設密碼", KEVIN, NOW, HANK);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_REPORT, "A2", null, KEVIN, NOW, HANK);
+		order.verify(fx.emgDao).insertAffect(EMG_ID, AcctConst.AFFECT_REPORT, "A3", null, KEVIN, NOW, HANK);
+		assertThat(fx.txm.commits).isEqualTo(1);
+	}
+
+	@Test
+	void 回報_上限20個帳號可送() {
+		emg(MICHAEL, 0);
+		EmgReportForm.AffectAcct[] list = new EmgReportForm.AffectAcct[AcctConst.EMG_AFFECT_MAX];
+		for (int i = 0; i < list.length; i++) {
+			fx.acct("A" + i, "DB", AcctConst.AS_APPROVED);
+			list[i] = affect("A" + i, "acct_A" + i, null);
+		}
+		svc.report(id(MICHAEL), EMG_ID, reportForm(AcctConst.EMG_REPORT_MODIFIED, "說明", 0, list));
+		verify(fx.emgDao, org.mockito.Mockito.times(AcctConst.EMG_AFFECT_MAX)).insertAffect(any(), any(), any(), any(), any(),
+				any(), any());
+	}
+
+	@Test
+	void 回報_本人即可_無任何權限仍可回報() {
+		// S4-⑬：申請後被拿掉 EMG_APPLY 的人仍須能回報自己的單
+		emg(MICHAEL, 0);
+		svc.report(idWith(MICHAEL, Set.of(), List.of()), EMG_ID, reportForm(AcctConst.EMG_REPORT_NONE, null, 0));
+		verify(fx.emgDao).report(EMG_ID, 0, MICHAEL, AcctConst.EMG_REPORT_NONE, null, NOW, MICHAEL);
+	}
+
+	@Test
+	void 回報_權限_查無或無權看404_非本人403_EMG_VIEW_ALL者非本人也403() {
+		emg(MICHAEL, 0);
+		EmgReportForm ok = reportForm(AcctConst.EMG_REPORT_NONE, null, 0);
+		assertStatus(() -> svc.report(id(KEVIN), EMG_ID, ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.report(id(MICHAEL), "EA20261007-999", ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.report(id(MICHAEL), null, ok), HttpStatus.NOT_FOUND, AcctMsg.N01);
+		assertStatus(() -> svc.report(id(TERRY), EMG_ID, ok), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		// 實際操作人是申請人、但切換成別人 → 有效身分不是申請人
+		assertStatus(() -> svc.report(impersonate(MICHAEL, TERRY), EMG_ID, ok), HttpStatus.FORBIDDEN, AcctMsg.P01);
+		assertNothingWritten();
+	}
+
+	@Test
+	void 回報驗證_回報結果_受影響帳號數量與重複_說明必填與欄寬_版本號必填() {
+		emg(MICHAEL, 0);
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		String type = AcctMsg.WHAT_EMG_REPORT_TYPE;
+		String aff = AcctMsg.WHAT_EMG_AFFECT;
+		String none = AcctConst.EMG_REPORT_NONE;
+		String mod = AcctConst.EMG_REPORT_MODIFIED;
+		assertBad(null, AcctMsg.E10_PREFIX + type);
+		assertBad(reportForm(" ", null, 0), AcctMsg.E10_PREFIX + type);
+		assertBad(reportForm("CLOSE", null, 0), AcctMsg.BAD_CODE_PREFIX + type);
+		assertBad(reportForm(mod, "說明", 0), AcctMsg.E10_PREFIX + aff);
+		assertBad(reportForm(none, null, 0, affect("A1", "acct_A1", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		// 21 個都是合法帳號，只剩上限能擋（不符與超量同一句，帳號不合法會讓上限測試假綠）
+		EmgReportForm.AffectAcct[] over = new EmgReportForm.AffectAcct[AcctConst.EMG_AFFECT_MAX + 1];
+		for (int i = 0; i < over.length; i++) {
+			fx.acct("A" + i, "DB", AcctConst.AS_APPROVED);
+			over[i] = affect("A" + i, "acct_A" + i, null);
+		}
+		assertBad(reportForm(mod, "說明", 0, over), AcctMsg.BAD_CODE_PREFIX + aff);
+		// 重複以去空白後的單號比對，由 Service 擋、不讓子表主鍵擋成 500
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "acct_A1", null), affect(" A1", "acct_A1", null)),
+				AcctMsg.BAD_CODE_PREFIX + aff);
+		assertBad(reportForm(mod, "說明", 0, (EmgReportForm.AffectAcct) null), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertBad(reportForm(mod, "說明", 0, affect(" ", "acct_A1", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "", null)), AcctMsg.BAD_CODE_PREFIX + aff);
+		assertBad(reportForm(mod, " ", 0, affect("A1", "acct_A1", null)), AcctMsg.E10_PREFIX + AcctMsg.WHAT_EMG_REPORT_DESCR);
+		assertBad(reportForm(none, "x".repeat(501), 0), AcctMsg.E11_PREFIX + AcctMsg.WHAT_EMG_REPORT_DESCR);
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "acct_A1", "x".repeat(501))),
+				AcctMsg.E11_PREFIX + AcctMsg.WHAT_EMG_AFFECT_DESCR);
+		assertBad(reportForm(none, null, null), AcctMsg.E02_PREFIX + "版本號");
+		assertNothingWritten();
+		// 以上全在查帳號前擋下（S4-③ 上限、單號空白等不得靠「查無帳號」那句湊成同一訊息）
+		verify(fx.acctDao, never()).findById(any());
+
+		// 500 字整為上限內
+		svc.report(id(MICHAEL), EMG_ID, reportForm(none, "x".repeat(500), 0));
+		verify(fx.emgDao).report(EMG_ID, 0, MICHAEL, none, "x".repeat(500), NOW, MICHAEL);
+	}
+
+	@Test
+	void 回報驗證_帳號單號與名稱須同時相符_狀態限三種_不符一律同一句() {
+		emg(MICHAEL, 0);
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		fx.acct("R1", "DB", AcctConst.AS_REVIEW);
+		fx.acct("J1", "DB", AcctConst.AS_REJECTED);
+		String msg = AcctMsg.BAD_CODE_PREFIX + AcctMsg.WHAT_EMG_AFFECT;
+		String mod = AcctConst.EMG_REPORT_MODIFIED;
+		assertBad(reportForm(mod, "說明", 0, affect("NOPE", "acct_NOPE", null)), msg);
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "acct_a1", null)), msg);
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "acct_A", null)), msg);
+		assertBad(reportForm(mod, "說明", 0, affect("R1", "acct_R1", null)), msg);
+		assertBad(reportForm(mod, "說明", 0, affect("J1", "acct_J1", null)), msg);
+		// 一筆對、一筆錯 → 整張不寫
+		assertBad(reportForm(mod, "說明", 0, affect("A1", "acct_A1", null), affect("R1", "acct_R1", null)), msg);
+		assertNothingWritten();
+	}
+
+	@Test
+	void 回報_已回報_已處理_版本不符_UPDATE零筆_一律409() {
+		EmgDetail d = emg(MICHAEL, 2);
+		EmgReportForm ok = reportForm(AcctConst.EMG_REPORT_NONE, null, 2);
+		assertStatus(() -> svc.report(id(MICHAEL), EMG_ID, reportForm(AcctConst.EMG_REPORT_NONE, null, 1)), HttpStatus.CONFLICT,
+				AcctMsg.E08);
+
+		d.setReportTypeCode(AcctConst.EMG_REPORT_NONE);
+		assertStatus(() -> svc.report(id(MICHAEL), EMG_ID, ok), HttpStatus.CONFLICT, AcctMsg.E08);
+		d.setReportTypeCode(null);
+		d.setDecideCode(AcctConst.EMG_DECIDE_RETURN);
+		assertStatus(() -> svc.report(id(MICHAEL), EMG_ID, ok), HttpStatus.CONFLICT, AcctMsg.E08);
+		assertNothingWritten();
+
+		// 讀取時還沒人動、寫入時被搶先 → UPDATE 0 筆 → 409，子表不寫、交易回滾
+		d.setDecideCode(null);
+		when(fx.emgDao.report(any(), anyInt(), any(), any(), any(), any(), any())).thenReturn(0);
+		fx.acct("A1", "DB", AcctConst.AS_APPROVED);
+		assertStatus(() -> svc.report(id(MICHAEL), EMG_ID,
+				reportForm(AcctConst.EMG_REPORT_MODIFIED, "說明", 2, affect("A1", "acct_A1", null))), HttpStatus.CONFLICT,
+				AcctMsg.E08);
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.commits).isZero();
+		assertThat(fx.txm.rollbacks).isEqualTo(1);
+	}
+
+	/** 待回報、未處理的單；report() 預設寫入 1 筆 */
+	EmgDetail emg(String applyBy, int versionNo) {
+		EmgDetail d = new EmgDetail();
+		d.setEmgId(EMG_ID);
+		d.setApplyBy(applyBy);
+		d.setVersionNo(versionNo);
+		d.setDueDate(NOW.plusHours(20));
+		when(fx.emgDao.findById(EMG_ID, NOW)).thenReturn(d);
+		when(fx.emgDao.report(any(), anyInt(), any(), any(), any(), any(), any())).thenReturn(1);
+		when(fx.emgDao.insertAffect(any(), any(), any(), any(), any(), any(), any())).thenReturn(1);
+		return d;
+	}
+
+	void assertBad(EmgReportForm f, String msg) {
+		assertStatus(() -> svc.report(id(MICHAEL), EMG_ID, f), HttpStatus.BAD_REQUEST, msg);
+	}
+
+	void assertNothingWritten() {
+		verify(fx.emgDao, never()).report(any(), anyInt(), any(), any(), any(), any(), any());
+		verify(fx.emgDao, never()).insertAffect(any(), any(), any(), any(), any(), any(), any());
+		assertThat(fx.txm.commits).isZero();
+	}
+
+	static EmgReportForm reportForm(String type, String descr, Integer versionNo, EmgReportForm.AffectAcct... accts) {
+		EmgReportForm f = new EmgReportForm();
+		f.setReportTypeCode(type);
+		f.setReportDescr(descr);
+		f.setVersionNo(versionNo);
+		f.setAffectAccts(accts.length == 0 ? null : java.util.Arrays.asList(accts));
+		return f;
+	}
+
+	static EmgReportForm.AffectAcct affect(String acctId, String acctName, String descr) {
+		EmgReportForm.AffectAcct a = new EmgReportForm.AffectAcct();
+		a.setAcctId(acctId);
+		a.setAcctName(acctName);
+		a.setAffectDescr(descr);
+		return a;
 	}
 
 	static EmgForm form(String catgId, String target, String reason, Integer hours) {

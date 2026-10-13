@@ -5,6 +5,9 @@ package com.mpx.im_acct_insp_web.controller;
 // 修改日期: 2026-10-13
 // 變更說明: 新增：緊急存取 API 轉送（BACKLOG 第 46 項 S2）：/emergencies（送出、列表）、/emergencies/{id}（明細）；
 //           Authorization、Content-Type、查詢字串原樣轉送，不解析 payload
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S4a：/emergencies/{id}/report（申請人回報）轉送
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,5 +49,11 @@ public class EmergencyController {
 	@GetMapping("/emergencies/{id}")
 	public ResponseEntity<byte[]> detail(@PathVariable("id") String id, HttpServletRequest request) {
 		return backend.get("/emergencies/" + BackendForwarder.seg(id), request);
+	}
+
+	/** 申請人回報：POST <backend>/emergencies/{id}/report，JSON {reportTypeCode, reportDescr, versionNo, affectAccts} */
+	@PostMapping("/emergencies/{id}/report")
+	public ResponseEntity<byte[]> report(@PathVariable("id") String id, HttpServletRequest request) {
+		return backend.post("/emergencies/" + BackendForwarder.seg(id) + "/report", request);
 	}
 }
