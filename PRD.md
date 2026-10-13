@@ -563,7 +563,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；API 根 `/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
 | 殼 jar | `im_acct_insp_web\im_acct_insp_web\` | Spring Boot；context `/im_acct_insp_web` | 提供前端靜態頁；把 `/im_acct_insp_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
 | 前端 | `im_acct_insp_web\im_acct_insp_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
-| DB | — | Oracle 19c，schema RD_USER | 本模組 21 張表 | — |
+| DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
 
 ```
 瀏覽器（token 存 localStorage、各分頁共用，每個請求帶 Authorization: Bearer）
@@ -622,7 +622,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 ### 資料結構
 
-21 張表、42 個索引（PK 21＋一般 21）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。以下已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），兩檔自測試 DB 反向產出並逐句比對一致。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/im_acct_insp_phase2_emg.sql`（可重跑；新環境只跑 create_table.sql 即可），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）；本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -691,7 +691,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 **IM_ACCT_APPR_STAGE 簽核關卡**：STAGE_ID（PK）NUMBER(2)（1＝申請人送出、2＝機房管理員、3＝Infra 主管、4＝資訊治理、5＝資訊主管、6＝執行人、7＝資訊治理複驗）；STAGE_NAME VARCHAR2(30 CHAR) 必；STAGE_TYPE_CODE VARCHAR2(10) 必（SUBMIT、APPR、EXEC、VERIFY）；PERM_ID VARCHAR2(30)（2～5 為 APPR_G2～G5、7 為 VERIFY_G7；1、6 為空——1 看 ACC_APPLY、6 看 IM_EXEC_MAP）。
 
-**IM_DOC_SEQ 單號流水號**（無初始資料；STATUS 固定 1）：DOC_TYPE_ID（PK）VARCHAR2(2)（AR、IN；EA 為預留值）；SEQ_DATE（PK）VARCHAR2(8)（yyyymmdd）；CURR_SEQ NUMBER(3) 必（預設 0）。
+**IM_DOC_SEQ 單號流水號**（無初始資料；STATUS 固定 1）：DOC_TYPE_ID（PK）VARCHAR2(2)（AR＝帳號申請單、IN＝機房巡檢、EA＝緊急存取）；SEQ_DATE（PK）VARCHAR2(8)（yyyymmdd）；CURR_SEQ NUMBER(3) 必（預設 0）。
 
 **IM_ACCT_CATG 帳號類別**：CATG_ID（PK）VARCHAR2(10)；CATG_NAME VARCHAR2(30 CHAR) 必；CATG_DESCR VARCHAR2(100 CHAR)（表單旁範例文字）；IS_ENABLED NUMBER(1) 必（開放新增，預設 0）；IS_SUGGEST_EXPIRY NUMBER(1) 必（預設 0）；SORT_SEQ NUMBER(3) 必。新增時另需 STATUS＝1。
 
@@ -724,11 +724,11 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | APPLY_BY | VARCHAR2(30) | | 原新增申請人（之後異動不覆蓋） |
 | LAST_REVIEW_DATE | DATE | | 上次審查日 |
 | NEXT_REVIEW_DATE | DATE | | 下次應審查日 |
-| IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記，預設 0（預留，程式不寫入） |
-| REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 預留 |
-| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 預留（REVIEW、EMG） |
-| REVIEW_FLAG_DATE | DATE | | 預留 |
-| REVIEW_FLAG_BY | VARCHAR2(30) | | 預留 |
+| IS_REVIEW_FLAG | NUMBER(1) | ✓ | 審查異常標記（1＝有異常），預設 0 |
+| REVIEW_FLAG_REASON | VARCHAR2(500 CHAR) | | 審查異常原因 |
+| REVIEW_FLAG_SOURCE_CODE | VARCHAR2(10) | | 異常來源：EMG＝緊急存取；REVIEW＝定期審查（預留） |
+| REVIEW_FLAG_DATE | DATE | | 標記時間 |
+| REVIEW_FLAG_BY | VARCHAR2(30) | | 標記人（有效身分） |
 
 索引：IND_IM_ACCT_01（ACCT_STATE_CODE, CATG_ID）、_02（ACCT_NAME）、_03（EXPIRY_DATE）、_04（NEXT_REVIEW_DATE）、_05（APPLY_BY）。
 
@@ -795,10 +795,10 @@ CREATE UNIQUE INDEX IND_IM_ACCT_REQ_04 ON RD_USER.IM_ACCT_REQ
 | HIST_ID（PK） | NUMBER(12) | ✓ | 流水號（同秒排序） |
 | ACCT_ID | VARCHAR2(20) | ✓ | 帳號 |
 | REQ_ID | VARCHAR2(20) | | 來源申請單（SOURCE_CODE＝REQ） |
-| EMG_ID | VARCHAR2(20) | | 預留，目前為空 |
+| EMG_ID | VARCHAR2(20) | | 來源緊急存取單（SOURCE_CODE＝EMG） |
 | REVIEW_ID | NUMBER(12) | | 預留，目前為空 |
-| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS（EMG、REVIEW 為預留值） |
-| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE（REVIEW_DONE、REVIEW_REJECT、FLAG_CLEAR、EMG_MODIFY、EMG_CLOSE_MODIFY 為預留值） |
+| SOURCE_CODE | VARCHAR2(10) | ✓ | REQ、SYS、EMG（REVIEW 為預留值） |
+| ACTION_CODE | VARCHAR2(20) | ✓ | SUBMIT、RESUB、APPROVE、REJECT、EXEC_DONE、VERIFY_OK、VERIFY_REJECT、EXPIRE、EMG_MODIFY（緊急存取異動）、EMG_CLOSE_MODIFY（結案登記異動）、FLAG_CLEAR（審查異常旗標清除）；REVIEW_DONE、REVIEW_REJECT 為預留值 |
 | STAGE_ID | NUMBER(2) | | 發生關卡；系統事件為空 |
 | ACT_BY | VARCHAR2(30) | | 實際操作人；排程為空 |
 | ACT_BY_NAME | VARCHAR2(100 CHAR) | ✓ | 顯示名快照；排程為「系統排程」 |
@@ -846,9 +846,9 @@ END
 | 欄 | 型別 | 必 | 說明 |
 |---|---|---|---|
 | NOTIFY_ID（PK） | NUMBER(12) | ✓ | 流水號 |
-| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」） |
-| REF_TYPE_CODE | VARCHAR2(10) | ✓ | REQ、ACCT、WEEK、JOB |
-| REF_ID | VARCHAR2(40) | ✓ | REQ＝單號；ACCT＝`ACCT_ID_到期日yyyymmdd`；WEEK＝週一 yyyymmdd；JOB＝RUN_ID |
+| EVENT_CODE | VARCHAR2(20) | ✓ | 11 種事件（見「通知」）；緊急存取另有 EMG_SUBMIT、EMG_OVERDUE、EMG_RETURN（EMG_OVERDUE 防重寄只看 EVENT_CODE＋REF_ID，每案一次） |
+| REF_TYPE_CODE | VARCHAR2(10) | ✓ | REQ、ACCT、WEEK、JOB、EMG |
+| REF_ID | VARCHAR2(40) | ✓ | REQ＝單號；ACCT＝`ACCT_ID_到期日yyyymmdd`；WEEK＝週一 yyyymmdd；JOB＝RUN_ID；EMG＝EMG_ID |
 | RCPT_USER_ID | VARCHAR2(30) | ✓ | 收件人 |
 | RCPT_EMAIL | VARCHAR2(100) | | 寄出當下的 Email；SKIP 時為空 |
 | SEND_DATE | DATE | ✓ | 嘗試寄送時間 |
@@ -857,11 +857,45 @@ END
 
 索引 IND_IM_ACCT_NOTIFY_LOG_01（EVENT_CODE, REF_ID, RCPT_USER_ID）。
 
-**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
+**IM_ACCT_JOB_RUN 排程執行紀錄**（SEQ_IM_ACCT_JOB_RUN；STATUS 固定 1）：RUN_ID（PK）NUMBER(12)；JOB_CODE VARCHAR2(10) 必（J01＝到期處理、J02＝每週彙總、J03＝緊急存取逾期通知；J04 預留）；RUN_BY VARCHAR2(30)（手動觸發者；排程為空）；BASE_DATE DATE 必（採用的今天；J03 為基準時間點，到秒）；START_DATE DATE 必；END_DATE DATE；RESULT_CODE VARCHAR2(10) 必（RUNNING、SUCCESS、PARTIAL、FAIL）；AFFECTED_CNT NUMBER(6) 必（預設 0）；ERR_MSG VARCHAR2(1000 CHAR)（失敗筆的帳號與例外類別）。索引 IND_IM_ACCT_JOB_RUN_01（JOB_CODE, START_DATE）。
 
-**SEQUENCE**：SEQ_IM_ACCT_ATTACH、SEQ_IM_ACCT_ADMIN_LOG、SEQ_IM_ACCT_NOTIFY_LOG、SEQ_IM_ACCT_JOB_RUN（NOCACHE）；SEQ_IM_ACCT_HIST（CACHE 20）；皆 START WITH 1。
+**IM_EMG_ACCESS 緊急存取單**（送出即生效、補核准期限＝送出＋24 小時；狀態不存欄位，由 DECIDE_CODE、CLOSE_DATE、DUE_DATE 計算）
 
-**邏輯參照**（重點；其餘同名欄即參照同名主鍵）：IM_ACCT.ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 值相同；IM_ACCT_REQ.ACCT_ID → IM_ACCT；IM_ACCT_HIST.REQ_ID 僅 SOURCE_CODE＝REQ 時有值；IM_ACCT_NOTIFY_LOG.REF_ID 依 REF_TYPE_CODE 指向不同對象（組合鍵）；所有人員欄 → IM_ACCT_USER.USER_ID（排程與初始資料為 SYSTEM）；IM_DOC_SEQ 不與其他表關聯。
+| 欄 | 型別 | 必 | 說明 |
+|---|---|---|---|
+| EMG_ID（PK） | VARCHAR2(20) | ✓ | 單號（EA，IM_DOC_SEQ 取號） |
+| CATG_ID | VARCHAR2(10) | ✓ | 帳號類別 |
+| TARGET_DESCR | VARCHAR2(200 CHAR) | ✓ | 存取對象（帳號或系統，自由文字） |
+| APPLY_BY | VARCHAR2(30) | ✓ | 申請人（有效身分） |
+| APPLY_REASON | VARCHAR2(500 CHAR) | ✓ | 緊急事由 |
+| EXPECT_HOUR_QTY | NUMBER(2) | ✓ | 預估時長（小時，1～24） |
+| SUBMIT_DATE | DATE | ✓ | 送出＝生效時間 |
+| DUE_DATE | DATE | ✓ | 補核准期限＝SUBMIT_DATE＋24 小時 |
+| REPORT_TYPE_CODE | VARCHAR2(10) | | 申請人回報：NONE＝沒有異動、MODIFIED＝異動了既有帳號；空＝未回報（僅能回報一次） |
+| REPORT_DESCR | VARCHAR2(500 CHAR) | | 回報說明 |
+| REPORT_DATE | DATE | | 回報時間 |
+| REPORT_ACT_BY | VARCHAR2(30) | | 回報的實際操作人 |
+| DECIDE_CODE | VARCHAR2(10) | | 主管處理：APPROVE＝補核准、RETURN＝退回；空＝未處理（逾期後仍可處理） |
+| DECIDE_BY | VARCHAR2(30) | | 處理人（有效身分） |
+| DECIDE_DATE | DATE | | 處理時間 |
+| DECIDE_ACT_BY | VARCHAR2(30) | | 處理的實際操作人 |
+| RETURN_REASON | VARCHAR2(500 CHAR) | | 退回原因（退回時必填） |
+| IS_SELF_DECIDE | NUMBER(1) | ✓ | 處理人＝申請人為 1，預設 0 |
+| CLOSE_BY | VARCHAR2(30) | | 異常結案人（有效身分；只有已退回的單可結案） |
+| CLOSE_DATE | DATE | | 結案時間；有值＝已結案 |
+| CLOSE_ACT_BY | VARCHAR2(30) | | 結案的實際操作人 |
+| CLOSE_DESCR | VARCHAR2(500 CHAR) | | 結案說明 |
+| CLOSE_RESULT_CODE | VARCHAR2(10) | | 結案發現：NO_CHANGE、CHANGED（結案時必填） |
+| IS_SELF_CLOSE | NUMBER(1) | ✓ | 結案人＝申請人為 1，預設 0 |
+| VERSION_NO | NUMBER(9) | ✓ | 樂觀鎖版本號，預設 0 |
+
+狀態：待補核准＝DECIDE_CODE 空且現在 ≤ DUE_DATE；逾期未補核准＝DECIDE_CODE 空且現在 > DUE_DATE；已補核准＝APPROVE；已退回＝RETURN 且 CLOSE_DATE 空；已退回（已結案）＝RETURN 且 CLOSE_DATE 有值。索引：IND_IM_EMG_ACCESS_01（APPLY_BY, SUBMIT_DATE）、_02（DECIDE_CODE, DUE_DATE）。
+
+**IM_EMG_AFFECT_ACCT 緊急存取受影響帳號**（只增不改；STATUS 固定 1；回報與結案登記各自成列、互不覆蓋）：EMG_ID（PK）VARCHAR2(20)；AFFECT_TYPE_CODE（PK）VARCHAR2(10)（REPORT＝申請人回報、CLOSE＝異常結案登記）；ACCT_ID（PK）VARCHAR2(20)；AFFECT_DESCR VARCHAR2(500 CHAR)（該帳號的異動說明）；RECORD_BY VARCHAR2(30) 必（有效身分）；RECORD_DATE DATE 必。索引 IND_IM_EMG_AFFECT_ACCT_01（ACCT_ID）。
+
+**SEQUENCE**：SEQ_IM_ACCT_ATTACH、SEQ_IM_ACCT_ADMIN_LOG、SEQ_IM_ACCT_NOTIFY_LOG、SEQ_IM_ACCT_JOB_RUN（NOCACHE）；SEQ_IM_ACCT_HIST（CACHE 20）；皆 START WITH 1。緊急存取兩表不用序列。
+
+**邏輯參照**（重點；其餘同名欄即參照同名主鍵）：IM_ACCT.ACCT_ID 與建立它的 IM_ACCT_REQ.REQ_ID 值相同；IM_ACCT_REQ.ACCT_ID → IM_ACCT；IM_ACCT_HIST.REQ_ID 僅 SOURCE_CODE＝REQ 時有值、EMG_ID 僅 SOURCE_CODE＝EMG 時有值（→ IM_EMG_ACCESS）；IM_EMG_AFFECT_ACCT.EMG_ID → IM_EMG_ACCESS、ACCT_ID → IM_ACCT；IM_ACCT_NOTIFY_LOG.REF_ID 依 REF_TYPE_CODE 指向不同對象（組合鍵）；所有人員欄 → IM_ACCT_USER.USER_ID（排程與初始資料為 SYSTEM）；IM_DOC_SEQ 不與其他表關聯。
 
 **顯示名的兩種算法**：快照欄（*_NAME）由 `Texts.displayName` 產生（含 trim、英文名空白退回中文名再退回工號）；申請單明細的 applyByName／execByName／verifyByName 與附件上傳人則由 SQL 即時 JOIN 計算（`AcctReqDao.nameExpr`：中文名為空只顯示英文名，否則「英文名 (中文名)」，不 trim、無工號退回）。見 BACKLOG 第 13 項。
 
@@ -1084,7 +1118,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
-| `config\database.properties` | `db.connect.itflow` | 本模組 21 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
+| `config\database.properties` | `db.connect.itflow` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `im.acct.insp.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `im.acct.insp.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
 | | `im.acct.insp.job.j01.cron`、`im.acct.insp.job.j02.cron` | J01、J02 觸發時間（Spring 六欄 cron，Asia/Taipei） |

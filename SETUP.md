@@ -10,7 +10,7 @@
 | JDK | 25 | 後端與殼 jar（`JAVA_HOME` 指向 JDK 25） |
 | Maven | 不需安裝 | 兩個 jar 都附 Maven Wrapper（`mvnw`／`mvnw.cmd`，固定 Maven 3.9.16） |
 | Node.js | 24 以上 | 前端（`im_acct_insp_web\im_acct_insp_web_frontend\.nvmrc`） |
-| Oracle | 19c | schema RD_USER，須已有本模組 21 張表與初始資料（建表與初始資料 SQL 在 `db\`，用法見第 6 節） |
+| Oracle | 19c | schema RD_USER，須已有本模組 23 張表與初始資料（建表與初始資料 SQL 在 `db\`，用法見第 6 節；只有第一階段 21 張表的環境先跑第 6 節的升級腳本） |
 | DB 連線資訊 API | — | 後端執行期向它取得 DB 連線資訊，須能連到 |
 
 ## 2. 設定檔
@@ -98,8 +98,10 @@ java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
 
 正式環境一律用 `db\` 兩個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。依序執行：
 
-1. `db\im_acct_insp_create_table.sql`：在空 schema 建 21 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
+1. `db\im_acct_insp_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
 2. `db\im_acct_insp_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
+
+**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\im_acct_insp_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；檔尾三句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）與兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。檔尾的 synonym 與授權段整段是註解，待確認第一階段建法後再執行（見 `BACKLOG.md` 第 46、48 項）；全新環境不用跑本檔。
 
 建完補第一位管理者，**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 
