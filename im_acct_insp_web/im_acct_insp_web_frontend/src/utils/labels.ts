@@ -9,6 +9,11 @@
 //           代碼與中文名稱改依 Table v0.2 第 6 節集中一份：刪 EXTEND、VOID、CONFIRM；帳號狀態加 EXPIRED；
 //           關卡 1～7（STAGE_LABEL）；歷史動作只留第一階段＋EXPIRE（第二階段預留碼一併列名）；角色改 6.1 的 9 個；
 //           新增 reqStateText（U10）、histActorText（4.8 操作人）、personText（4.14 巡檢人員）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：緊急存取狀態 EMG_STATE_LABEL／EMG_STATE_FILTER（五種計算值）、
+//           回報／處理／結案發現代碼文字；stateTagClass 加 PENDING（黃）、OVERDUE（紅）、RETURNED（橘）
+//           （APPROVED 與帳號、申請單共用綠色；CLOSED 走預設灰色）
 // ============================================================
 import type { ReqTypeCode } from '../types/account'
 
@@ -94,19 +99,61 @@ export function stateTagClass(code: string): string {
     case 'FIXED':
       return 'tag-ok'
     case 'REVIEW':
+    case 'PENDING':
       return 'tag-pending'
     case 'EXEC':
     case 'DISABLED':
     case 'REJECTED':
     case 'EXCPT':
+    case 'RETURNED':
       return 'tag-warn'
     case 'EXPIRED':
+    case 'OVERDUE':
       return 'tag-priv'
     case 'VERIFY':
       return 'tag-info'
     default:
       return 'tag-gray'
   }
+}
+
+/** 緊急存取狀態（計算值 emgStateCode；不存欄位） */
+export const EMG_STATE_LABEL: Record<string, string> = {
+  PENDING: '待補核准',
+  OVERDUE: '逾期未補核准',
+  APPROVED: '已補核准',
+  RETURNED: '已退回',
+  CLOSED: '已退回（已結案）'
+}
+
+/** 緊急存取清單狀態篩選（空＝全部） */
+export const EMG_STATE_FILTER: { value: string; label: string }[] = [
+  { value: '', label: '全部狀態' },
+  ...Object.entries(EMG_STATE_LABEL).map(([value, text]) => ({ value, label: text }))
+]
+
+/** 申請人回報（REPORT_TYPE_CODE） */
+export const EMG_REPORT_LABEL: Record<string, string> = {
+  NONE: '沒有異動',
+  MODIFIED: '異動了既有帳號'
+}
+
+/** 主管處理（DECIDE_CODE） */
+export const EMG_DECIDE_LABEL: Record<string, string> = {
+  APPROVE: '補核准',
+  RETURN: '退回'
+}
+
+/** 異常結案發現（CLOSE_RESULT_CODE） */
+export const EMG_CLOSE_RESULT_LABEL: Record<string, string> = {
+  NO_CHANGE: '確認沒有帳號異動',
+  CHANGED: '有帳號異動'
+}
+
+/** 受影響帳號類別（AFFECT_TYPE_CODE） */
+export const EMG_AFFECT_TYPE_LABEL: Record<string, string> = {
+  REPORT: '申請人回報',
+  CLOSE: '異常結案登記'
 }
 
 /** 巡檢整體狀態（計算值） */

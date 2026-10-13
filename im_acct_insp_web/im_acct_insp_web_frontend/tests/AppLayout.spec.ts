@@ -17,6 +17,9 @@
 // 變更說明: BACKLOG 第 42 項：無 ACC_LIST_FULL 時不顯示「帳號列表」（原本指向申請單列表）；
 //           只有 GENERAL、在申請單列表頁、切回無權限本人三案改驗「帳號列表」不存在、「帳號申請單列表」反白；
 //           新增反方向：無權限本人切換成有 ACC_LIST_FULL 者後「帳號列表」出現並連 /accounts
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：只有 GENERAL 時「緊急存取」照常顯示並連 /emergency
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -113,6 +116,7 @@ describe('AppLayout', () => {
     expect(w.find('.nav-accounts').exists()).toBe(false)
     expect(w.find('.nav-requests').attributes('href')).toBe('/requests')
     expect(w.find('.nav-insp').exists()).toBe(false)
+    expect(w.find('.nav-emergency').attributes('href')).toBe('/emergency')
     expect(w.find('.imp-start').exists()).toBe(false)
     expect(w.find('.imp-banner').exists()).toBe(false)
     expect(w.find('.who').text()).toContain('Kevin (李凱鈞)')

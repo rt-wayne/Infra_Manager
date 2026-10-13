@@ -6,6 +6,9 @@
 // 修改日期: 2026-10-07
 // 變更說明: v2.0（開發文件 spec_im_acct_insp_v2.0.md）：代碼表改新格式（enabled、suggestExpiry、reviewTrigger、selectable、關卡 1～7）；
 //           假路由加 /login；新增 makeMe（依權限碼組 /me）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：假路由加 /emergency、/emergency/new
 // ============================================================
 import { AxiosError, AxiosHeaders } from 'axios'
 import type { AxiosResponse } from 'axios'
@@ -30,6 +33,8 @@ export async function makeRouter(path = '/'): Promise<Router> {
       '/assets',
       '/inspections',
       '/inspections/new',
+      '/emergency',
+      '/emergency/new',
       '/no-access'
     ].map(p => ({ path: p, component: Stub }))
   })

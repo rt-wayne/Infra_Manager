@@ -24,6 +24,9 @@
   修改日期: 2026-10-12
   變更說明: BACKLOG 第 42 項：「帳號列表」只對有 ACC_LIST_FULL 者顯示、一律連 /accounts；
             無權限者不再顯示（原本改指向申請單列表，與「帳號申請單列表」重複），第 39 項的不反白處理一併移除
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-13
+  變更說明: BACKLOG 第 46 項 S3：「帳號權限管理」區塊在「新增申請」之後加「緊急存取」（登入即可見，S3 裁示①A）
 -->
 <template>
   <div class="app">
@@ -37,6 +40,7 @@
       <RouterLink v-if="can('ACC_LIST_FULL')" class="nav-item nav-accounts" to="/accounts">📋 帳號列表</RouterLink>
       <RouterLink v-if="can('ACC_SELF_SERVICE')" class="nav-item nav-requests" to="/requests">📄 帳號申請單列表</RouterLink>
       <RouterLink v-if="can('ACC_APPLY')" class="nav-item" to="/requests/new">＋ 新增申請</RouterLink>
+      <RouterLink class="nav-item nav-emergency" to="/emergency">🚨 緊急存取</RouterLink>
       <RouterLink class="nav-item" to="/assets">📖 資產分類說明</RouterLink>
       <template v-if="can('INSP_VIEW')">
         <div class="nav-title nav-insp">機房巡檢</div>

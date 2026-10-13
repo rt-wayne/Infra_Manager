@@ -7,6 +7,9 @@
 // 修改日期: 2026-10-07
 // 變更說明: v2.0（開發文件 spec_im_acct_insp_v2.0.md 第 3 節：時間 yyyy-MM-dd HH:mm:ss）：
 //           localInputToApi 輸出補秒；新增 localInputToDate（巡檢時間不可晚於現在的比較用）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：新增 toMinute（後端 yyyy-MM-dd HH:mm:ss 只顯示到分，緊急存取清單與明細用）
 // ============================================================
 
 function pad(n: number): string {
@@ -51,4 +54,9 @@ export function daysAgo(n: number, today: Date = new Date()): string {
 /** 取日期字串前 10 碼（後端若回含時間的字串也只顯示日期） */
 export function dateOnly(v: string | null | undefined): string {
   return v ? v.slice(0, 10) : ''
+}
+
+/** 取時間字串前 16 碼 yyyy-MM-dd HH:mm（不顯示秒）；空值回空字串 */
+export function toMinute(v: string | null | undefined): string {
+  return v ? v.slice(0, 16) : ''
 }

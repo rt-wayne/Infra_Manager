@@ -15,6 +15,10 @@
 //           全域守衛 authGuard：沒有 token → 登入頁（帶 redirect，登入後回原路由）；已登入開登入頁 → 首頁；
 //           meta.need 改為權限碼（PermCode），不符 → /no-access；
 //           註冊 http 的 401 處理：清共用狀態、記下後端 message、導回登入頁
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：/emergency 緊急存取清單（登入即可，與通知信連結 #/emergency 一致）、
+//           /emergency/new 緊急存取申請（需 EMG_APPLY）
 // ============================================================
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteLocationNormalized, RouteLocationRaw, RouteRecordRaw, Router } from 'vue-router'
@@ -63,6 +67,12 @@ const routes: RouteRecordRaw[] = [
         path: 'requests/new',
         component: () => import('../views/RequestFormView.vue'),
         meta: { title: '帳號權限申請', need: 'ACC_APPLY' }
+      },
+      { path: 'emergency', component: () => import('../views/EmergencyListView.vue'), meta: { title: '緊急存取' } },
+      {
+        path: 'emergency/new',
+        component: () => import('../views/EmergencyFormView.vue'),
+        meta: { title: '緊急存取申請', need: 'EMG_APPLY' }
       },
       { path: 'assets', component: () => import('../views/AssetRefView.vue'), meta: { title: '資產分類說明' } },
       {

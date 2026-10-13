@@ -7,6 +7,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：token 改存 localStorage，每案前改清 localStorage
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S3：緊急存取清單登入即可進、申請頁需 EMG_APPLY（並直接核對正式路由的 meta）
 // ============================================================
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -17,7 +20,7 @@ import http from '../src/api/http'
 import { getMe } from '../src/api/auth'
 import { clearToken, getToken, setToken } from '../src/api/tokenStore'
 import { resetSession, useSession } from '../src/composables/useSession'
-import { authGuard, installUnauthorizedHandler, safeRedirect } from '../src/router'
+import appRouter, { authGuard, installUnauthorizedHandler, safeRedirect } from '../src/router'
 import type { PermCode } from '../src/utils/perms'
 import { httpError, makeMe } from './helpers'
 
@@ -52,6 +55,8 @@ function makeGuardedRouter(): Router {
       { path: '/requests/new', component: Stub, meta: need('ACC_APPLY') },
       { path: '/inspections', component: Stub, meta: need('INSP_VIEW') },
       { path: '/inspections/new', component: Stub, meta: need('INSP_CREATE') },
+      { path: '/emergency', component: Stub },
+      { path: '/emergency/new', component: Stub, meta: need('EMG_APPLY') },
       { path: '/no-access', component: Stub }
     ]
   })
@@ -120,6 +125,25 @@ describe('全域路由守衛', () => {
     expect(r.currentRoute.value.path).toBe('/inspections')
     await r.push('/inspections/new')
     expect(r.currentRoute.value.path).toBe('/no-access')
+  })
+
+  it('緊急存取：正式路由清單不需權限碼、申請頁需 EMG_APPLY；無 EMG_APPLY 只能進清單', async () => {
+    expect(appRouter.resolve('/emergency').meta.need).toBeUndefined()
+    expect(appRouter.resolve('/emergency/new').meta.need).toBe('EMG_APPLY')
+    setToken('tok')
+    meMock.mockResolvedValue(makeMe({ permissions: ['ACC_SELF_SERVICE'] }))
+    const r = makeGuardedRouter()
+    await r.push('/emergency')
+    expect(r.currentRoute.value.path).toBe('/emergency')
+    await r.push('/emergency/new')
+    expect(r.currentRoute.value.path).toBe('/no-access')
+  })
+
+  it('緊急存取：GENERAL（有 EMG_APPLY）可進申請頁', async () => {
+    setToken('tok')
+    const r = makeGuardedRouter()
+    await r.push('/emergency/new')
+    expect(r.currentRoute.value.path).toBe('/emergency/new')
   })
 
   it('/me 回 401（token 失效）：導向登入頁並保留原目標', async () => {
