@@ -477,7 +477,7 @@
 
 #### 14. 緊急存取（送出、查詢、回報、處理）
 
-本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、唯讀詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API、補核准 API、退回 API（後三支尚無畫面）；異常結案與逾期通知尚未上線。
+本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API（尚無畫面）、補核准與退回 API 與詳情彈窗內的處理動作；異常結案與逾期通知尚未上線。
 
 - **送出**（EMG_APPLY；GENERAL 角色即有）：填帳號類別（只要類別存在即可，停用中的類別也能選）、帳號或系統（自由文字，200 字內）、緊急事由（500 字內）、預估時長（整數 1～24 小時）。送出即生效、同一交易取 EA 單號；補核准期限＝送出時間＋24 小時；申請人＝有效身分、建立者＝實際操作人（切換身分代送時兩者不同）。驗證順序：權限 403 → 四個必填（E10「請填寫帳號類別／帳號或系統／緊急事由／預估時長」）→ 欄寬 E11 → 時長範圍（400「欄位內容不正確：預估時長」）→ 類別不存在（400「欄位內容不正確：帳號類別」）。交易提交後寄 EMG_SUBMIT 給所有 EMG_DECIDE 持有人；寄信失敗不影響送出結果。沒有每人送單張數上限（濫用靠登入與申請人／建立者欄位追責）。
 - **狀態**（不存欄位，查詢當下計算）：待補核准＝尚未處理且未逾期；逾期未補核准＝尚未處理且已過期限；已補核准；已退回＝退回且尚未異常結案；已結案＝退回且已異常結案。
@@ -558,7 +558,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | `/inspections/new` | 新增巡檢 | INSP_CREATE | 14 項填寫 |
 | `/no-access` | 無權限 | 無 | 回首頁 |
 
-**彈窗**：申請單明細（附件、事件、可用動作、U02）、帳號明細（含唯讀模式）、帳號歷史（操作人顯示、U12）、巡檢明細與標記處理、切換身分選人、資產分類說明、緊急存取詳情（唯讀：申請內容；申請人回報、主管處理（自核、逾期後處理標記）、異常結案（只在退回時出現）三段沒資料顯示「尚未⋯」；受影響帳號有資料才列）。
+**彈窗**：申請單明細（附件、事件、可用動作、U02）、帳號明細（含唯讀模式）、帳號歷史（操作人顯示、U12）、巡檢明細與標記處理、切換身分選人、資產分類說明、緊急存取詳情（申請內容；申請人回報、主管處理（自核、逾期後處理標記）、異常結案（只在退回時出現）三段沒資料顯示「尚未⋯」；受影響帳號有資料才列；送出、回報、處理、結案四個節點的實際操作人與有效身分不同時顯示「{有效身分}（實際操作人：{實際}）」，相同不顯示；有 EMG_DECIDE 且尚未處理顯示「退回」「補核准」——補核准開確認框（有異動時寫明將寫入帳號歷史），尚未回報時停用並提示可先退回；退回開原因框（必填、500 字按碼點、去頭尾空白）；成功 toast 並重載明細、清單同步重查；409 關子彈窗並重載；送出中關閉無效，請求結束後才能關；逾期後仍可操作）。
 
 **查詢失敗**：任何查詢失敗顯示 U09「查詢失敗，請稍後再試」，不得顯示成查無資料。已知限制，見 BACKLOG 第 8 項：`/me` 回 401 以外的錯誤時，需要權限的頁面會導向無權限頁而不是顯示 U09，只有整頁重新整理才恢復。
 
@@ -1104,7 +1104,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
 | POST | `/emergencies` | EMG_APPLY | catgId、targetDescr、applyReason、expectHourQty（整數 1～24） | emgId | 403、400 E10、E11、欄位內容不正確（預估時長／帳號類別） |
-| GET | `/emergencies` | 登入（有 EMG_VIEW_ALL 看全部，否則限本人） | query：keyword、stateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）、dateFrom、dateTo | [IM_EMG_ACCESS 全欄、catgName、applyByName、decideByName、closeByName、emgStateCode] | 400 欄位內容不正確（狀態）、日期格式錯誤 |
+| GET | `/emergencies` | 登入（有 EMG_VIEW_ALL 看全部，否則限本人） | query：keyword、stateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）、dateFrom、dateTo | [IM_EMG_ACCESS 全欄、catgName、applyByName、decideByName、closeByName、createByName、reportActByName、decideActByName、closeActByName（四個實際操作人姓名，LEFT JOIN IM_ACCT_USER，查不到為 null）、emgStateCode] | 400 欄位內容不正確（狀態）、日期格式錯誤 |
 | GET | `/emergencies/{id}` | 可看緊急存取單（同列表範圍） | — | 上列欄位＋affectAccts[emgId、affectTypeCode、acctId、acctName、sysName、catgId、affectDescr、recordBy、recordByName、recordDate]（目前只有回報寫入的 REPORT 列） | 404（查無或無權看） |
 | POST | `/emergencies/{id}/report` | 申請人本人（不需 EMG_APPLY） | reportTypeCode（NONE／MODIFIED）、reportDescr、versionNo、affectAccts[acctId、acctName、affectDescr]（MODIFIED 時 1～20 個） | emgId、versionNo（回報後的新版本） | 404、403、400 E10、E11、E02、欄位內容不正確（回報結果／受影響帳號）、409 E08 |
 | POST | `/emergencies/{id}/approve` | EMG_DECIDE（可看該單） | versionNo | emgId、versionNo（處理後的新版本） | 404、403、400 E02、申請人尚未回報，不能補核准、409 E08 |
