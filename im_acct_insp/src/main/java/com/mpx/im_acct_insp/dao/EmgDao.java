@@ -36,6 +36,11 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: BACKLOG 第 46 項 S7（S7-③）：J03 逾期掃描 FIND_OVERDUE_UNNOTIFIED——以子查詢 X 包住 SELECT_BASE 後篩
 //           EMG_STATE_CODE＝'OVERDUE'（與列表同口徑、:now 綁基準時間點），並以 NOT EXISTS 排除 IM_ACCT_NOTIFY_LOG 已有
 //           （:eventCode、EMG、單號）任何紀錄者＝每案一次（與 J01 轉逾期信同作法）；依 DUE_DATE、EMG_ID 排序
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：首頁卡共用計數條件 UNDECIDED_COND（未處理，含逾期）、RETURNED_COND（已退回未結案，
+//           S9 鈴鐺類別 3 沿用），比照 AcctDao.EXPIRING_COND；兩句含 E.STATUS = 1，與 SELECT_BASE 同範圍；
+//           FIND_LIST 的 :stateCode 多收 'UNDECIDED'＝計算狀態 PENDING 或 OVERDUE（與 UNDECIDED_COND 同義，STATE_EXPR 前兩支）
 // ============================================================
 
 import java.time.LocalDate;
@@ -64,6 +69,18 @@ public class EmgDao {
 			         WHEN E.CLOSE_DATE IS NULL THEN 'RETURNED'
 			         ELSE 'CLOSED'
 			       END""";
+
+	/**
+	 * 首頁卡「緊急存取待補核准」（S8）：尚未處理（含逾期）＝STATE_EXPR 的 PENDING＋OVERDUE；
+	 * 清單篩選 UNDECIDED 與此同口徑。別名 E＝IM_EMG_ACCESS，不需 :now
+	 */
+	public static final String UNDECIDED_COND = "E.STATUS = 1 AND E.DECIDE_CODE IS NULL";
+
+	/**
+	 * 首頁卡「緊急存取異常待追蹤」（S8）與鈴鐺類別 3（S9）：已退回且尚未異常結案＝STATE_EXPR 的 RETURNED；
+	 * 清單篩選 RETURNED 與此同口徑（DECIDE_CODE 只有 APPROVE／RETURN 兩值，STATE_EXPR 第四支即此）。別名 E＝IM_EMG_ACCESS，不需 :now
+	 */
+	public static final String RETURNED_COND = "E.STATUS = 1 AND E.DECIDE_CODE = 'RETURN' AND E.CLOSE_DATE IS NULL";
 
 	/**
 	 * 主表全欄＋類別名、三種有效身分人名、四種實際操作人（送出 CREATE_BY、回報／處理／結案 *_ACT_BY）及其姓名、計算狀態；
@@ -106,7 +123,8 @@ public class EmgDao {
 			  FROM (""" + SELECT_BASE + """
 			       ) X
 			 WHERE (:applyBy IS NULL OR X.APPLY_BY = :applyBy)
-			   AND (:stateCode IS NULL OR X.EMG_STATE_CODE = :stateCode)
+			   AND (:stateCode IS NULL OR X.EMG_STATE_CODE = :stateCode
+			        OR (:stateCode = 'UNDECIDED' AND X.EMG_STATE_CODE IN ('PENDING', 'OVERDUE')))
 			   AND (:keyword IS NULL
 			        OR UPPER(X.EMG_ID) LIKE '%' || UPPER(:keyword) || '%' ESCAPE '\\'
 			        OR UPPER(X.APPLY_BY_NAME) LIKE '%' || UPPER(:keyword) || '%' ESCAPE '\\'

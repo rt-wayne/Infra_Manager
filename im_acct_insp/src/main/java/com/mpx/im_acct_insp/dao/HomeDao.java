@@ -16,6 +16,10 @@ package com.mpx.im_acct_insp.dao;
 //           本月巡檢次數、本月異常（EXCPT 且 IS_FIXED＝0）；今天與月份界線一律綁定參數（不用 SYSDATE）；
 //           鈴鐺清單改用到期提醒範圍並附 catgId、acctStateCode、applyBy（逐筆相關性由 Service 判斷）；
 //           待辦查詢移到 AcctReqDao（帶 versionNo、複驗退回資訊）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：卡片加兩張——緊急存取待補核准（EmgDao.UNDECIDED_COND，含逾期）、
+//           緊急存取異常待追蹤（EmgDao.RETURNED_COND）；數字看全部（不依登入者過濾）
 // ============================================================
 
 import java.time.LocalDate;
@@ -33,7 +37,7 @@ import com.mpx.im_acct_insp.model.HomeStats;
 @Repository
 public class HomeDao {
 
-	/** 六張卡片（共用計算函式，第二階段統計頁可沿用） */
+	/** 首頁卡片（共用計算函式，第二階段統計頁可沿用）：帳號四張、巡檢兩張、緊急存取兩張 */
 	public static final String FIND_STATS = """
 			SELECT (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE <> 'DELETED') AS ACCT_TOTAL,
 			       (SELECT COUNT(*) FROM IM_ACCT A WHERE A.ACCT_STATE_CODE = 'REVIEW') AS ACCT_REVIEWING,
@@ -45,7 +49,13 @@ public class HomeDao {
 			         WHERE I.STATUS = 1 AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_THIS_MONTH,
 			       (SELECT COUNT(*) FROM IM_INSP_RESULT R JOIN IM_INSP I ON I.INSP_ID = R.INSP_ID
 			         WHERE I.STATUS = 1 AND R.RESULT_CODE = 'EXCPT' AND R.IS_FIXED = 0
-			           AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_EXCPT_THIS_MONTH
+			           AND I.INSP_DATE >= :monthStart AND I.INSP_DATE < :nextMonthStart) AS INSP_EXCPT_THIS_MONTH,
+			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
+			""" + EmgDao.UNDECIDED_COND + """
+			       ) AS EMG_UNDECIDED,
+			       (SELECT COUNT(*) FROM IM_EMG_ACCESS E WHERE
+			""" + EmgDao.RETURNED_COND + """
+			       ) AS EMG_RETURNED
 			  FROM DUAL
 			""";
 

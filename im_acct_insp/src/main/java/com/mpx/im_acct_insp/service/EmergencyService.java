@@ -28,6 +28,9 @@ package com.mpx.im_acct_insp.service;
 //           每帳號寫子表 CLOSE 列、EMG_CLOSE_MODIFY 歷史（自行結案標記，S6-③）並標旗標（原因「{單號} 異常結案發現異動：…」，S6-②）；
 //           IS_SELF_CLOSE＝結案人即申請人（㉖）；不寄信。回報與結案共用帳號檢查 pickAffects／verifyAffects（驗證順序不變）；
 //           結案帳號照單號排序後才寫入，與退回（findAffects 依 ACCT_ID 排序）同一上鎖順序，避免兩者並發時死結
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：列表狀態篩選改依 AcctConst.EMG_STATE_FILTERS（多收 UNDECIDED＝待補核准＋逾期，首頁卡點進來用）
 // ============================================================
 
 import java.time.Clock;
@@ -176,7 +179,7 @@ public class EmergencyService {
 	/** 列表（登入即可）：無 EMG_VIEW_ALL 只看自己申請的 */
 	public List<Emg> list(Identity id, String keyword, String stateCode, String dateFrom, String dateTo) {
 		String state = Texts.trimToNull(stateCode);
-		if (state != null && !AcctConst.EMG_STATES.contains(state)) {
+		if (state != null && !AcctConst.EMG_STATE_FILTERS.contains(state)) {
 			throw AcctMsg.badCode(LABEL_STATE);
 		}
 		String applyBy = perm.can(id, AcctConst.PERM_EMG_VIEW_ALL) ? null : id.getUserId();

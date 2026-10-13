@@ -38,11 +38,16 @@ package com.mpx.im_acct_insp.common;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S7：排程代碼加 J03（緊急存取逾期通知）並納入 JOB_CODES
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：緊急存取清單篩選值加 UNDECIDED（未處理＝待補核准＋逾期未補核准，首頁卡「待補核准」點進來用；
+//           不是計算狀態、不會出現在 EMG_STATE_CODE），篩選可接受的值另列 EMG_STATE_FILTERS（＝EMG_STATES＋UNDECIDED，五種狀態只寫一份）
 // ============================================================
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public final class AcctConst {
 
@@ -226,6 +231,10 @@ public final class AcctConst {
 	public static final String ES_RETURNED = "RETURNED";
 	public static final String ES_CLOSED = "CLOSED";
 	public static final List<String> EMG_STATES = List.of(ES_PENDING, ES_OVERDUE, ES_APPROVED, ES_RETURNED, ES_CLOSED);
+	/** 清單篩選專用（S8）：未處理＝PENDING＋OVERDUE＝DECIDE_CODE 為空，與首頁卡「待補核准」同口徑；不是計算狀態 */
+	public static final String ES_UNDECIDED = "UNDECIDED";
+	/** 清單狀態篩選可接受的值：五種計算狀態＋UNDECIDED */
+	public static final List<String> EMG_STATE_FILTERS = Stream.concat(EMG_STATES.stream(), Stream.of(ES_UNDECIDED)).toList();
 	/** 申請人回報 REPORT_TYPE_CODE */
 	public static final String EMG_REPORT_NONE = "NONE";
 	public static final String EMG_REPORT_MODIFIED = "MODIFIED";

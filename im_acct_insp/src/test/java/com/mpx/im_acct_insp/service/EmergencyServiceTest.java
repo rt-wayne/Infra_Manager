@@ -23,6 +23,9 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 46 項 S6：異常結案測試——沒有異動只寫主表、有異動寫子表 CLOSE 列＋EMG_CLOSE_MODIFY 歷史＋旗標
 //           （原因格式、截斷、REPORT 列不動）、驗證順序（結案說明兩種都必填）、帳號不符同一句、404／403、
 //           未退回／已補核准／已結案／版本不符／UPDATE 0 筆皆 409、旗標 0 筆 500 回滾、自核標籤「自行結案」、不寄信
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：列表篩選 UNDECIDED 合法並原樣轉交 DAO（SQL 斷言在 SqlConstantScanTest）
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -193,6 +196,12 @@ class EmergencyServiceTest {
 
 		svc.list(id(TERRY), "50%_a", null, null, null);
 		verify(fx.emgDao).findList(isNull(), eq("50\\%\\_a"), isNull(), isNull(), isNull(), eq(NOW));
+	}
+
+	@Test
+	void 列表_篩選UNDECIDED合法_原樣轉交DAO() {
+		svc.list(id(TERRY), null, "UNDECIDED", null, null);
+		verify(fx.emgDao).findList(isNull(), isNull(), eq("UNDECIDED"), isNull(), isNull(), eq(NOW));
 	}
 
 	@Test

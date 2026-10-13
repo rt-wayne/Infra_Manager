@@ -488,7 +488,7 @@
 
 #### 14. 緊急存取（送出、查詢、回報、處理）
 
-本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API 與詳情彈窗內的回報動作（回報彈窗、受影響帳號選取器）、補核准與退回 API 與詳情彈窗內的處理動作、異常結案 API 與詳情彈窗內的異常結案動作（結案彈窗）、逾期通知排程 J03 與 EMG_OVERDUE 信（規格見第 8 節 J03 與第 9 節）。
+本功能分批施工中，進度見 `BACKLOG.md` 第 46 項。目前已上線：送出、列表、明細三支 API 與對應畫面（清單、申請、詳情，見「畫面說明」`/emergency`、`/emergency/new`）、回報 API 與詳情彈窗內的回報動作（回報彈窗、受影響帳號選取器）、補核准與退回 API 與詳情彈窗內的處理動作、異常結案 API 與詳情彈窗內的異常結案動作（結案彈窗）、逾期通知排程 J03 與 EMG_OVERDUE 信（規格見第 8 節 J03 與第 9 節）、首頁統計 emgUndecided／emgReturned 兩欄與清單篩選 UNDECIDED（首頁兩張卡的畫面待 S8 回合 2）。
 
 - **送出**（EMG_APPLY；GENERAL 角色即有）：填帳號類別（只要類別存在即可，停用中的類別也能選）、帳號或系統（自由文字，200 字內）、緊急事由（500 字內）、預估時長（整數 1～24 小時）。送出即生效、同一交易取 EA 單號；補核准期限＝送出時間＋24 小時；申請人＝有效身分、建立者＝實際操作人（切換身分代送時兩者不同）。驗證順序：權限 403 → 四個必填（E10「請填寫帳號類別／帳號或系統／緊急事由／預估時長」）→ 欄寬 E11 → 時長範圍（400「欄位內容不正確：預估時長」）→ 類別不存在（400「欄位內容不正確：帳號類別」）。交易提交後寄 EMG_SUBMIT 給所有 EMG_DECIDE 持有人；寄信失敗不影響送出結果。沒有每人送單張數上限（濫用靠登入與申請人／建立者欄位追責）。
 - **狀態**（不存欄位，查詢當下計算）：待補核准＝尚未處理且未逾期；逾期未補核准＝尚未處理且已過期限；已補核准；已退回＝退回且尚未異常結案；已結案＝退回且已異常結案。
@@ -1053,7 +1053,7 @@ Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單�
 | 方法 | 路徑 | 權限 | 回應 |
 |---|---|---|---|
 | GET | `/codes` | 登入 | categories[catgId、catgName、catgDescr、enabled、suggestExpiry、sortSeq]、assetClasses[assetClassId、assetTypeCode、assetClassName、reviewTrigger、selectable、ctrlDescr、sortSeq]、stages[stageId、stageName、stageTypeCode、permId] |
-| GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth |
+| GET | `/home/stats` | 登入 | acctTotal、acctReviewing、acctExpiring、acctPriv、inspThisMonth、inspExcptThisMonth、emgUndecided（緊急存取尚未處理，含逾期）、emgReturned（緊急存取已退回未結案）；數字看全部，不依登入者過濾 |
 | GET | `/home/expiring` | 登入 | [acctId、acctName、catgId、catgName、acctStateCode、expiryDate、daysLeft]（不含 applyBy） |
 | GET | `/todos` | 登入 | [source（ACCT_REQ）、reqId、title、reqTypeCode、catgId、catgName、acctName、isPriv、applyBy、applyByName、stageId、stageName、submitDate、actionKind（APPROVE、EXEC、VERIFY）、versionNo、verifyRejectCnt、verifyRejectReason] |
 
@@ -1122,7 +1122,7 @@ keyword 以 LIKE 比對 INSP_ID、INSP_BY_NAME、ACT_AS_NAME（跳脫 `\ % _`，
 | 方法 | 路徑 | 權限 | 請求 | 回應 | 主要錯誤 |
 |---|---|---|---|---|---|
 | POST | `/emergencies` | EMG_APPLY | catgId、targetDescr、applyReason、expectHourQty（整數 1～24） | emgId | 403、400 E10、E11、欄位內容不正確（預估時長／帳號類別） |
-| GET | `/emergencies` | 登入（有 EMG_VIEW_ALL 看全部，否則限本人） | query：keyword、stateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）、dateFrom、dateTo | [IM_EMG_ACCESS 全欄、catgName、applyByName、decideByName、closeByName、createByName、reportActByName、decideActByName、closeActByName（四個實際操作人姓名，LEFT JOIN IM_ACCT_USER，查不到為 null）、emgStateCode] | 400 欄位內容不正確（狀態）、日期格式錯誤 |
+| GET | `/emergencies` | 登入（有 EMG_VIEW_ALL 看全部，否則限本人） | query：keyword、stateCode（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED，或 UNDECIDED＝PENDING＋OVERDUE，與 /home/stats 的 emgUndecided 同口徑）、dateFrom、dateTo | [IM_EMG_ACCESS 全欄、catgName、applyByName、decideByName、closeByName、createByName、reportActByName、decideActByName、closeActByName（四個實際操作人姓名，LEFT JOIN IM_ACCT_USER，查不到為 null）、emgStateCode] | 400 欄位內容不正確（狀態）、日期格式錯誤 |
 | GET | `/emergencies/{id}` | 可看緊急存取單（同列表範圍） | — | 上列欄位＋affectAccts[emgId、affectTypeCode、acctId、acctName、sysName、catgId、affectDescr、recordBy、recordByName、recordDate]（回報的 REPORT 列與結案登記的 CLOSE 列） | 404（查無或無權看） |
 | POST | `/emergencies/{id}/report` | 申請人本人（不需 EMG_APPLY） | reportTypeCode（NONE／MODIFIED）、reportDescr、versionNo、affectAccts[acctId、acctName、affectDescr]（MODIFIED 時 1～20 個） | emgId、versionNo（回報後的新版本） | 404、403、400 E10、E11、E02、欄位內容不正確（回報結果／受影響帳號）、409 E08 |
 | POST | `/emergencies/{id}/approve` | EMG_DECIDE（可看該單） | versionNo | emgId、versionNo（處理後的新版本） | 404、403、400 E02、申請人尚未回報，不能補核准、409 E08 |

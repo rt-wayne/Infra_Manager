@@ -37,6 +37,10 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S7：EmgDao.FIND_OVERDUE_UNNOTIFIED 須以計算狀態 OVERDUE 篩選（同 STATE_EXPR、:now 綁參數）、
 //           以 NOT EXISTS 通知紀錄（:eventCode、EMG）排除已寄過的單
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：FIND_LIST 篩選 UNDECIDED＝PENDING＋OVERDUE；首頁卡計數條件 UNDECIDED_COND／RETURNED_COND
+//           對應 STATE_EXPR 的支、含 STATUS = 1、不需 :now；EMG_STATE_FILTERS＝五種計算狀態＋UNDECIDED
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -180,6 +184,14 @@ class SqlConstantScanTest {
 				.contains("NOT EXISTS (SELECT 1 FROM IM_ACCT_NOTIFY_LOG N").contains("N.EVENT_CODE = :eventCode")
 				.contains("N.REF_TYPE_CODE = 'EMG'").contains("N.REF_ID = X.EMG_ID").contains("ORDER BY X.DUE_DATE, X.EMG_ID")
 				.doesNotContain("SYSDATE").doesNotContain("DECIDE_CODE IS NULL AND E.DUE_DATE < :now");
+		// S8：清單篩選 UNDECIDED＝PENDING＋OVERDUE；首頁卡兩個計數條件對應 STATE_EXPR 的支（同 SELECT_BASE 只算 STATUS = 1）
+		assertThat(EmgDao.FIND_LIST).contains("(:stateCode = 'UNDECIDED' AND X.EMG_STATE_CODE IN ('PENDING', 'OVERDUE'))");
+		assertThat(EmgDao.STATE_EXPR).contains("WHEN E.DECIDE_CODE IS NULL THEN 'OVERDUE'")
+				.contains("WHEN E.DECIDE_CODE = 'APPROVE' THEN 'APPROVED'").contains("WHEN E.CLOSE_DATE IS NULL THEN 'RETURNED'");
+		assertThat(EmgDao.SELECT_BASE).contains("E.STATUS = 1");
+		assertThat(EmgDao.UNDECIDED_COND).contains("E.STATUS = 1").contains("E.DECIDE_CODE IS NULL").doesNotContain(":now");
+		assertThat(EmgDao.RETURNED_COND).contains("E.STATUS = 1").contains("E.DECIDE_CODE = 'RETURN'")
+				.contains("E.CLOSE_DATE IS NULL").doesNotContain(":now");
 	}
 
 	@Test
@@ -229,6 +241,8 @@ class SqlConstantScanTest {
 		assertThat(AcctConst.REQ_STATES).containsExactly("REVIEW", "EXEC", "VERIFY", "APPROVED", "REJECTED");
 		assertThat(AcctConst.ACCT_STATES).containsExactly("REVIEW", "APPROVED", "EXPIRED", "DISABLED", "REJECTED", "DELETED");
 		assertThat(AcctConst.RESULT_CODES).containsExactly("NORMAL", "EXCPT");
+		assertThat(AcctConst.EMG_STATES).containsExactly("PENDING", "OVERDUE", "APPROVED", "RETURNED", "CLOSED");
+		assertThat(AcctConst.EMG_STATE_FILTERS).containsExactly("PENDING", "OVERDUE", "APPROVED", "RETURNED", "CLOSED", "UNDECIDED");
 		assertThat(AcctConst.STAGE_EXEC).isEqualTo(6);
 		assertThat(AcctConst.STAGE_VERIFY).isEqualTo(7);
 	}

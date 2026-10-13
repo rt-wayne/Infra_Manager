@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp.service;
 //           驗收 T06⑤、T19、T24、T25）：申請前提含 EXPIRED、在途時 allowedReqTypes 為空；/accounts 需 ACC_LIST_FULL、
 //           stateCounts 不套狀態條件；lookup 需完整名稱；lookup/{id} 名稱不符且不可看 → 404；明細他人 403；
 //           鈴鐺逐筆相關、daysLeft 可為負；待辦依權限碼與執行人對照、帶 versionNo 與標題；審查條件共用函式
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S8：FIND_STATS 含緊急存取兩張卡的共用計數條件、不依登入者過濾
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -103,7 +106,11 @@ class AccountAndHomeServiceTest {
 		assertThat(AcctDao.FIND_LIST).contains("A.ACCT_STATE_CODE <> 'DELETED'").contains(AcctDao.EXPIRING_COND);
 		assertThat(AcctDao.COUNT_EXPIRING).contains(AcctDao.EXPIRING_COND).doesNotContain(":keyword");
 		assertThat(AcctDao.EXPIRING_COND).contains("A.EXPIRY_DATE <= :today + 30").contains("A.ACCT_STATE_CODE = 'EXPIRED'");
-		assertThat(com.mpx.im_acct_insp.dao.HomeDao.FIND_STATS).contains(AcctDao.EXPIRING_COND);
+		assertThat(com.mpx.im_acct_insp.dao.HomeDao.FIND_STATS).contains(AcctDao.EXPIRING_COND)
+				// S8：緊急存取兩張卡共用計數條件；數字看全部，不依登入者過濾
+				.contains(com.mpx.im_acct_insp.dao.EmgDao.UNDECIDED_COND).contains("AS EMG_UNDECIDED")
+				.contains(com.mpx.im_acct_insp.dao.EmgDao.RETURNED_COND).contains("AS EMG_RETURNED")
+				.doesNotContain(":userId").doesNotContain(":applyBy");
 		assertThat(com.mpx.im_acct_insp.dao.HomeDao.FIND_EXPIRING).contains(AcctDao.EXPIRING_COND);
 	}
 
