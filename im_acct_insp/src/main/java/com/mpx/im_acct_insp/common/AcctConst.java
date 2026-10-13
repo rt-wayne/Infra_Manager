@@ -21,6 +21,11 @@ package com.mpx.im_acct_insp.common;
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：TOKEN_IDLE_MINUTES 由 30 改為 TOKEN_MAX_HOURS * 60（480 分，實際只剩登入滿 8 小時失效；
 //           前端 token 改跨分頁共用，一天登入一次）。閒置檢查保留，日後要縮短只改此值
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2（緊急存取）：單號 EA；計算狀態碼 5 種（PENDING／OVERDUE／APPROVED／RETURNED／CLOSED）；
+//           回報、處理、結案、受影響帳號登記來源代碼；補核准期限 24 小時與預估時長 1～24；
+//           通知事件 EMG_SUBMIT／EMG_OVERDUE／EMG_RETURN、參照 EMG；權限碼 EMG_APPLY／EMG_VIEW_ALL／EMG_DECIDE
 // ============================================================
 
 import java.util.LinkedHashMap;
@@ -35,6 +40,7 @@ public final class AcctConst {
 	// 單號前綴（IM_DOC_SEQ.DOC_TYPE_ID，Table 第 5 節）
 	public static final String DOC_AR = "AR";
 	public static final String DOC_IN = "IN";
+	public static final String DOC_EA = "EA";
 
 	// 申請類型 REQ_TYPE_CODE（Table 6.5）
 	public static final String REQ_ADD = "ADD";
@@ -114,10 +120,14 @@ public final class AcctConst {
 	public static final String EV_EXPIRED = "EXPIRED";
 	public static final String EV_WEEKLY_SUMMARY = "WEEKLY_SUMMARY";
 	public static final String EV_JOB_FAIL = "JOB_FAIL";
+	public static final String EV_EMG_SUBMIT = "EMG_SUBMIT";
+	public static final String EV_EMG_OVERDUE = "EMG_OVERDUE";
+	public static final String EV_EMG_RETURN = "EMG_RETURN";
 	public static final String REF_REQ = "REQ";
 	public static final String REF_ACCT = "ACCT";
 	public static final String REF_WEEK = "WEEK";
 	public static final String REF_JOB = "JOB";
+	public static final String REF_EMG = "EMG";
 	public static final String NR_SUCCESS = "SUCCESS";
 	public static final String NR_FAIL = "FAIL";
 	public static final String NR_SKIP = "SKIP";
@@ -154,6 +164,9 @@ public final class AcctConst {
 	public static final String PERM_INSP_RESOLVE = "INSP_RESOLVE";
 	public static final String PERM_SYS_IMPERSONATE = "SYS_IMPERSONATE";
 	public static final String PERM_SYS_JOB_RUN = "SYS_JOB_RUN";
+	public static final String PERM_EMG_APPLY = "EMG_APPLY";
+	public static final String PERM_EMG_VIEW_ALL = "EMG_VIEW_ALL";
+	public static final String PERM_EMG_DECIDE = "EMG_DECIDE";
 
 	// 類別、期限、門禁（Table 6.5、spec §4.9）
 	public static final String CATG_DOOR = "DOOR";
@@ -182,6 +195,32 @@ public final class AcctConst {
 	public static final String INSP_EXCPT = "EXCPT";
 	public static final String INSP_FIXED = "FIXED";
 	public static final List<String> INSP_STATES = List.of(INSP_NORMAL, INSP_EXCPT, INSP_FIXED);
+
+	// 緊急存取（BACKLOG 第 46 項；值域依 IM_EMG_ACCESS 的 COMMENT）
+	/** 計算狀態 EMG_STATE_CODE（不存欄位，由 EmgDao.STATE_EXPR 算出）：待補核准、逾期未補核准、已補核准、已退回、已退回（已結案） */
+	public static final String ES_PENDING = "PENDING";
+	public static final String ES_OVERDUE = "OVERDUE";
+	public static final String ES_APPROVED = "APPROVED";
+	public static final String ES_RETURNED = "RETURNED";
+	public static final String ES_CLOSED = "CLOSED";
+	public static final List<String> EMG_STATES = List.of(ES_PENDING, ES_OVERDUE, ES_APPROVED, ES_RETURNED, ES_CLOSED);
+	/** 申請人回報 REPORT_TYPE_CODE */
+	public static final String EMG_REPORT_NONE = "NONE";
+	public static final String EMG_REPORT_MODIFIED = "MODIFIED";
+	/** 主管處理 DECIDE_CODE */
+	public static final String EMG_DECIDE_APPROVE = "APPROVE";
+	public static final String EMG_DECIDE_RETURN = "RETURN";
+	/** 結案發現 CLOSE_RESULT_CODE */
+	public static final String EMG_CLOSE_NO_CHANGE = "NO_CHANGE";
+	public static final String EMG_CLOSE_CHANGED = "CHANGED";
+	/** 受影響帳號登記來源 IM_EMG_AFFECT_ACCT.AFFECT_TYPE_CODE */
+	public static final String AFFECT_REPORT = "REPORT";
+	public static final String AFFECT_CLOSE = "CLOSE";
+	/** 補核准期限＝送出＋24 小時（SA §5.11） */
+	public static final int EMG_DUE_HOURS = 24;
+	/** 預估時長（小時，整數）的範圍（裁示②） */
+	public static final int EMG_HOUR_MIN = 1;
+	public static final int EMG_HOUR_MAX = 24;
 
 	// 系統寫入
 	/** 系統排程寫入時的 CREATE_BY／UPDATE_BY（Table 第 2 節） */

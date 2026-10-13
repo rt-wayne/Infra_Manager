@@ -3,21 +3,24 @@
 -- ============================================================================
 -- 內容：新增 2 張表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT，含主鍵）、3 個索引、
 --       兩表全部欄位 COMMENT；更新既有欄位 COMMENT（EA 單號前綴、EMG 歷史事件、
---       三種緊急存取通知事件、排程 J03、IM_ACCT 審查異常旗標改為啟用）。
+--       三種緊急存取通知事件、排程 J03、IM_ACCT 審查異常旗標改為啟用）；
+--       兩表的 PUBLIC synonym 與授權給 AP_USER（比照第一階段 synonym 建法，權限採最小範圍）。
 --       不建序列（EMG_ID 由 IM_DOC_SEQ 取號；子表為複合主鍵）、不加既有表欄位、
 --       不寫任何資料列。
 -- 對象：已依 im_acct_insp_create_table.sql 建好第一階段 21 張表的既有環境（測試、正式）。
---       全新環境不用本檔：im_acct_insp_create_table.sql 已含這兩張表與全部 COMMENT。
--- 可重跑：每個 CREATE 先查 USER_TABLES／USER_INDEXES，已存在就略過（印出「已存在，略過」）；
---       COMMENT 本身可重覆執行。跑到一半失敗直接從頭再跑即可。
--- 前提：以表的擁有者（RD_USER）執行，需 CREATE TABLE 權限與表空間配額。
+--       全新環境：im_acct_insp_create_table.sql 已含這兩張表與全部 COMMENT，但建表檔沒有 synonym 與授權，
+--       建完表仍須執行本檔（表、索引會印「已存在，略過」，只會補上檔尾的 PUBLIC synonym 與 GRANT）。
+-- 可重跑：每個 CREATE 先查 USER_TABLES／USER_INDEXES／ALL_SYNONYMS，已存在就略過（印出「已存在，略過」）；
+--       COMMENT 與 GRANT 本身可重覆執行。跑到一半失敗直接從頭再跑即可。
+-- 前提：以表的擁有者（RD_USER）執行，需 CREATE TABLE、CREATE PUBLIC SYNONYM 權限與表空間配額
+--       （2026-10-13 已確認 RD_USER 具備）。
 --       檔案編碼 UTF-8；SQL*Plus 執行前先 set NLS_LANG=.AL32UTF8、SQL Developer 開檔選 UTF-8，
 --       否則 COMMENT 的中文會無聲變成亂碼（不會報錯）。SQL Developer 請用「執行指令碼」（F5）。
 -- 命名：依公司 DB 規範 V1（2026-10-02 版，不在 repo）：單字超過 6 碼的改用短字或字典縮寫
 --       （EMG＝EMERGENCY，待補入規範字典；AFFECT、DECIDE、DUE、EXPECT 為換用的短字；QTY 在字典）；
 --       VERSION_NO 的 VERSION 為 7 碼，沿用第一階段既有欄名（施工計畫裁示 ㉘）；
 --       旗標 IS_ 前綴；每表最後固定五欄。
--- 注意：本檔不含任何帳密、主機位址。synonym 與授權段見檔尾（待確認第一階段建法後定稿）。
+-- 注意：本檔不含任何帳密、主機位址。被授權帳號 AP_USER 是殼 jar 的連線帳號名，不是機密。
 -- 施工計畫：backlog/46-緊急存取.md 第 3 節。
 -- ============================================================================
 
@@ -190,10 +193,41 @@ COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_SOURCE_CODE IS '審查異常來源：EMG�
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_DATE IS '審查異常標記時間';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有效身分）';
 
+-- ===== PUBLIC SYNONYM 與授權給 AP_USER（synonym 已存在就略過；GRANT 重覆執行無害）
+-- 依 2026-10-13 以 RD_USER 查詢的結果（backlog/46-緊急存取.md 3.6）：第一階段 21 張表與 5 個序列全部是
+-- PUBLIC synonym（同名、指向 RD_USER），被授權帳號是 AP_USER；RD_USER 本身有 CREATE PUBLIC SYNONYM 權限，不需 DBA。
+-- 權限採最小範圍（使用者裁示 2026-10-13 ①B）：IM_EMG_ACCESS 只有狀態更新、無刪除 → SELECT／INSERT／UPDATE；
+-- IM_EMG_AFFECT_ACCT 只增不改 → SELECT／INSERT。第一階段每張表四種全給是沒有紀錄的舊做法，不延續；
+-- 若 S4～S6 施工發現需要更新子表，再補 GRANT 並更新本段。
+-- synonym 指向用 USER（目前連線帳號）而不寫死 schema 名；若同名 PUBLIC synonym 已存在但指向別的 schema，
+-- 計數為 0 → CREATE 會以 ORA-00955 停下，這是真的撞名，要人工處理。
+DECLARE
+  v_cnt NUMBER;
+  PROCEDURE create_public_synonym(p_table VARCHAR2) IS
+  BEGIN
+    SELECT COUNT(*) INTO v_cnt FROM ALL_SYNONYMS
+     WHERE OWNER = 'PUBLIC' AND SYNONYM_NAME = p_table AND TABLE_OWNER = USER AND TABLE_NAME = p_table;
+    IF v_cnt = 0 THEN
+      EXECUTE IMMEDIATE 'CREATE PUBLIC SYNONYM ' || p_table || ' FOR ' || USER || '.' || p_table;
+      DBMS_OUTPUT.PUT_LINE('PUBLIC SYNONYM ' || p_table || ' 已建立');
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('PUBLIC SYNONYM ' || p_table || ' 已存在，略過');
+    END IF;
+  END;
+BEGIN
+  create_public_synonym('IM_EMG_ACCESS');
+  create_public_synonym('IM_EMG_AFFECT_ACCT');
+END;
+/
+GRANT SELECT, INSERT, UPDATE ON IM_EMG_ACCESS TO AP_USER;
+GRANT SELECT, INSERT ON IM_EMG_AFFECT_ACCT TO AP_USER;
+
 -- ===== 執行後自我檢查（唯讀）
 -- 期望：第一句 2 列（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）；
 --       第二句 3 列（IND_IM_EMG_ACCESS_01、IND_IM_EMG_ACCESS_02、IND_IM_EMG_AFFECT_ACCT_01；主鍵索引 PK_ 已排除）；
---       第三句 IM_EMG_ACCESS COL_CNT 30、IM_EMG_AFFECT_ACCT COL_CNT 11，兩列 NO_COMMENT_CNT 皆 0。
+--       第三句 IM_EMG_ACCESS COL_CNT 30、IM_EMG_AFFECT_ACCT COL_CNT 11，兩列 NO_COMMENT_CNT 皆 0；
+--       第四句 2 列（PUBLIC synonym IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT，TABLE_OWNER 皆為執行本檔的帳號）；
+--       第五句 5 列（AP_USER：IM_EMG_ACCESS 的 INSERT、SELECT、UPDATE；IM_EMG_AFFECT_ACCT 的 INSERT、SELECT）。
 -- 以下解除遇錯即停：互動式 SQL*Plus 用 @ 執行本檔後，同一連線再打錯指令才不會直接結束 SQL*Plus。
 WHENEVER SQLERROR CONTINUE
 SELECT TABLE_NAME FROM USER_TABLES WHERE TABLE_NAME LIKE 'IM\_EMG%' ESCAPE '\' ORDER BY TABLE_NAME;
@@ -201,27 +235,7 @@ SELECT INDEX_NAME, TABLE_NAME FROM USER_INDEXES
  WHERE TABLE_NAME LIKE 'IM\_EMG%' ESCAPE '\' AND INDEX_NAME LIKE 'IND\_%' ESCAPE '\' ORDER BY INDEX_NAME;
 SELECT TABLE_NAME, COUNT(*) AS COL_CNT, SUM(CASE WHEN COMMENTS IS NULL THEN 1 ELSE 0 END) AS NO_COMMENT_CNT
   FROM USER_COL_COMMENTS WHERE TABLE_NAME LIKE 'IM\_EMG%' ESCAPE '\' GROUP BY TABLE_NAME ORDER BY TABLE_NAME;
-
--- ============================================================================
--- ===== SYNONYM 與授權（待定稿：先確認第一階段 21 張表怎麼建的，再去掉本段註解執行）
--- ============================================================================
--- 殼 jar 以 ap_user 連線、經 public synonym 讀 RD_USER 的表（database.properties.example 第 20 行），
--- 但第一階段的 synonym 與 GRANT 寫法 repo 沒有紀錄（BACKLOG 第 48 項）。請先以 RD_USER 執行
--- backlog/46-緊急存取.md 3.5 的三句唯讀查詢，依結果擇一：
---
--- (a) 第一階段是 PUBLIC SYNONYM＋直接 GRANT 給 AP_USER（需 CREATE PUBLIC SYNONYM 系統權限，通常由 DBA 執行）：
--- CREATE PUBLIC SYNONYM IM_EMG_ACCESS FOR RD_USER.IM_EMG_ACCESS;
--- CREATE PUBLIC SYNONYM IM_EMG_AFFECT_ACCT FOR RD_USER.IM_EMG_AFFECT_ACCT;
--- GRANT SELECT, INSERT, UPDATE ON IM_EMG_ACCESS TO AP_USER;
--- GRANT SELECT, INSERT ON IM_EMG_AFFECT_ACCT TO AP_USER;
---
--- (b) 第一階段是 AP_USER 自己 schema 下的 PRIVATE SYNONYM（以 AP_USER 執行 synonym、以 RD_USER 執行 GRANT）：
--- CREATE SYNONYM IM_EMG_ACCESS FOR RD_USER.IM_EMG_ACCESS;
--- CREATE SYNONYM IM_EMG_AFFECT_ACCT FOR RD_USER.IM_EMG_AFFECT_ACCT;
--- GRANT SELECT, INSERT, UPDATE ON IM_EMG_ACCESS TO AP_USER;
--- GRANT SELECT, INSERT ON IM_EMG_AFFECT_ACCT TO AP_USER;
---
--- 最小權限：IM_EMG_ACCESS 只有狀態更新、無刪除，授 SELECT／INSERT／UPDATE；
--- IM_EMG_AFFECT_ACCT 只增不改，授 SELECT／INSERT（與第一階段同為只增不改的 IM_ACCT_HIST 實際授權比對，見三句查詢 ③）。
--- 權限範圍、被授權帳號名稱與 synonym 類型以三句查詢第 ②③ 句的結果為準，
--- 查到後把定稿寫回 backlog/46-緊急存取.md 3.6 並更新本段。
+SELECT SYNONYM_NAME, TABLE_OWNER FROM ALL_SYNONYMS
+ WHERE OWNER = 'PUBLIC' AND SYNONYM_NAME LIKE 'IM\_EMG%' ESCAPE '\' ORDER BY SYNONYM_NAME;
+SELECT GRANTEE, TABLE_NAME, PRIVILEGE FROM USER_TAB_PRIVS
+ WHERE TABLE_NAME LIKE 'IM\_EMG%' ESCAPE '\' ORDER BY TABLE_NAME, PRIVILEGE;

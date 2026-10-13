@@ -19,6 +19,9 @@ package com.mpx.im_acct_insp.support;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 40 項：Identity 建構子多一個 deptName 參數（此處給 null）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：加 EmgDao（mock）與 EmergencyService（真）
 // ============================================================
 
 import static org.mockito.ArgumentMatchers.any;
@@ -56,6 +59,7 @@ import com.mpx.im_acct_insp.dao.AcctReqDao;
 import com.mpx.im_acct_insp.dao.AttachDao;
 import com.mpx.im_acct_insp.dao.CodeDao;
 import com.mpx.im_acct_insp.dao.DocSeqDao;
+import com.mpx.im_acct_insp.dao.EmgDao;
 import com.mpx.im_acct_insp.dao.HomeDao;
 import com.mpx.im_acct_insp.dao.InspDao;
 import com.mpx.im_acct_insp.dao.JobRunDao;
@@ -71,6 +75,7 @@ import com.mpx.im_acct_insp.model.Category;
 import com.mpx.im_acct_insp.service.AccountService;
 import com.mpx.im_acct_insp.service.AttachmentService;
 import com.mpx.im_acct_insp.service.CodeService;
+import com.mpx.im_acct_insp.service.EmergencyService;
 import com.mpx.im_acct_insp.service.HomeService;
 import com.mpx.im_acct_insp.service.InspectionService;
 import com.mpx.im_acct_insp.service.JobService;
@@ -221,6 +226,7 @@ public class TestFixture {
 	public final AttachDao attachDao = mock(AttachDao.class);
 	public final HomeDao homeDao = mock(HomeDao.class);
 	public final InspDao inspDao = mock(InspDao.class);
+	public final EmgDao emgDao = mock(EmgDao.class);
 	public final NotifyLogDao notifyLogDao = mock(NotifyLogDao.class);
 	public final JobRunDao jobRunDao = mock(JobRunDao.class);
 	public final AttachmentService attachmentService = mock(AttachmentService.class);
@@ -236,6 +242,8 @@ public class TestFixture {
 	public final HomeService homeService = new HomeService(permissionService, codeService, homeDao, acctReqDao, clock);
 	public final InspectionService inspectionService = new InspectionService(permissionService, docSeqService, inspDao, tx,
 			clock);
+	public final EmergencyService emergencyService = new EmergencyService(permissionService, codeService, docSeqService, emgDao,
+			notificationService, tx, clock);
 
 	/** 模擬 IM_ACCT_REQ 的單筆申請單（null＝查無） */
 	public AcctReqDetail req;

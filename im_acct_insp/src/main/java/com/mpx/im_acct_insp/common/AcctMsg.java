@@ -5,6 +5,9 @@ package com.mpx.im_acct_insp.common;
 // 修改日期: 2026-10-07
 // 變更說明: 新增：錯誤訊息文案（spec v2.0 §4.15，代號 E01～E20、A01～A03、P01、N01）與對應的 ApiException 工廠
 //           文案原樣給前端顯示；帶參數的（E02、E10、E11）由方法組字；文件未定文案的 400 類集中在下方
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：緊急存取送出欄位的 E10 受詞（帳號類別、帳號或系統、緊急事由、預估時長）
 // ============================================================
 
 import java.util.List;
@@ -44,6 +47,11 @@ public final class AcctMsg {
 	public static final String WHAT_REASON = "原因";
 	public static final String WHAT_EXCPT = "異常說明";
 	public static final String WHAT_FIX = "處理方式與結果";
+	// 緊急存取送出欄位（BACKLOG 第 46 項）
+	public static final String WHAT_EMG_CATG = "帳號類別";
+	public static final String WHAT_EMG_TARGET = "帳號或系統";
+	public static final String WHAT_EMG_REASON = "緊急事由";
+	public static final String WHAT_EMG_HOURS = "預估時長";
 
 	// 文件未定文案、由 developer 補的（400 類）
 	public static final String BAD_CODE_PREFIX = "欄位內容不正確：";

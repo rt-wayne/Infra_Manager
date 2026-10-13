@@ -30,6 +30,11 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 7 項：jobFail 的 runId 可為空（連執行序號都沒取到）→ 參照鍵寫 0、信中執行序號「（未取得）」；
 //           結果碼為 SUCCESS（排程做完、只有結束紀錄寫失敗）→ 主旨「【排程失敗】{代碼} 結束紀錄寫入失敗」
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：建構子加 EmgDao；新增緊急存取事件 emgEvent（交易提交後呼叫）——
+//           EMG_SUBMIT 寄給所有 EMG_DECIDE 持有人，主旨含補核准期限，本文列單號、類別、帳號或系統、申請人、事由、
+//           預估時長、送出時間、期限，連結「緊急存取」；參照 EMG／單號。EMG_RETURN 待 S4、EMG_OVERDUE 待 S7 補
 // ============================================================
 
 import java.time.Clock;
@@ -49,11 +54,13 @@ import org.springframework.stereotype.Service;
 import com.mpx.im_acct_insp.common.AcctConst;
 import com.mpx.im_acct_insp.common.Texts;
 import com.mpx.im_acct_insp.dao.AcctReqDao;
+import com.mpx.im_acct_insp.dao.EmgDao;
 import com.mpx.im_acct_insp.dao.NotifyLogDao;
 import com.mpx.im_acct_insp.dao.PermDao;
 import com.mpx.im_acct_insp.model.Acct;
 import com.mpx.im_acct_insp.model.AcctReq;
 import com.mpx.im_acct_insp.model.ApprStage;
+import com.mpx.im_acct_insp.model.Emg;
 import com.mpx.im_acct_insp.model.Recipient;
 
 @Service
@@ -62,6 +69,7 @@ public class NotificationService {
 	private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 	static final DateTimeFormatter YMD = DateTimeFormatter.BASIC_ISO_DATE;
 	static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+	static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	static final int ERR_MSG_MAX = 500;
 	/** J02 0 筆時的本文（spec §4.15 U13） */
 	static final String U13 = "目前沒有已逾期未處理的帳號";
@@ -70,6 +78,7 @@ public class NotificationService {
 
 	private final PermDao permDao;
 	private final AcctReqDao acctReqDao;
+	private final EmgDao emgDao;
 	private final CodeService codeService;
 	private final NotifyLogDao notifyLogDao;
 	private final MailSender mailSender;
@@ -77,10 +86,11 @@ public class NotificationService {
 	private final MailHtml html;
 	private final Clock clock;
 
-	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, CodeService codeService, NotifyLogDao notifyLogDao,
-			MailSender mailSender, MailAllowList allowList, MailHtml html, Clock clock) {
+	public NotificationService(PermDao permDao, AcctReqDao acctReqDao, EmgDao emgDao, CodeService codeService,
+			NotifyLogDao notifyLogDao, MailSender mailSender, MailAllowList allowList, MailHtml html, Clock clock) {
 		this.permDao = permDao;
 		this.acctReqDao = acctReqDao;
+		this.emgDao = emgDao;
 		this.codeService = codeService;
 		this.notifyLogDao = notifyLogDao;
 		this.mailSender = mailSender;
@@ -169,6 +179,54 @@ public class NotificationService {
 			rows.add(new String[] { "退回原因", nvl(r.getVerifyRejectReason(), "") });
 		}
 		return MailHtml.table(rows);
+	}
+
+	// ------------------------------------------------------------
+	// 緊急存取事件（交易提交後呼叫；BACKLOG 第 46 項）
+	// ------------------------------------------------------------
+
+	/**
+	 * @param event    EMG_SUBMIT（EMG_RETURN 待 S4、EMG_OVERDUE 待 S7）
+	 * @param emgId    緊急存取單號（重新讀取提交後的內容）
+	 * @param createBy 寫通知紀錄的 CREATE_BY（實際操作人）
+	 */
+	public void emgEvent(String event, String emgId, String createBy) {
+		try {
+			Emg e = emgDao.findById(emgId, LocalDateTime.now(clock));
+			if (e == null) {
+				return;
+			}
+			List<Recipient> rcpts;
+			String subject;
+			switch (event) {
+			case AcctConst.EV_EMG_SUBMIT -> {
+				rcpts = withPerm(AcctConst.PERM_EMG_DECIDE);
+				subject = "【緊急存取】" + emgId + " 已送出，待您補核准（期限 " + dateTimeText(e.getDueDate()) + "）";
+			}
+			default -> throw new IllegalArgumentException("未知的通知事件 " + event);
+			}
+			sendAll(event, AcctConst.REF_EMG, emgId, rcpts, subject, html.page(subject, emgBody(e), MailHtml.PATH_EMG), createBy);
+		} catch (RuntimeException ex) {
+			log.error("通知失敗 event={} emgId={} 例外={}", event, emgId, ex.getClass().getSimpleName());
+		}
+	}
+
+	/** 緊急存取本文的兩欄表（HTML 片段，值已跳脫） */
+	static String emgBody(Emg e) {
+		List<String[]> rows = new ArrayList<>();
+		rows.add(new String[] { "單號", e.getEmgId() });
+		rows.add(new String[] { "帳號類別", nvl(e.getCatgName(), e.getCatgId()) });
+		rows.add(new String[] { "帳號或系統", nvl(e.getTargetDescr(), "") });
+		rows.add(new String[] { "申請人", nvl(e.getApplyByName(), e.getApplyBy()) });
+		rows.add(new String[] { "緊急事由", nvl(e.getApplyReason(), "") });
+		rows.add(new String[] { "預估時長", e.getExpectHourQty() == null ? "" : e.getExpectHourQty() + " 小時" });
+		rows.add(new String[] { "送出時間", dateTimeText(e.getSubmitDate()) });
+		rows.add(new String[] { "補核准期限", dateTimeText(e.getDueDate()) });
+		return MailHtml.table(rows);
+	}
+
+	private static String dateTimeText(LocalDateTime t) {
+		return t == null ? "" : t.format(DATE_TIME);
 	}
 
 	// ------------------------------------------------------------

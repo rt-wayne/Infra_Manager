@@ -101,7 +101,7 @@ java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
 1. `db\im_acct_insp_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
 2. `db\im_acct_insp_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
 
-**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\im_acct_insp_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；檔尾三句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）與兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。檔尾的 synonym 與授權段整段是註解，待確認第一階段建法後再執行（見 `BACKLOG.md` 第 46、48 項）；全新環境不用跑本檔。
+**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\im_acct_insp_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表的 synonym 與授權建法仍未記載（見 `BACKLOG.md` 第 48 項）。
 
 建完補第一位管理者，**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 

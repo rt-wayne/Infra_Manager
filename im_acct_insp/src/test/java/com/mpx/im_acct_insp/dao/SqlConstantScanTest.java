@@ -12,6 +12,10 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-10
 // 變更說明: UPDATE_EXEC_DONE 須含門禁卡新增時申請單 ACCT_NAME 寫卡號
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：掃描清單加 EmgDao、EmergencyController；API 數 32 → 35；
+//           緊急存取人名取 IM_ACCT_USER（申請人／處理人／結案人三個 LEFT JOIN）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +41,7 @@ import com.mpx.im_acct_insp.common.Identity;
 import com.mpx.im_acct_insp.controller.AccountController;
 import com.mpx.im_acct_insp.controller.AttachmentController;
 import com.mpx.im_acct_insp.controller.AuthController;
+import com.mpx.im_acct_insp.controller.EmergencyController;
 import com.mpx.im_acct_insp.controller.HomeController;
 import com.mpx.im_acct_insp.controller.InspectionController;
 import com.mpx.im_acct_insp.controller.JobController;
@@ -45,11 +50,12 @@ import com.mpx.im_acct_insp.controller.RequestController;
 class SqlConstantScanTest {
 
 	static final List<Class<?>> DAOS = List.of(AcctDao.class, AcctHistDao.class, AcctReqDao.class, AdminLogDao.class,
-			AttachDao.class, CodeDao.class, DocSeqDao.class, HomeDao.class, InspDao.class, JobRunDao.class, LoginTokenDao.class,
-			NotifyLogDao.class, PermDao.class, UserDao.class);
+			AttachDao.class, CodeDao.class, DocSeqDao.class, EmgDao.class, HomeDao.class, InspDao.class, JobRunDao.class,
+			LoginTokenDao.class, NotifyLogDao.class, PermDao.class, UserDao.class);
 
 	static final List<Class<?>> CONTROLLERS = List.of(AccountController.class, AttachmentController.class, AuthController.class,
-			HomeController.class, InspectionController.class, JobController.class, RequestController.class);
+			EmergencyController.class, HomeController.class, InspectionController.class, JobController.class,
+			RequestController.class);
 
 	/** 既有模組使用者表（IM_ACCT_USER 不算） */
 	static final Pattern IM_USER = Pattern.compile("(?<![\\w])IM_USER\\b");
@@ -103,6 +109,17 @@ class SqlConstantScanTest {
 		assertThat(AcctReqDao.FIND_BY_ID).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = R.APPLY_BY");
 		assertThat(AcctHistDao.FIND_BY_ACCT).contains("H.ACT_BY_NAME").doesNotContain("IM_ACCT_USER");
 		assertThat(InspDao.INSP_SUMMARY).contains("I.INSP_BY_NAME").doesNotContain("IM_ACCT_USER");
+		assertThat(EmgDao.SELECT_BASE).contains("LEFT JOIN IM_ACCT_USER UA ON UA.USER_ID = E.APPLY_BY")
+				.contains("LEFT JOIN IM_ACCT_USER UD ON UD.USER_ID = E.DECIDE_BY")
+				.contains("LEFT JOIN IM_ACCT_USER UC ON UC.USER_ID = E.CLOSE_BY");
+	}
+
+	@Test
+	void 緊急存取_狀態即時計算_時間綁參數_列表與明細共用() {
+		assertThat(EmgDao.STATE_EXPR).contains(":now").doesNotContain("SYSDATE");
+		assertThat(EmgDao.FIND_LIST).contains(EmgDao.STATE_EXPR).contains(":applyBy IS NULL OR X.APPLY_BY = :applyBy");
+		assertThat(EmgDao.FIND_BY_ID).contains(EmgDao.STATE_EXPR).contains("E.EMG_ID = :emgId");
+		assertThat(EmgDao.INSERT_EMG).contains("VERSION_NO").contains(":dueDate").doesNotContain("DECIDE_CODE");
 	}
 
 	@Test
@@ -155,7 +172,7 @@ class SqlConstantScanTest {
 				}
 			}
 		}
-		assertThat(apis).isEqualTo(32);
+		assertThat(apis).isEqualTo(35);
 		assertThat(missing).isEmpty();
 	}
 }

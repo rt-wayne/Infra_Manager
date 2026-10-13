@@ -6,13 +6,36 @@ package com.mpx.im_acct_insp.common;
 // 變更說明: 新增：文字共用處理（spec v2.0 §2.2 顯示名格式、§3 欄寬與 LIKE 跳脫）
 //           自 AccountService／RequestService 搬出 trimToNull、escapeLike；
 //           欄寬：n CHAR 以字數（code point）、VARCHAR2(n) 以 UTF-8 byte 計，超過丟 400 E11
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：列表日期篩選的 parseDate（yyyy-MM-dd 嚴格解析，空值回 null，格式錯丟 400 BAD_DATE）
+//           自 InspectionService 搬入，供巡檢與緊急存取列表共用
 // ============================================================
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 
 public final class Texts {
 
+	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
+
 	private Texts() {
+	}
+
+	/** 列表日期篩選：yyyy-MM-dd（嚴格，2026-02-30 不收）；空白回 null，格式錯丟 400 BAD_DATE */
+	public static LocalDate parseDate(String s) {
+		String v = trimToNull(s);
+		if (v == null) {
+			return null;
+		}
+		try {
+			return LocalDate.parse(v, DATE_FMT);
+		} catch (DateTimeParseException ex) {
+			throw ApiException.badRequest(AcctMsg.BAD_DATE);
+		}
 	}
 
 	public static String trimToNull(String s) {

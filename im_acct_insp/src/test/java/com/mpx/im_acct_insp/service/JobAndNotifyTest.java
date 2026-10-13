@@ -28,11 +28,17 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: BACKLOG 第 7 項：寫結束紀錄失敗（排程成功／部分失敗）仍寄 JOB_FAIL 並註明；寫 RUNNING 或取號失敗不跑、寄信、例外照拋
 //           （排程觸發不外拋）；開跑前補記舊 RUNNING 為 FAIL（先查寄過沒再改狀態）、已寄過不重寄、補記失敗照常執行；
 //           jobFail 沒有執行序號時參照鍵 0、主旨依結果碼（SUCCESS＝結束紀錄寫入失敗）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：NotificationService 建構子加 EmgDao；新增緊急存取送出通知測試——收件人為 EMG_DECIDE
+//           持有人、主旨含補核准期限、本文值跳脫與換行、連結到緊急存取頁、通知紀錄事件 EMG_SUBMIT／參照 EMG、
+//           查無單號不寄、未知事件與 DAO 例外不外拋
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
 import static com.mpx.im_acct_insp.support.TestFixture.HANK;
 import static com.mpx.im_acct_insp.support.TestFixture.KEVIN;
+import static com.mpx.im_acct_insp.support.TestFixture.NOW;
 import static com.mpx.im_acct_insp.support.TestFixture.TODAY;
 import static com.mpx.im_acct_insp.support.TestFixture.id;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +76,7 @@ import com.mpx.im_acct_insp.common.AcctMsg;
 import com.mpx.im_acct_insp.common.ApiException;
 import com.mpx.im_acct_insp.model.Acct;
 import com.mpx.im_acct_insp.model.AcctReqDetail;
+import com.mpx.im_acct_insp.model.EmgDetail;
 import com.mpx.im_acct_insp.model.JobRunResult;
 import com.mpx.im_acct_insp.model.Recipient;
 import com.mpx.im_acct_insp.support.TestFixture;
@@ -593,6 +600,56 @@ class JobAndNotifyTest {
 		assertThat(MailHtml.esc(null)).isEmpty();
 	}
 
+	// ------------------------------------------------------------
+	// 緊急存取通知（BACKLOG 第 46 項 S2）
+	// ------------------------------------------------------------
+
+	@Test
+	void 緊急存取_送出通知寄給補核准權限持有人_主旨含期限_本文值跳脫連緊急存取_查無不寄_未知事件不外拋() {
+		MailSender sender = mock(MailSender.class);
+		NotificationService n = notifier(sender, SEND_ALL);
+		EmgDetail e = new EmgDetail();
+		e.setEmgId("EA20261007-001");
+		e.setCatgId("DB");
+		e.setCatgName("資料庫");
+		e.setTargetDescr("prod-db <root>");
+		e.setApplyBy(KEVIN);
+		e.setApplyByName("凱文 & 測試");
+		e.setApplyReason("第一行\n<i>斜體</i>");
+		e.setExpectHourQty(4);
+		e.setSubmitDate(NOW);
+		e.setDueDate(NOW.plusHours(24));
+		when(fx.emgDao.findById(eq("EA20261007-001"), any())).thenReturn(e);
+		when(fx.permDao.findUsersWithPerm(AcctConst.PERM_EMG_DECIDE))
+				.thenReturn(List.of(rcpt("0000004", "t@example.com"), rcpt("0000005", null)));
+
+		n.emgEvent(AcctConst.EV_EMG_SUBMIT, "EA20261007-001", KEVIN);
+		ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+		verify(sender).send(eq("t@example.com"),
+				eq("【緊急存取】EA20261007-001 已送出，待您補核准（期限 2026-10-08 10:30）"), body.capture());
+		assertThat(body.getValue()).startsWith("<!DOCTYPE html>")
+				.contains("資料庫", "prod-db &lt;root&gt;", "凱文 &amp; 測試", "第一行<br>&lt;i&gt;斜體&lt;/i&gt;", "4 小時",
+						"2026-10-07 10:30", "2026-10-08 10:30")
+				.doesNotContain("<root>", "<i>")
+				.contains("<a href=\"http://h/ctx/#/emergency\"", "前往「緊急存取」", FOOTER);
+		// 通知紀錄：事件 EMG_SUBMIT、參照類型 EMG、CREATE_BY 為實際操作人；無 Email 記 SKIP
+		verify(fx.notifyLogDao).insert(eq("EMG_SUBMIT"), eq("EMG"), eq("EA20261007-001"), eq("0000004"), eq("t@example.com"),
+				eq("SUCCESS"), isNull(), any(), eq(KEVIN));
+		verify(fx.notifyLogDao).insert(eq("EMG_SUBMIT"), eq("EMG"), eq("EA20261007-001"), eq("0000005"), isNull(), eq("SKIP"),
+				isNull(), any(), eq(KEVIN));
+		verify(fx.permDao).findUsersWithPerm("EMG_DECIDE");
+
+		// 查無單號：不寄、不記
+		n.emgEvent(AcctConst.EV_EMG_SUBMIT, "EA-none", KEVIN);
+		// 未知事件：記 log、不外拋、不寄
+		n.emgEvent("EMG_WHAT", "EA20261007-001", KEVIN);
+		// DAO 例外：不外拋
+		doThrow(new IllegalStateException("db")).when(fx.emgDao).findById(eq("EA-err"), any());
+		n.emgEvent(AcctConst.EV_EMG_SUBMIT, "EA-err", KEVIN);
+		verify(sender, times(1)).send(any(), any(), any());
+		verify(fx.notifyLogDao, times(2)).insert(any(), any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
 	/** 帳號名稱與申請人姓名含 HTML 特殊字元的申請單（目前關卡＝第一關），並放進模擬的申請單表 */
 	AcctReqDetail htmlReq() {
 		AcctReqDetail r = new AcctReqDetail();
@@ -609,7 +666,7 @@ class JobAndNotifyTest {
 	}
 
 	NotificationService notifier(MailSender sender, MailAllowList allowList) {
-		return new NotificationService(fx.permDao, fx.acctReqDao, fx.codeService, fx.notifyLogDao, sender, allowList,
+		return new NotificationService(fx.permDao, fx.acctReqDao, fx.emgDao, fx.codeService, fx.notifyLogDao, sender, allowList,
 				new MailHtml(SITE, fx.clock), fx.clock);
 	}
 

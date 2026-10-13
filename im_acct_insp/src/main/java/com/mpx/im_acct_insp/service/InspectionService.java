@@ -16,10 +16,12 @@ package com.mpx.im_acct_insp.service;
 //           巡檢時間預設現在、可調整、不可晚於現在；取號 IN → INSERT 巡檢單 → INSERT 全部結果（含 ITEM_NAME_SNAP、SECT_NAME_SNAP）同一交易；
 //           INSP_BY／INSP_BY_NAME＝實際使用者、切換中 ACT_AS_*＝代理身分；整體狀態即時計算（InspDao.INSP_SUMMARY）；
 //           標記處理只接受 EXCPT 且未處理（否則 409 E19）、處理方式必填（E10），寫 FIX_BY_NAME、FIX_ACT_AS_*；回 {inspId, inspStateCode}
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：列表日期篩選改用 Texts.parseDate（行為不變），刪本類別的私有副本
 // ============================================================
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -57,7 +59,6 @@ public class InspectionService {
 
 	private static final Logger log = LoggerFactory.getLogger(InspectionService.class);
 
-	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT);
 	private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss")
 			.withResolverStyle(ResolverStyle.STRICT);
 
@@ -153,7 +154,8 @@ public class InspectionService {
 		if (state != null && !AcctConst.INSP_STATES.contains(state)) {
 			throw AcctMsg.badCode("狀態");
 		}
-		return inspDao.findList(Texts.escapeLike(Texts.trimToNull(keyword)), state, parseDate(dateFrom), parseDate(dateTo));
+		return inspDao.findList(Texts.escapeLike(Texts.trimToNull(keyword)), state, Texts.parseDate(dateFrom),
+				Texts.parseDate(dateTo));
 	}
 
 	public InspDetail detail(Identity id, String inspId) {
@@ -216,18 +218,6 @@ public class InspectionService {
 			return LocalDateTime.parse(norm, DATE_TIME_FMT);
 		} catch (DateTimeParseException ex) {
 			throw ApiException.badRequest(AcctMsg.BAD_DATE_TIME);
-		}
-	}
-
-	private static LocalDate parseDate(String s) {
-		String v = Texts.trimToNull(s);
-		if (v == null) {
-			return null;
-		}
-		try {
-			return LocalDate.parse(v, DATE_FMT);
-		} catch (DateTimeParseException ex) {
-			throw ApiException.badRequest(AcctMsg.BAD_DATE);
 		}
 	}
 }

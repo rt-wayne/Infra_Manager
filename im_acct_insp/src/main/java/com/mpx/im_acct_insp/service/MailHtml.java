@@ -10,6 +10,9 @@ package com.mpx.im_acct_insp.service;
 //           連結＝im.acct.insp.mail.site-url＋前端 hash 路徑。網址容錯：去掉 # 之後（從網址列整串貼上時）、
 //           結尾的 index.html 與斜線；留空、不是 http:// https:// 開頭、或格式不正確／沒有主機（含空白、雙引號等）
 //           時不放連結（後兩者記 WARN）。表格欄位各自指定字型與字級（Outlook 表格不繼承外層樣式）
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：新增前端路徑 PATH_EMG（#/emergency，連結文字「緊急存取」）
 // ============================================================
 
 import java.net.URI;
@@ -36,6 +39,7 @@ public class MailHtml {
 	public static final String PATH_TODO = "#/todo";
 	public static final String PATH_REQUESTS = "#/requests";
 	public static final String PATH_HOME = "#/";
+	public static final String PATH_EMG = "#/emergency";
 	private static final DateTimeFormatter SENT_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 	/** 字型；表格欄位要各自再指定一次（Outlook 的表格不繼承 body 字型，會退回新細明體等襯線字） */
 	private static final String FONT = "font-family: 'Microsoft JhengHei', Arial, sans-serif;";
@@ -128,6 +132,7 @@ public class MailHtml {
 		return switch (path) {
 		case PATH_TODO -> "待辦簽核";
 		case PATH_REQUESTS -> "申請單列表";
+		case PATH_EMG -> "緊急存取";
 		default -> SITE_NAME;
 		};
 	}

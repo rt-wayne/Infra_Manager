@@ -47,15 +47,15 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-10
 // 變更說明: 新增申請重新送出鎖定帳號類別：以原申請單 CATG_ID 為準、忽略表單值（原以表單值覆寫）；原類別已關閉時照常回 E05
+// AI版本  : Claude Fable 5.1 (claude-fable-5-1)
+// 修改日期: 2026-10-13
+// 變更說明: BACKLOG 第 46 項 S2：到期日解析改用 Texts.parseDate（行為不變，呼叫前已確認非空），刪本類別的私有副本
 // ============================================================
 
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.time.format.ResolverStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,9 +110,6 @@ public class RequestService {
 	static final String LABEL_VERSION = "版本號";
 	/** 同帳號一筆在途的唯一函式索引；ORA-00001 訊息含此名稱才是在途衝突 */
 	static final String IDX_IN_FLIGHT = "IND_IM_ACCT_REQ_04";
-
-	private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("uuuu-MM-dd")
-			.withResolverStyle(ResolverStyle.STRICT);
 
 	private final PermissionService perm;
 	private final CodeService codeService;
@@ -643,7 +640,7 @@ public class RequestService {
 		if (!AcctConst.EXPIRY_TYPES.contains(expiryType)) {
 			throw AcctMsg.badCode("有效期限類型");
 		}
-		LocalDate expiryDate = dateType ? parseDate(expiryText) : null;
+		LocalDate expiryDate = dateType ? Texts.parseDate(expiryText) : null;
 		if (expiryDate != null && expiryDate.isBefore(LocalDate.now(clock))) {
 			throw ApiException.badRequest(AcctMsg.E04);
 		}
@@ -869,14 +866,6 @@ public class RequestService {
 	private static void addIfBlank(List<String> missing, String label, String value) {
 		if (value == null || value.isBlank()) {
 			missing.add(label);
-		}
-	}
-
-	private static LocalDate parseDate(String s) {
-		try {
-			return LocalDate.parse(s, DATE_FMT);
-		} catch (DateTimeParseException ex) {
-			throw ApiException.badRequest(AcctMsg.BAD_DATE);
 		}
 	}
 }
