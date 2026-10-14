@@ -5,6 +5,9 @@
 //           base 與殼 jar 的 context-path 相同；build 直接輸出到殼 jar 的 src/frontend（mvn package 時打進 static）
 //           dev 時 /<專案名>/api 轉給本機殼 jar（port 同 application.properties 的 server.port）
 //           jdk25 階段 3（規格 D-41）：改 TypeScript（vite.config.ts）、Vite 8；移除 '@' alias（範本未使用，可省掉 node 型別）
+// AI版本  : 使用者手改
+// 修改日期: 2026-10-14
+// 變更說明: dev proxy 目標 port 由 8080 改為 8787，與殼 jar 的 server.port 一致（BACKLOG 第 35 項）
 // ============================================================
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -19,7 +22,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/im_acct_insp_web/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8787',
         changeOrigin: true
       }
     }

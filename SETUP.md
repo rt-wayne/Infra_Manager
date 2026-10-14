@@ -72,7 +72,7 @@ java -jar target\im_acct_insp_web-0.0.1-SNAPSHOT.jar
 - `npm test` 跑 Vitest（jsdom），測試檔在 `tests\`。
 - `npm run build` 先做型別檢查（`vue-tsc --build`）再輸出到 `im_acct_insp_web\src\frontend`，會清空該目錄（含 `.gitkeep`）；要還原 `.gitkeep` 用 `git checkout`。該目錄只有 `.gitkeep` 時殼 jar 也能建置。型別檢查也可單獨跑 `npm run type-check`。
 - 開啟 `http://localhost:<殼 jar 的 server.port>/im_acct_insp_web/`。
-- 開發時可另開 `npm run dev`（Vite dev server），`/im_acct_insp_web/api` 會 proxy 到本機殼 jar，殼 jar 須先啟動。
+- 開發時可另開 `npm run dev`（Vite dev server），`/im_acct_insp_web/api` 會 proxy 到本機殼 jar，殼 jar 須先啟動。proxy 目標寫在 `im_acct_insp_web_frontend\vite.config.ts` 的 `server.proxy`（目前 `http://localhost:8787`），殼 jar 改 `server.port` 時要一起改，否則 API 會連不上。
 - 殼 jar log：`/home/tomcat/log/im_acct_insp_web/im_acct_insp_web.yyyy-MM-dd.log`（Windows 依啟動磁碟機），保留 30 天。
 - 用殼 jar 開的畫面空白、樣式或圖片沒出來時，按 F12 看 Console：出現 `Content Security Policy`（Chrome／Edge）或 `Content-Security-Policy`（Firefox）字樣的錯誤，代表前端用了外站資源、行內程式、`<style>` 區塊或 data: 圖片，被殼 jar 的安全標頭擋下（HTML 的 style 屬性已放行）。`npm run dev` 開的畫面不經過殼 jar、不帶這個標頭，所以這類問題開發時看不到，只在殼 jar 開的畫面出現。放寬步驟：
   1. 改 `im_acct_insp_web\src\main\java\com\mpx\im_acct_insp_web\config\SecurityHeadersConfig.java` 的 `CSP`，加上錯誤訊息點名的項目。來源只填協定加主機，不帶路徑（帶路徑就只對得到那一個檔）。例如外站字型通常要先載外站的 CSS，`style-src` 與 `font-src` 都要加：`style-src 'self' https://字型主機; font-src 'self' https://字型主機`。

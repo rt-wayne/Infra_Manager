@@ -4,8 +4,11 @@
 ### spring.application.name、context-path 為專案名；產生器建專案時換成新專案名
 ### im_acct_insp SA v0.5 改版（2026-10-07，開發文件 spec_im_acct_insp_v2.0.md 第 7.1、9.4 節）：關閉殼 jar 的 multipart 解析，
 ###   multipart 本文才會留在請求串流裡由 BackendForwarder 原樣轉給後端；請求本文上限 11 MB 為 BackendForwarder 程式常數，超過回 413
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-14
+### 變更說明: server.port 由 8080 改為 8787，與本機、UAT、正式實際 port 及 vite.config.ts 的開發 proxy 一致（BACKLOG 第 35 項）
 spring.application.name=im_acct_insp_web
-server.port=8080
+server.port=8787
 server.servlet.context-path=/im_acct_insp_web
 spring.servlet.multipart.enabled=false
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
