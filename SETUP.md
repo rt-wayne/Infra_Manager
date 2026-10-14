@@ -15,20 +15,16 @@
 
 ## 2. 設定檔
 
-實際設定檔不進 git。首次建置時，把每個 `.example` 複製成去掉 `.example` 的檔名，再填值（各 key 用途見 `PRD.md`「環境設定」，範本內註解有填法說明）。例（cmd，在 `im_acct_insp\` 下）：
+實際設定檔不進 git，repo 內也沒有範本。首次建置時向專案負責人取得下列 6 個檔，放到對應位置後，依各環境改值（各 key 用途見 `PRD.md`「環境設定」）。
 
-```
-copy src\main\resources\config\host.properties.example src\main\resources\config\host.properties
-```
-
-| 範本 | 複製成 | 必填重點 |
+| 目錄 | 檔案 | 必填重點 |
 |---|---|---|
-| `im_acct_insp\src\main\resources\application.properties.example` | `application.properties` | `server.port`；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
-| `im_acct_insp\src\main\resources\config\host.properties.example` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
-| `im_acct_insp\src\main\resources\config\database.properties.example` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
-| `im_acct_insp\src\main\resources\config\environment.properties.example` | `config\environment.properties` | `im.acct.insp.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
-| `im_acct_insp_web\im_acct_insp_web\src\main\resources\application.properties.example` | `application.properties` | `server.port`；`spring.servlet.multipart.enabled` 保持關閉 |
-| `im_acct_insp_web\im_acct_insp_web\src\main\resources\config\host.properties.example` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留 |
+| `im_acct_insp\src\main\resources\` | `application.properties` | `server.port`；`server.servlet.context-path=/im_acct_insp`（少了這行，殼 jar 轉送會回 404）；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
+| `im_acct_insp\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
+| `im_acct_insp\src\main\resources\` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
+| `im_acct_insp\src\main\resources\` | `config\environment.properties` | `im.acct.insp.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
+| `im_acct_insp_web\im_acct_insp_web\src\main\resources\` | `application.properties` | `server.port`；`spring.servlet.multipart.enabled` 保持關閉 |
+| `im_acct_insp_web\im_acct_insp_web\src\main\resources\` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留。`backend.api.domain` 只寫協定＋主機、不帶 port；`im.acct.insp.path` 含後端前綴，填 `/im_acct_insp/api/v1` |
 
 **既有環境升級（2026-10-14 起的版本）**：DB 別名的 key 由 `db.connect.itflow` 改名為 `itflow.db.alias`。已有 `config\database.properties` 的環境（各開發機、UAT／正式的建置機），重新建置前把該行 key 改名、值不變（例 `db.connect.itflow=itflow_uat` → `itflow.db.alias=itflow_uat`）。沒改的話建置會成功、但後端啟動失敗，log 出現 `Could not resolve placeholder 'itflow.db.alias'`。
 
@@ -52,7 +48,7 @@ java -jar target\im_acct_insp-0.0.1-SNAPSHOT.jar
 
 - Git Bash／Linux 改用 `./mvnw clean package`、`java -jar target/im_acct_insp-0.0.1-SNAPSHOT.jar`。
 - `clean package` 會一併跑單元測試（含 42 個 common.db 測試），須全過。
-- port 取自 `server.port`，也可加 `--server.port=xxxx` 覆蓋。
+- port 取自 `server.port`，也可加 `--server.port=xxxx` 覆蓋。API 根為 `http://主機:port/im_acct_insp/api/v1`（前綴來自 `server.servlet.context-path`）。
 - log：`/home/tomcat/log/im_acct_insp/im_acct_insp.yyyy-MM-dd.log`（Windows 為啟動時工作目錄所在磁碟機，例 `D:\home\tomcat\log\im_acct_insp\`），保留 30 天。
 
 ## 4. 前端與殼 jar 建置與啟動
@@ -258,7 +254,7 @@ DELETE FROM IM_ACCT_NOTIFY_LOG
 
 ## 7. 手動觸發排程
 
-系統沒有觸發排程的畫面，以 curl 呼叫 API。需 SYS_JOB_RUN 權限（初始資料中只有 SYS_ADMIN 角色有）。以下以直連後端（`server.port` 8989）為例；經殼 jar 時把 `http://localhost:8989` 換成殼 jar 的位址並在路徑前加 `/im_acct_insp_web`。指令為 Git Bash 寫法，`【】` 換成實際值。
+系統沒有觸發排程的畫面，以 curl 呼叫 API。需 SYS_JOB_RUN 權限（初始資料中只有 SYS_ADMIN 角色有）。以下以直連後端（`server.port` 8989、context-path `/im_acct_insp`）為例；經殼 jar 時把 `http://localhost:8989/im_acct_insp` 換成殼 jar 的位址加 `/im_acct_insp_web`（例 `http://localhost:8787/im_acct_insp_web/api/v1/...`）。指令為 Git Bash 寫法，`【】` 換成實際值。
 
 密碼與 token 都只放在 shell 變數裡，不直接寫進指令，所以不會留在 shell 歷史；密碼經管線送給 curl，也不會出現在程序的命令列（token 會，但登出後即失效）。全部做完在第 3 步清掉變數。下面三步要在**同一個 Git Bash 視窗**依序執行。每個 curl 都加了 `-w`，回應內容的最後一行是 HTTP 狀態碼（例如 `200`、`401`）。
 
@@ -273,7 +269,7 @@ IFS= read -rs -p "密碼: " PW; echo
 ```bash
 PWJ=${PW//\\/\\\\}; PWJ=${PWJ//\"/\\\"}
 RESP=$(printf '{"userId":"%s","password":"%s"}' '【工號】' "$PWJ" \
-  | curl -s -w "\n%{http_code}" -X POST http://localhost:8989/api/v1/auth/login \
+  | curl -s -w "\n%{http_code}" -X POST http://localhost:8989/im_acct_insp/api/v1/auth/login \
       -H "Content-Type: application/json" --data-binary @-)
 unset PW PWJ
 TOKEN=$(echo "$RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
@@ -283,6 +279,7 @@ echo "$RESP" | tail -n 1
 - 第一行把密碼裡的 `\` 與 `"` 先跳脫，含這兩個字元的密碼也能登入。
 - 最後印出 `200` 就是成功，token 已存進變數 `TOKEN`，下一步直接用；要確認有沒有存到，用 `echo ${#TOKEN}` 看長度（應為 43），不要把 token 本身印出來。不是 200 時用 `echo "$RESP"` 看錯誤訊息。
 - 印出 `000`＝連不上後端（沒啟動或位址錯），這時 `$RESP` 也沒有內容。
+- 印出 `404`＝網址前綴和後端的 `server.servlet.context-path` 對不上（網址少了 `/im_acct_insp`，或後端沒設 context-path）。
 - 工號不存在、密碼錯、使用者停用都回 401 `{"message":"帳號或密碼錯誤"}`；其中只有「密碼錯」每次算一次輸錯，連錯 5 次會被鎖定（工號不存在或已停用不計次）。被鎖定回 401「此帳號已鎖定，請聯絡系統管理員」（解鎖見第 6 節第 3 段）。
 - 回 400「請求內容格式錯誤」＝密碼含 Tab 之類的控制字元，組出的 JSON 格式不合法、後端拒收，請找開發人員協助。
 
@@ -290,15 +287,15 @@ echo "$RESP" | tail -n 1
 
 ```bash
 # J01：到期帳號轉逾期、寄逾期信與到期前 7 天提醒（漏跑會補寄、不重寄）
-curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J01/run \
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/im_acct_insp/api/v1/jobs/J01/run \
   -H "Authorization: Bearer $TOKEN"
 
 # J02：每週逾期帳號彙總信，同一週只寄一次（本週寄送失敗、收件人沒有 Email 或不在寄送名單也算已寄，同週不會重寄）
-curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J02/run \
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/im_acct_insp/api/v1/jobs/J02/run \
   -H "Authorization: Bearer $TOKEN"
 
 # J03：緊急存取逾期未補核准通知，每張單只寄一次（寄送失敗、收件人沒有 Email 或不在寄送名單也算已寄，不會重寄）
-curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/jobs/J03/run \
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/im_acct_insp/api/v1/jobs/J03/run \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -331,11 +328,11 @@ SELECT RCPT_USER_ID, RCPT_EMAIL, SEND_DATE, RESULT_CODE, ERR_MSG
 
 ```bash
 # J01、J02：日期
-curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/api/v1/jobs/J01/run?baseDate=【yyyy-MM-dd】" \
+curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/im_acct_insp/api/v1/jobs/J01/run?baseDate=【yyyy-MM-dd】" \
   -H "Authorization: Bearer $TOKEN"
 
 # J03：時間點，格式 yyyy-MM-ddTHH:mm:ss（秒可省；T 也可換成空白，但網址裡要寫成 %20）；只給日期回 400
-curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/api/v1/jobs/J03/run?baseDate=【yyyy-MM-dd】T【HH:mm:ss】" \
+curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/im_acct_insp/api/v1/jobs/J03/run?baseDate=【yyyy-MM-dd】T【HH:mm:ss】" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -345,9 +342,44 @@ curl -s -w "\n%{http_code}\n" -X POST "http://localhost:8989/api/v1/jobs/J03/run
 **3. 用完登出並清掉變數**（不登出的話 token 最長 8 小時內有效；登出後立即失效）
 
 ```bash
-curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/api/v1/auth/logout \
+curl -s -w "\n%{http_code}\n" -X POST http://localhost:8989/im_acct_insp/api/v1/auth/logout \
   -H "Authorization: Bearer $TOKEN"
 unset TOKEN RESP
 ```
 
 - 成功回 200、沒有內容。
+
+## 8. UAT 部署（經 Apache 轉發）
+
+UAT 上兩個 jar 由 tomcat 帳號以 `java -jar -Dserver.port=<port> <jar> --spring.config.name=application,database,host,environment,... --spring.config.additional-location=<共用 config 目錄>` 啟動，port 由啟動參數指定（會蓋過 `application.properties` 的 `server.port`）。殼 jar 不直連後端，而是經 Apache 轉發：
+
+```
+殼 jar → http://<Apache 主機>:<Apache port>/im_acct_insp/api/v1/...
+       → Apache：ProxyPass /im_acct_insp http://localhost:<後端 port>/im_acct_insp（前綴原樣保留）
+       → 後端 /im_acct_insp/api/v1/...（context-path /im_acct_insp）
+```
+
+- **後端必須有 context-path `/im_acct_insp`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。建置機的 `application.properties` 有 `server.servlet.context-path=/im_acct_insp` 時打包進 jar 即可；沒有的話在後端啟動指令加 `-Dserver.servlet.context-path=/im_acct_insp`（寫在 `-Dserver.port` 旁邊）。
+- **不要把 context-path 寫進共用 config 目錄的設定檔**：該目錄所有 jar（含其他系統）都會讀，寫進去它們會一起多一段前綴而壞掉。
+- 殼 jar 的 `config\host.properties`：`backend.api.domain` 直接填 Apache 的協定＋主機實際值（不帶 port），**不要沿用 `${itflow.domain}`**：共用 config 目錄的檔案優先於 jar 內設定，`itflow.domain` 是共用 key，值由其他系統決定，可能不是 Apache。`backend.api.port` 填 `:<Apache port>`；留空會連到該協定的預設 port（http 為 80、https 為 443），不是 Apache 這個 port。`im.acct.insp.path` 填 `/im_acct_insp/api/v1`。
+- 實際 port 查法：`ps -ef | grep -v grep | grep java | grep -o -- '-Dserver.port=[0-9]*'` 只取出各 jar 的 port（完整的 `ps` 輸出含同台所有系統的啟動參數，可能夾著密碼，不要整段貼到工單或對話）；`ss -ltnp` 看哪些 port 在聽；Apache 規則用 `grep -ri proxypass /etc/httpd/` 查。
+- 改完 `host.properties` 要重啟殼 jar；改後端啟動參數要重啟後端。
+
+**驗證**（在 UAT 主機上，`<>` 換成實際值）：
+
+```bash
+# 直連後端（有前綴）
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' http://localhost:<後端 port>/im_acct_insp/api/v1/auth/login
+# 經 Apache（殼 jar 實際打的網址）
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{}' http://<Apache 主機>:<Apache port>/im_acct_insp/api/v1/auth/login
+```
+
+| 結果 | 代表什麼 |
+|---|---|
+| 401 或 400 | 正常：已打到後端登入 API，空帳密被拒 |
+| 直連 404 | 後端沒有 context-path（見上方第一點），或 port 指到同台別的系統的 jar（用 `ss -ltnp` 對照） |
+| 直連通、經 Apache 404 | Apache 規則的前綴不對 |
+| 經 Apache 503 或 502 | Apache 連不到後端：後端沒在跑，或 ProxyPass 的目標 port 錯 |
+| 000 | 連不上（只會出現在直連，或 Apache 本身連不上時）：程序沒在跑、port 錯或防火牆擋住 |
+
+殼 jar log 出現含 `POST /auth/login backend status 404` 的 WARN 行，就是上面其中一種對不上；`503`、`502` 同理對照上表。

@@ -175,14 +175,14 @@ public class ItemController {
 
 | 檔案 | 內容 | 誰讀 |
 |---|---|---|
-| `application.properties` | `spring.application.name`（專案名）、`server.port` | Spring |
+| `application.properties` | `spring.application.name`（專案名）、`server.port`、`server.servlet.context-path`（固定 `/im_acct_insp`） | Spring |
 | `config/host.properties` | 連線資訊 API 四個 key：`rt-api.domain`、`db.connect.api.port`、`db.connect.api.path`，以及由前三個以 `${}` 組成的 `db.connect.api.domain.path` | common.db（只讀 `db.connect.api.domain.path`） |
 | `config/database.properties` | DB 別名（key 自訂） | `Application` 載入，業務程式以 `@Value` 讀 |
 | `config/environment.properties` | 各專案自訂設定（選用，可能不存在） | 業務程式自行以 `@PropertySource("classpath:config/environment.properties")` 載入 |
 
-- 以上 `*.properties` 都是**真檔，不進 git**（已被 `.gitignore` 排除）；進 git 的是同名 `.properties.example`。
-- 新增任何 key 時，**同步寫進對應的 `.example`**（只寫 key 與說明，不寫真實位址或帳密）。
-- 本機沒有真檔時的建立步驟見根目錄 `SETUP.md`。
+- 以上 `*.properties` 都是**真檔，不進 git**（已被 `.gitignore` 排除），repo 內也沒有範本，向專案負責人取得。
+- 新增任何 key 時，**同步寫進根目錄 `PRD.md`「環境設定」表**（只寫 key 與用途，不寫真實位址或帳密），並通知專案負責人更新他手上的設定檔。
+- 本機沒有真檔時的取得與放置步驟見根目錄 `SETUP.md`。
 - `host.properties` 四個 key 都要存在（值可空），不存在時啟動失敗；API 位址為空時仍可啟動，第一次呼叫 `DbClient` 才丟例外。
 
 ## 5. 限制與假設
@@ -218,7 +218,7 @@ public class ItemController {
 - [ ] 改動的檔案都不在 `com.mpx.common` 底下，也沒改 `com.mpx.Application`。
 - [ ] 業務程式都在 `com.mpx.im_acct_insp` 底下。
 - [ ] SQL 全部用 `:name` 具名參數，沒有字串拼接。
-- [ ] 新增的 properties key 已同步寫進對應的 `.example`。
+- [ ] 新增的 properties key 已同步寫進 `PRD.md`「環境設定」表，並已通知專案負責人。
 - [ ] 沒有把 `*.properties` 真檔、帳密或真實位址加進 git。
 - [ ] `./mvnw clean package` 通過，42 個 common.db 測試全過。
 
@@ -237,8 +237,8 @@ PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000，輸出 `PBKDF2$310000$bas
 | 權限 | `service.PermissionService` | `can(身分, 權限碼)` 與資料範圍判斷集中處；關卡權限取自 `IM_ACCT_APPR_STAGE.PERM_ID`；程式不判斷角色名稱 |
 | 交易 | `common.AppConfig#transactionTemplate`、`common.LazyDataSourceTransactionManager` | `TransactionTemplate` 與 `DbClient` 共用 common.db 的連線池（DataSource 延遲到第一次開交易才取）；不改 `com.mpx.common` |
 | 時間 | `common.AppConfig#clock`（Asia/Taipei） | 業務時間一律由 Clock 產生後以參數綁定，SQL 不用 `SYSDATE` |
-| 附件 | `service.AttachmentService` | 根目錄 `im.acct.insp.attach.dir`（`config/environment.properties`，見 `.example`）；必須是絕對路徑，**Windows 請用 `/` 或 `\\`**（properties 的單一 `\` 是跳脫字元，`D:\home\attach` 會變成相對路徑 `D:homeattach`），例 `D:/home/im_acct_insp/attach`；未設定或不是絕對路徑時啟動即失敗並記 ERROR（變更單 #3） |
-| 排程 | `service.JobService`（`@Scheduled`） | J01、J02 的 cron、開關、`allow-base-date` 見 `config/environment.properties.example`；手動 `POST /api/v1/jobs/{code}/run` |
+| 附件 | `service.AttachmentService` | 根目錄 `im.acct.insp.attach.dir`（`config/environment.properties`，key 見根目錄 `PRD.md`「環境設定」）；必須是絕對路徑，**Windows 請用 `/` 或 `\\`**（properties 的單一 `\` 是跳脫字元，`D:\home\attach` 會變成相對路徑 `D:homeattach`），例 `D:/home/im_acct_insp/attach`；未設定或不是絕對路徑時啟動即失敗並記 ERROR（變更單 #3） |
+| 排程 | `service.JobService`（`@Scheduled`） | J01、J02 的 cron、開關、`allow-base-date` 見 `config/environment.properties`（key 見根目錄 `PRD.md`「環境設定」）；手動 `POST /api/v1/jobs/{code}/run` |
 | 寄信 | `service.MailSender`（介面）、`service.SmtpMailSender`、`service.LogMailSender`、`common.MailConfig`、`service.MailAllowList`、`service.MailHtml` | 本文為 HTML（`MailHtml` 組版面、值一律跳脫，信末連結＝`im.acct.insp.mail.site-url`＋前端頁面，留空不放）；`spring.mail.host`（`application.properties`）與 `im.acct.insp.mail.from` 都有值時 `MailConfig` 選 SMTP 實際寄出，否則只寫 log；只寄給寄送名單 `im.acct.insp.mail.allow-list` 內的工號（留空誰都不寄，`send-to-all=true` 忽略名單），名單外記 SKIP「不在寄送名單」 |
 | 通知收件人 | `service.NotificationService`、`dao.PermDao#findUsersInRoles` | 角色收件人固定為程式常數（`AcctConst.MAIL_ROLE_EXPIRY`＝GOV：到期前 7 天、轉已逾期、每週彙總；`AcctConst.MAIL_ROLE_JOB_FAIL`＝SYS_ADMIN：排程失敗），**不放設定檔**（變更單 #2）；成員於寄信當下查 `IM_ACCT_ROLE_USER`（STATUS＝1）＋`IM_ACCT_USER`（STATUS＝1），無 Email 記 SKIP |
 

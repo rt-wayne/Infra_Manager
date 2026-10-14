@@ -398,10 +398,10 @@ describe('ItemView', () => {
 - 四個 key 名稱固定、都要保留（值可空）：被 `${}` 引用的 key 不存在時殼 jar 會啟動失敗；值留空時能啟動，呼叫 API 時才失敗（回 500）。
 - 本機、UAT、正式環境**只改這個檔的值、不改程式**；檔案打包在 jar 內，改完要重新建置。
 
-### 真檔與 .example
+### 真檔不進 git
 
-- 以上都是**真檔，不進 git**；進 git 的是同名 `.properties.example`。新增 key 時同步寫進 `.example`（不寫真實位址）。
-- 本機沒有真檔時的建立步驟見根目錄 `SETUP.md`。
+- 以上都是**真檔，不進 git**，repo 內也沒有範本，向專案負責人取得。新增 key 時同步寫進根目錄 `PRD.md`「環境設定」表（不寫真實位址），並通知專案負責人。
+- 本機沒有真檔時的取得與放置步驟見根目錄 `SETUP.md`。
 
 ### cookie 與 header
 
@@ -441,5 +441,5 @@ describe('ItemView', () => {
 - [ ] API 型別放在 `src\types\`，前端只透過 `api/http.ts` 打 `/im_acct_insp_web/api/v1`。
 - [ ] 沒有 `any`（或已註明原因）；`npm run type-check` 通過。
 - [ ] 查詢失敗走 toast，不顯示成「查無資料」；清單每頁 20 筆；1024 寬無橫向捲軸。
-- [ ] 新增的 properties key 已同步寫進 `.example`；沒有把真檔或真實位址加進 git。
+- [ ] 新增的 properties key 已同步寫進 `PRD.md`「環境設定」表並通知專案負責人；沒有把真檔或真實位址加進 git。
 - [ ] `npm test`、`npm run build` 與 `./mvnw clean package` 都通過。
