@@ -34,7 +34,7 @@
 | 12 | DAO 以參數顯式綁定 NULL 會蓋過 DB DEFAULT（IS_PRIV、EXPIRY_TYPE_CODE、IS_UNIQUE_CONF 等必填欄）；目前 Service 都先填值所以沒出事，日後新路徑漏填會直接 ORA-01400 | 2026-10-10 | — |
 | 13 | 顯示名兩種算法不一致：`AcctReqDao.nameExpr`（第 42 行，用於第 56-58、181 行與 `AttachDao.java:43`）不 trim、無工號退回；快照用的 `Texts.displayName`（`Texts.java:35-42`）有 trim 與英文名 → 中文名 → 工號退回 | 2026-10-10 | — |
 | 14 | 第二階段功能：定期審查、統計頁、帳號與巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
-| 16 | 原始規格書缺件：子 README 與 `.example` 註解引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
+| 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
 | 17 | `im_acct_insp_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
 | 19 | 人工鎖定（DB 直接寫 LOCK_DATE）只擋之後的登入，不擋已發出的 token；`TokenIdentityProvider` 每次請求只查 STATUS 不查 LOCK_DATE。要不要讓鎖定也立即作廢既有 token 屬設計決策 | 2026-10-10 | — |
@@ -52,7 +52,7 @@
 | 45 | 處理中的按鈕沒有停用外觀：`src/assets/app.css` 第 84 行 `.btn-link` 無 `:disabled` 樣式（只有 `.btn:disabled` 半透明，第 79 行），附件檔名鈕與下載鈕在處理中停用時外觀、游標都不變，下載大檔時看不出在處理。改法一行 `.btn-link:disabled { opacity: .55; cursor: default; }`，但屬全站共用樣式，要目視確認其他畫面的停用連結鈕。第 43 項 code-reviewer 發現，使用者裁示（2026-10-12）留到下一批 | 2026-10-12 | — |
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
 | 47 | IM_ACCT_JOB_RUN 沒有清理機制；J03（每 15 分鐘）上線後每天約 96 列、一年約 3.5 萬列。第 46 項 architect 發現 | 2026-10-12 | — |
-| 48 | `db\im_acct_insp_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（只有 `database.properties.example:20` 一句「有 Public Synonym」），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
+| 48 | `db\im_acct_insp_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（原本只有 `database.properties.example:20` 一句「有 Public Synonym」，該範本已於 2026-10-14 刪除），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
 | 49 | 第一階段 21 張表對照 `DB規範_V1_20261002_JLA.xlsx` 規則 3（單字超過 6 碼要用字典縮寫）有 7 個字未縮寫：AFFECTED_CNT、CONTENT_JSON、IS_ENABLED、IS_SELECTABLE、SUGGEST_*、IS_REVIEW_TRIGGER、VERSION_NO；「IM_」前綴也不在規範的業務簡碼表。已上線欄位改名要動程式、PRD 與既有資料。第 46 項 DB 規範對照時發現，使用者裁示（2026-10-12）只登記 | 2026-10-12 | — |
 | 50 | `SqlConstantScanTest` 的黏字檢查目前只抓 `END` 接下一個字（`\bEND[A-Z]`）；同類拼接錯誤還有 `)AS`、`'X'AS`、`:nowAND`、`NULLAS`、漏逗號、連兩個逗號等沒抓。可擴充方向：關鍵字前必須有空白、`,\s*,`、`,\s*(FROM\|WHERE)\b`，要先確認不誤報既有 SQL。另：掃描清單比對只認 `@Repository`，DAO 日後改標 `@Component`、用 `@Bean` 建立或寫成介面／抽象類別時會漏掃而測試照過（目前 15 支都有標），可改依「含 static final String 的類別」或類別名 `*Dao` 比對。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 51 | Service 單元測試把 DAO 全 mock，SQL 文法錯誤要連 DB 才會發現（第 46 項 ENDAS 即此）。不連 DB 的做法有四種：(a) 在片段接縫處斷言前後有空白 (b) 擴充第 50 項的規則 (c) 把各 SQL 常數存快照逐字比對 (d) 引入 JSqlParser 解析（新套件要先審查）；連 DB 的話可在測試環境以 `WHERE 1=0` 包住執行，或呼叫 `DBMS_SQL.PARSE` 只解析不執行。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
@@ -66,6 +66,9 @@
 | 61 | 鈴鐺面板視覺與排序小問題：(1) 沒有「查看全部到期清單」鈕時，第二節標題緊貼最後一筆到期項目（`.bell-panel-title` 只有 `margin-bottom`）；(2) `.bell-item:last-of-type` 依元素類型比對，兩節項目都是 `button`，第一節最後一筆的底線會保留；(3) 類別 3 依後端送出時間遞減排序，畫面顯示的卻是退回日期，日期可能看起來不是遞減（SA 沒規定排序，可不改或改顯示送出日）。第 46 項 S9 審查提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 62 | 「我曾申請新增的帳號」區塊的列（`RequestListView.vue` 的 `.mine-row`）在前端測試完全沒有渲染驗證（tests 底下搜尋 `mine-row` 零筆）：門禁卡待發卡顯示、在途「申請處理中」與查看／歷史鈕、AcctOpButtons 權限分支都沒鎖住。既有缺口，申請單列表加收合（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
 | 58 | `AppLayout.vue` 第 80 行 router-view 的 key 含 `route.fullPath`（同一畫面換 query 就整頁重建），三頁靠它在換網址參數時重置：申請表單 `RequestFormView.vue`（setup 一次讀完 resubmit／reqType／acctId／acctName、不監看 query；最嚴重——在異動表單點側欄「＋ 新增申請」會留在異動表單，使用者以為填新增、送出的卻是異動）、帳號列表 `?expiring=1`、緊急存取清單 `?state=`。目前沒有測試鎖住，key 被拿掉時三頁同時退化而測試全綠。可在 `tests/AppLayout.spec.ts` 補測試，以「新增 ↔ 異動切換後表單重建」為主案例。第 46 項 S8 回合 2 審查提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
+| 63 | UAT 的 Apache 有 `ProxyPass /im_acct_insp` 直通後端，等於後端 API 在 Apache 的 port 上對外可達：繞過殼 jar（前端連不到後端的設計、11 MB 上傳上限都失效），只剩後端自己的 token 檢查。要問 UAT 管理者該 port 是否只限內網；正式環境上線前要確認是否沿用同一條規則。後端加網址前綴（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
+| 64 | `SETUP.md` 第 26 行寫了郵件主機名稱，與檔頭「不記主機位址」的規則衝突；要移到 PRD 環境設定、改成「向負責人取得」或維持現狀未定。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
+| 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/im_acct_insp/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 
 ## 已拍板不做
 

@@ -629,7 +629,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 | 程式 | 路徑 | 技術 | 負責 | 不做 |
 |---|---|---|---|---|
-| 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；API 根 `/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
+| 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/im_acct_insp`，API 根 `/im_acct_insp/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
 | 殼 jar | `im_acct_insp_web\im_acct_insp_web\` | Spring Boot；context `/im_acct_insp_web` | 提供前端靜態頁；把 `/im_acct_insp_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
 | 前端 | `im_acct_insp_web\im_acct_insp_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
 | DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
@@ -637,7 +637,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 ```
 瀏覽器（token 存 localStorage、各分頁共用，每個請求帶 Authorization: Bearer）
   → 殼 jar /im_acct_insp_web/api/v1/...（RestTemplate 原樣轉送；連線逾時 5 秒、讀取逾時 120 秒）
-  → 後端 /api/v1/...（驗 token → 權限 → 業務 → SQL）
+  → 後端 /im_acct_insp/api/v1/...（驗 token → 權限 → 業務 → SQL；UAT 中間經 Apache 轉發，見 SETUP.md 第 8 節）
   → Oracle RD_USER
 ```
 
@@ -647,7 +647,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
-- **API 不快取**：後端 `/api/**` 回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
+- **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/im_acct_insp/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
 - **安全標頭**：殼 jar `/im_acct_insp_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；`<style>` 區塊與行內程式仍不放行）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/im_acct_insp_web` 未加斜線時的 302 轉址、`/im_acct_insp_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
 - **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
   - 與本系統同站的網站嵌入時，框內沿用使用者原本的登入，可直接誘騙使用者在框內點擊（例如簽核按鈕）。同站範圍依開系統的網址而定：用 IP 或單段主機名開時，是同一台主機的其他服務（含其他 port）；用完整網域名（如 `xxx.pxmart.com.tw`）開時，是同協定、同屬 `pxmart.com.tw` 的網站。
@@ -662,7 +662,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 | 層 | 檔案與職責 |
 |---|---|
-| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（`/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
+| common | `AppConfig`（Clock、TransactionTemplate、啟用排程、載入業務設定）、`Identity`／`IdentityProvider`／`IdentityArgumentResolver`（取身分單一介面，Controller 宣告 Identity 參數即注入）、`TokenCodec`、`PasswordHasher`、`AcctConst`（代碼、時效、通知收件角色）、`AcctMsg`（錯誤文案）、`ApiException`、`GlobalExceptionHandler`（例外轉 `{message}`；multipart 超限轉 413 E15；其他 500 不外洩）、`NoStoreInterceptor`（context 內 `/api/**` 回應 no-store，由 `WebConfig` 註冊）、`DocSeqService`（取號）、`Texts`（顯示名、trim、LIKE 跳脫、欄寬檢查） |
 | controller | `AuthController`、`HomeController`、`AccountController`、`RequestController`、`AttachmentController`、`InspectionController`、`JobController`；只轉呼叫 service，不寫權限邏輯 |
 | service | `AuthService`（登入、鎖定、登出、`/me`、切換身分）、`TokenIdentityProvider`（驗 token、代理被停用自動切回）、`PermissionService`（can、執行人、此刻能處理哪關、可看申請單／帳號、到期相關性）、`RequestService`（送出驗證、7 關狀態機、樂觀鎖、在途、主表同步、歷史、交易）、`ReviewRule`（審查條件）、`AccountService`、`AttachmentService`、`NotificationService`、`MailSender`／`SmtpMailSender`（SMTP 寄出）／`LogMailSender`（SMTP 未設定時只寫 log）、`MailAllowList`（寄送名單）、`JobService`、`HomeService`、`InspectionService`、`CodeService` |
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
@@ -1034,7 +1034,7 @@ Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單�
 
 ### API 規格
 
-後端根路徑 `/api/v1`；經殼 jar 為 `/im_acct_insp_web/api/v1`，路徑一一對應。
+後端根路徑 `/im_acct_insp/api/v1`；經殼 jar 為 `/im_acct_insp_web/api/v1`，路徑一一對應。以下各 API 路徑都省略根路徑。
 
 **通則**
 
@@ -1190,7 +1190,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 ### 環境設定
 
-實際設定檔不進 git，repo 內只有 `.example` 範本；以下只列 key 與用途，怎麼建立與填值見 `SETUP.md`。
+實際設定檔不進 git，repo 內也沒有範本，向專案負責人取得；以下只列 key 與用途，取得後怎麼放、要改哪些值見 `SETUP.md`。
 
 **後端 `im_acct_insp\src\main\resources\`**
 
@@ -1198,6 +1198,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 |---|---|---|
 | `application.properties` | `spring.application.name` | Spring 專案名（不影響 log 落點） |
 | | `server.port` | 後端監聽 port |
+| | `server.servlet.context-path` | 網址前綴，固定 `/im_acct_insp`（API 根 `/im_acct_insp/api/v1`）；UAT 的 Apache 轉發保留此前綴，少了會回 404 |
 | | `spring.servlet.multipart.max-file-size`、`spring.servlet.multipart.max-request-size` | 附件單檔與請求上限（未設定時程式預設 10MB／11MB） |
 | | `server.tomcat.max-swallow-size` | 讓超大附件能正常回 413，而不是被 Tomcat 直接斷線 |
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
@@ -1222,7 +1223,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | `application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path` | 專案名、監聽 port、context（`/im_acct_insp_web`） |
 | | `spring.servlet.multipart.enabled` | 須為關閉，multipart 本文才會原樣轉送給後端 |
 | | `server.tomcat.max-swallow-size` | 同後端 |
-| `config\host.properties` | `backend.api.domain`、`backend.api.port`、`im.acct.insp.path` | 後端 API 的協定＋主機、port、根路徑（含後端 context，以 / 開頭、結尾不加 /） |
+| `config\host.properties` | `backend.api.domain`、`backend.api.port`、`im.acct.insp.path` | 後端 API 的協定＋主機（不帶 port）、port、根路徑（含後端 context，`/im_acct_insp/api/v1`，以 / 開頭、結尾不加 /） |
 | | `im.acct.insp.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留 |
 
 **前端**：無環境變數；API baseURL 固定為 `/im_acct_insp_web/api/v1`（與殼 jar 同源）。
