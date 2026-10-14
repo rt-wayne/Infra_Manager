@@ -1203,7 +1203,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
-| `config\database.properties` | `db.connect.itflow` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
+| `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
 | `config\environment.properties` | `im.acct.insp.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
 | | `im.acct.insp.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
 | | `im.acct.insp.job.j01.cron`、`im.acct.insp.job.j02.cron`、`im.acct.insp.job.j03.cron` | J01、J02、J03 觸發時間（Spring 六欄 cron，Asia/Taipei；設 `-` 可單獨停用該支） |
