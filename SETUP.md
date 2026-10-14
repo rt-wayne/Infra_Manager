@@ -359,11 +359,11 @@ UAT 上兩個 jar 由 tomcat 帳號以 `java -jar -Dserver.port=<port> <jar> --s
        → 後端 /im_acct_insp/api/v1/...（context-path /im_acct_insp）
 ```
 
-- **後端必須有 context-path `/im_acct_insp`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。建置機的 `application.properties` 有 `server.servlet.context-path=/im_acct_insp` 時打包進 jar 即可；沒有的話在後端啟動指令加 `-Dserver.servlet.context-path=/im_acct_insp`（寫在 `-Dserver.port` 旁邊）。
-- **不要把 context-path 寫進共用 config 目錄的設定檔**：該目錄所有 jar（含其他系統）都會讀，寫進去它們會一起多一段前綴而壞掉。
+- **後端必須有 context-path `/im_acct_insp`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。前綴寫在後端 `application.properties` 的 `server.servlet.context-path=/im_acct_insp`，隨 jar 打包，啟動指令不用加任何參數。該檔不進 git，打包前先確認建置機那份有這一行。
+- **不要把 context-path 寫進共用 config 目錄的設定檔**：該目錄所有 jar（含其他系統）都會讀，寫進去它們會一起多一段前綴而壞掉。反過來，共用目錄任何一個檔（不限 `application.properties`）若有這個 key，會蓋掉 jar 內的那一行。部署前兩項檢查：`grep -rn "context-path" <共用 config 目錄>` 應無輸出；`unzip -p <後端 jar> BOOT-INF/classes/application.properties | grep context-path` 應印出 `server.servlet.context-path=/im_acct_insp`。
 - 殼 jar 的 `config\host.properties`：`backend.api.domain` 直接填 Apache 的協定＋主機實際值（不帶 port），**不要沿用 `${itflow.domain}`**：共用 config 目錄的檔案優先於 jar 內設定，`itflow.domain` 是共用 key，值由其他系統決定，可能不是 Apache。`backend.api.port` 填 `:<Apache port>`；留空會連到該協定的預設 port（http 為 80、https 為 443），不是 Apache 這個 port。`im.acct.insp.path` 填 `/im_acct_insp/api/v1`。
 - 實際 port 查法：`ps -ef | grep -v grep | grep java | grep -o -- '-Dserver.port=[0-9]*'` 只取出各 jar 的 port（完整的 `ps` 輸出含同台所有系統的啟動參數，可能夾著密碼，不要整段貼到工單或對話）；`ss -ltnp` 看哪些 port 在聽；Apache 規則用 `grep -ri proxypass /etc/httpd/` 查。
-- 改完 `host.properties` 要重啟殼 jar；改後端啟動參數要重啟後端。
+- 改完 `host.properties` 要重啟殼 jar；改後端 `application.properties` 要重新打包、部署後端 jar 再重啟。
 
 **驗證**（在 UAT 主機上，`<>` 換成實際值）：
 
@@ -377,7 +377,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/j
 | 結果 | 代表什麼 |
 |---|---|
 | 401 或 400 | 正常：已打到後端登入 API，空帳密被拒 |
-| 直連 404 | 後端沒有 context-path（見上方第一點），或 port 指到同台別的系統的 jar（用 `ss -ltnp` 對照） |
+| 直連 404 | 後端沒有 context-path（見上方第一點）、共用 config 目錄有 `server.servlet.context-path` 蓋掉 jar 內設定（用上方 grep 查），或 port 指到同台別的系統的 jar（用 `ss -ltnp` 對照） |
 | 直連通、經 Apache 404 | Apache 規則的前綴不對 |
 | 經 Apache 503 或 502 | Apache 連不到後端：後端沒在跑，或 ProxyPass 的目標 port 錯 |
 | 000 | 連不上（只會出現在直連，或 Apache 本身連不上時）：程序沒在跑、port 錯或防火牆擋住 |
