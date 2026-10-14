@@ -6,6 +6,9 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: 新增：通知紀錄 IM_ACCT_NOTIFY_LOG（spec v2.0 §4.11、§4.12；Table v0.2 7.20）
 //           每位收件人每封信一筆（SUCCESS／FAIL／SKIP）；NOTIFY_ID 取 SEQ_IM_ACCT_NOTIFY_LOG；
 //           J02 以（WEEKLY_SUMMARY、週鍵）是否已有任何紀錄判斷本週是否已寄（J01 的判斷寫在 AcctDao 的 NOT EXISTS）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -39,7 +42,7 @@ public class NotifyLogDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public NotifyLogDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public NotifyLogDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

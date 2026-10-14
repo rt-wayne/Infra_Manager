@@ -25,10 +25,12 @@ copy src\main\resources\config\host.properties.example src\main\resources\config
 |---|---|---|
 | `im_acct_insp\src\main\resources\application.properties.example` | `application.properties` | `server.port`；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
 | `im_acct_insp\src\main\resources\config\host.properties.example` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
-| `im_acct_insp\src\main\resources\config\database.properties.example` | `config\database.properties` | 取消 `db.connect.itflow` 的註解並填入 DB 別名 |
+| `im_acct_insp\src\main\resources\config\database.properties.example` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
 | `im_acct_insp\src\main\resources\config\environment.properties.example` | `config\environment.properties` | `im.acct.insp.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
 | `im_acct_insp_web\im_acct_insp_web\src\main\resources\application.properties.example` | `application.properties` | `server.port`；`spring.servlet.multipart.enabled` 保持關閉 |
 | `im_acct_insp_web\im_acct_insp_web\src\main\resources\config\host.properties.example` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留 |
+
+**既有環境升級（2026-10-14 起的版本）**：DB 別名的 key 由 `db.connect.itflow` 改名為 `itflow.db.alias`。已有 `config\database.properties` 的環境（各開發機、UAT／正式的建置機），重新建置前把該行 key 改名、值不變（例 `db.connect.itflow=itflow_uat` → `itflow.db.alias=itflow_uat`）。沒改的話建置會成功、但後端啟動失敗，log 出現 `Could not resolve placeholder 'itflow.db.alias'`。
 
 - 附件根目錄在 Windows 要用 `/` 或 `\\`（例 `D:/home/im_acct_insp/attach`）；寫成單一 `\` 會被當跳脫字元，變成相對路徑而啟動失敗。目錄須讓執行帳號可讀寫。
 - 測試環境若要用 baseDate 手動跑排程，把 `im.acct.insp.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `im.acct.insp.job.j03.cron` 設為 `-`。

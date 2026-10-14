@@ -6,6 +6,9 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: 新增：登入 token IM_ACCT_LOGIN_TOKEN 存取（spec v2.0 §2.1、§2.5）
 //           只存 TOKEN_HASH（SHA-256），token 本身不入庫；查詢附實際使用者與代理身分的 STATUS（有效性與自動切回判斷用）；
 //           登出寫 LOGOUT_DATE；切換身分／切回只改 ACT_AS_USER_ID；LAST_ACCESS_DATE 由 Service 節流後更新
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -60,7 +63,7 @@ public class LoginTokenDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public LoginTokenDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public LoginTokenDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

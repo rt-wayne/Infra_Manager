@@ -41,6 +41,9 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: BACKLOG 第 46 項 S8：首頁卡共用計數條件 UNDECIDED_COND（未處理，含逾期）、RETURNED_COND（已退回未結案，
 //           S9 鈴鐺類別 3 沿用），比照 AcctDao.EXPIRING_COND；兩句含 E.STATUS = 1，與 SELECT_BASE 同範圍；
 //           FIND_LIST 的 :stateCode 多收 'UNDECIDED'＝計算狀態 PENDING 或 OVERDUE（與 UNDECIDED_COND 同義，STATE_EXPR 前兩支）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDate;
@@ -223,7 +226,7 @@ public class EmgDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public EmgDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public EmgDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

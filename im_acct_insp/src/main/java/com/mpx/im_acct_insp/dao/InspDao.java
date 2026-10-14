@@ -18,6 +18,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: INSP_SUMMARY 的狀態欄改用 AcctReqDao 的「"   " + 片段 + " AS 別名\n"」串接寫法（原寫法靠結尾 """ 那行撐住最短縮排，
 //           結尾一移就會拼出 ENDAS；同 EmgDao 修正，BACKLOG 第 46 項 S3 實測發現），SQL 只差空白
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDate;
@@ -117,7 +120,7 @@ public class InspDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public InspDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public InspDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

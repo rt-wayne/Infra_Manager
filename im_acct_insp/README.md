@@ -45,7 +45,7 @@ JSON 使用 Jackson 3（套件 `tools.jackson`，例 `tools.jackson.databind.Obj
 `config/database.properties` 先加一行別名（key 自訂，value 是連線資訊 API 認得的名稱）：
 
 ```
-db.connect.nova=<alias>
+nova.db.alias=<alias>
 ```
 
 最小範例（四個檔，可直接編譯）：
@@ -89,7 +89,7 @@ public class ItemDao {
 
 	private final DbClient dbClient;
 
-	@Value("${db.connect.nova}")
+	@Value("${nova.db.alias}")
 	private String novaDb;
 
 	public ItemDao(DbClient dbClient) {
@@ -188,7 +188,7 @@ public class ItemController {
 ## 5. 限制與假設
 
 - 支援 **Oracle** 與 **MSSQL**（由連線資訊 API 回的 `dbType` 決定）；SQL 方言依目標 DB 自行撰寫（例：分頁、日期函式、`TOP`／`FETCH FIRST`），common.db 不做方言轉換。
-- `update` 本身**不開交易**：呼叫端沒開交易時每句 autocommit；在 `TransactionTemplate` 內呼叫則加入該交易，**僅限 `db.connect.itflow` 別名**（`LazyDataSourceTransactionManager` 只綁該別名的連線池，見該類別檔頭）；其他別名的寫入仍每句 autocommit、不隨交易回滾。沒有 `@Transactional`。
+- `update` 本身**不開交易**：呼叫端沒開交易時每句 autocommit；在 `TransactionTemplate` 內呼叫則加入該交易，**僅限 `itflow.db.alias` 別名**（`LazyDataSourceTransactionManager` 只綁該別名的連線池，見該類別檔頭）；其他別名的寫入仍每句 autocommit、不隨交易回滾。沒有 `@Transactional`。
 - 連線池建好後不會重新取連線資訊；API 端改了帳密或位址，**需重啟程式**。
 - 連線資訊 API 走 http、不帶驗證 header。
 - 取得連線階段失敗（別名空白、API 位址未設、API 失敗、回應缺欄位、dbType 非 ORACLE／MSSQL、建池失敗）丟 `com.mpx.common.db.DbConnectException`，

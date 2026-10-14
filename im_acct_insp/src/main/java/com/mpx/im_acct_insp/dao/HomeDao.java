@@ -20,6 +20,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S8：卡片加兩張——緊急存取待補核准（EmgDao.UNDECIDED_COND，含逾期）、
 //           緊急存取異常待追蹤（EmgDao.RETURNED_COND）；數字看全部（不依登入者過濾）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDate;
@@ -72,7 +75,7 @@ public class HomeDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public HomeDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public HomeDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp.dao;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-07
 // 變更說明: v2.0（spec_im_acct_insp_v2.0.md §3、§4.1）：CREATE_DATE／UPDATE_DATE 改綁定 :now（Clock 產生），不用 SYSDATE
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -46,7 +49,7 @@ public class DocSeqDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public DocSeqDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public DocSeqDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

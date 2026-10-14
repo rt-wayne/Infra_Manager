@@ -11,6 +11,9 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: v2.0（spec_im_acct_insp_v2.0.md §6.3；Table v0.2 7.9、7.11、7.12）：類別加 IS_ENABLED、IS_SUGGEST_EXPIRY、SORT_SEQ；
 //           資產分類改 IS_REVIEW_TRIGGER、IS_SELECTABLE（旗標以 Boolean 對應）；關卡 ROLE_ID 換 PERM_ID；
 //           刪執行人名單查詢（不再 JOIN 既有模組使用者表；執行人改由 PermDao 查 IM_ACCT_USER）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.util.List;
@@ -51,7 +54,7 @@ public class CodeDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public CodeDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public CodeDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

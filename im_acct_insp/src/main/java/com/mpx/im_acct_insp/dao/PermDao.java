@@ -7,6 +7,9 @@ package com.mpx.im_acct_insp.dao;
 //           權限集合＝使用者 IM_ACCT_ROLE_USER（STATUS＝1）的角色經 IM_ACCT_ROLE_PERM（STATUS＝1）展開，再加上 GENERAL 角色的權限
 //           （GENERAL 不存角色人員列；角色碼以參數 :generalRoleId 綁定，不寫死權限碼）；角色或權限 STATUS＝0 不計。
 //           收件人一律只含 IM_ACCT_USER.STATUS＝1；每次查詢都讀當下 DB（不快取，spec §2.3、§4.12）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.util.HashMap;
@@ -96,7 +99,7 @@ public class PermDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public PermDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public PermDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

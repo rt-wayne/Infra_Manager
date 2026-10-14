@@ -6,6 +6,9 @@ package com.mpx.im_acct_insp.dao;
 // 變更說明: 新增：申請單附件 IM_ACCT_ATTACH 存取（spec v2.0 §4.10；Table v0.2 7.16）
 //           ATTACH_ID 取 SEQ_IM_ACCT_ATTACH；FILE_PATH 為相對附件根目錄的 REQ_ID/uuid.副檔名；
 //           取代時同類型舊列 STATUS＝0（檔案保留）；明細只列 STATUS＝1；上傳人顯示名 JOIN IM_ACCT_USER
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -58,7 +61,7 @@ public class AttachDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public AttachDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public AttachDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

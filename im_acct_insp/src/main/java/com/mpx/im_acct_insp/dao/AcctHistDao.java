@@ -16,6 +16,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S4b-1：寫入加 EMG_ID（SOURCE_CODE＝EMG 的緊急存取事件）；查詢 LEFT JOIN IM_EMG_ACCESS，
 //           REQ_APPLY_BY 改取申請單或緊急存取單的申請人（COALESCE），讓 EMG_MODIFY 自核列也能標「自行核准」（S4-⑨）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.util.HashMap;
@@ -81,7 +84,7 @@ public class AcctHistDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public AcctHistDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public AcctHistDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

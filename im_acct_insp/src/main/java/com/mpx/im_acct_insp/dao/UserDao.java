@@ -8,6 +8,9 @@ package com.mpx.im_acct_insp.dao;
 //           登入成功歸 0 並寫 LAST_LOGIN_DATE；切換身分名單＝STATUS＝1、不含自己，附啟用中的角色。
 //           單句更新不需交易（spec §5 末段）；時間一律綁定 :now
 //           修改：登入成功的 UPDATE 加 LOCK_DATE IS NULL，查詢後到更新前被鎖定者影響 0 筆，由呼叫端回 A02
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -63,7 +66,7 @@ public class UserDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public UserDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public UserDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

@@ -13,6 +13,9 @@ package com.mpx.im_acct_insp.dao;
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S7（S7-①）：BASE_DATE 改收 LocalDateTime——J03 的基準是時間點（到秒），
 //           J01／J02 由 Service 傳當天 00:00，寫入值不變
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.LocalDateTime;
@@ -60,7 +63,7 @@ public class JobRunDao {
 	private final DbClient dbClient;
 	private final String itflowDb;
 
-	public JobRunDao(DbClient dbClient, @Value("${db.connect.itflow}") String itflowDb) {
+	public JobRunDao(DbClient dbClient, @Value("${itflow.db.alias}") String itflowDb) {
 		this.dbClient = dbClient;
 		this.itflowDb = itflowDb;
 	}

@@ -6,6 +6,9 @@
 ### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 ### 修改日期: 2026-10-07
 ### 變更說明: 變更單 #1（L6）：註解中的 IM_ 表數由 18 張更正為 21 張
+### AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+### 修改日期: 2026-10-14
+### 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）；範例 key 格式改為 <名稱>.db.alias
 ### 首次建置：複製本檔為 database.properties 後填值（database.properties 不進 git）
 ###################################
 
@@ -15,7 +18,7 @@
 ### key 名稱使用者自訂，value 為連線資訊 API 認得的實際名稱（alias）
 ### 在 DAO 以 @Value("${<key>}") 讀出後傳給 DbClient；本檔由 com.mpx.Application 載入，common.db 不讀本檔
 ### 例：
-# db.connect.nova=<alias>
+# nova.db.alias=<alias>
 
-### ITFLOW（Oracle，RD_USER；IM_ACCT_*／IM_INSP_* 等表，有 Public Synonym）；所有 DAO 以 @Value("${db.connect.itflow}") 讀取
-# db.connect.itflow=<alias>
+### ITFLOW（Oracle，RD_USER；IM_ACCT_*／IM_INSP_* 等表，有 Public Synonym）；所有 DAO 以 @Value("${itflow.db.alias}") 讀取
+# itflow.db.alias=<alias>

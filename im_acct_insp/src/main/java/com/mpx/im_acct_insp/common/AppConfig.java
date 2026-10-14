@@ -9,12 +9,15 @@ package com.mpx.im_acct_insp.common;
 // 變更說明: v2.0（spec_im_acct_insp_v2.0.md §3、§5、§4.11、§6.1、§9.4）：
 //           Clock 固定 Asia/Taipei（業務時間一律由此產生並以參數綁定寫入）；
 //           TransactionTemplate：以 LazyDataSourceTransactionManager 延遲到第一次開交易才取
-//           dbConnectionManager.getJdbcTemplate(${db.connect.itflow}).getJdbcTemplate().getDataSource()；
+//           dbConnectionManager.getJdbcTemplate(${itflow.db.alias}).getJdbcTemplate().getDataSource()；
 //           @EnableScheduling（J01／J02，cron 與開關見 JobService）；
 //           @PropertySource 載入選用的 config/environment.properties（檔案不存在仍可啟動；缺 key 用程式預設，
 //           唯 im.acct.insp.attach.dir 必須設定且為絕對路徑，否則啟動失敗——變更單 #3，檢查在 AttachmentService）；
 //           MultipartConfigElement：spring.servlet.multipart.max-file-size／max-request-size 未設定時預設 10MB／11MB
 //           （Spring 內建預設 1MB 會擋下合法附件）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-14
+// 變更說明: DB 別名 key 由 db.connect.itflow 改名為 itflow.db.alias（使用者改名）
 // ============================================================
 
 import java.time.Clock;
@@ -47,7 +50,7 @@ public class AppConfig {
 	/** 業務交易（spec §5）；DataSource 延遲到第一次使用才取，與 DbClient 共用同一個連線池 */
 	@Bean
 	public TransactionTemplate transactionTemplate(DbConnectionManager dbConnectionManager,
-			@Value("${db.connect.itflow}") String itflowDb) {
+			@Value("${itflow.db.alias}") String itflowDb) {
 		String key = itflowDb == null ? "" : itflowDb.trim();
 		return new TransactionTemplate(new LazyDataSourceTransactionManager(
 				() -> dbConnectionManager.getJdbcTemplate(key).getJdbcTemplate().getDataSource()));
