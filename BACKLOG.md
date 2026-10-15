@@ -71,7 +71,7 @@
 | 64 | `SETUP.md` 第 26 行寫了郵件主機名稱，與檔頭「不記主機位址」的規則衝突；要移到 PRD 環境設定、改成「向負責人取得」或維持現狀未定。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/im_acct_insp/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 67 | 未來不再有英文名（IM_ACCT_USER.USER_EN_NAME）：顯示名目前都是「英文名 (中文名)」，影響登入身分、切換身分、申請單／待辦／緊急存取／附件人名、Email 內文、三種稽核快照欄、DDL 的 NOT NULL、SETUP 的 SQL 與約 14 個測試檔；先盤點、未定改法（刪欄位或不填、顯示改什麼、舊快照怎麼辦），可與第 13 項（顯示名兩種算法不一致）一起處理。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/67-移除英文名.md](backlog/67-移除英文名.md) |
-| 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫，DB 裡另有本專案沒用到的 IM_ 開頭表）。整併範圍、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | — |
+| 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫；那些表是開發 Infra_Manager_Java 時建的，目前沒有任何系統在用；使用者 2026-10-15 裁示維持整併後再清、留作整併設計參考，DROP 前逐表列清單給使用者確認）。現況（2026-10-15 查看）：原 Infra_Manager＝「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑，正式機運作中，程式在 `D:\ai\Infra_Manager_OLD`；Infra_Manager_Java 未部署，程式在 `D:\ai\Infra_Manager_Java改寫`（repo `rt-wayne/Infra_Manager`、Java 檔 217 個、套件 `com.mpx.infra_manager_java`、殼 jar 名 `infra_manager_web`，最後 commit 2026-10-13）。整併要以哪一版為基礎由 architect 評估中。整併範圍、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | — |
 
 ## 已拍板不做
 

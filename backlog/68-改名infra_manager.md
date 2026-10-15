@@ -5,7 +5,8 @@
 
 ## 待確認
 
-1. UAT 上原 Infra_Manager／Infra_Manager_Java 是否已佔用 `/infra_manager` 網址前綴、`/home/tomcat/log/infra_manager`、`${pxt.upload.root}/infra_manager`（本機後端 `environment.properties` 第 3 行有一行註解掉的附件目錄就是這個值）——負責人部署批 1 前查；已被佔用就要另議名稱或路徑。
+1. **GitHub repo 名稱衝突（擋批 1 的 repo 改名）**：Infra_Manager_Java 的 repo 是 `rt-wayne/Infra_Manager`，GitHub repo 名稱不分大小寫，本 repo 無法改名為 `infra_manager`。處理方式待 BACKLOG 第 69 項的整併做法（architect 評估中）決定後再裁示。
+1a. Infra_Manager_Java 的殼 jar 已叫 `infra_manager_web`（context-path `/infra_manager_web`），與本專案改名後的殼 jar 同名。該版未部署，正式與 UAT 不衝突；同一台開發機兩個都跑時，log 會寫進同一個 `/home/tomcat/log/infra_manager_web/`。
 2. 本專案 UAT 的附件根目錄現在設在哪、要不要隨改名搬到新目錄（DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定即可，不用動資料）。
 3. 批 2 的 Java 套件改名做法（批 2 動工前裁示）。
 
@@ -21,6 +22,8 @@
   - 最外層資料夾「機房巡檢與帳號權限管理系統」不改
   - UAT 端（Apache 轉發規則、啟動指令、log 目錄權限、UAT 設定檔）由專案負責人做；Claude 碰不到 UAT 主機，只把步驟寫進 SETUP
   - 殼 jar 與前端名稱比照現行「加 _web 後綴」規則：infra_manager_web、infra_manager_web_frontend
+- 瀏覽器分頁標題（`index.html` 的 `<title>`，目前是代號 `im_acct_insp_web`）改為「Infra Manager」（使用者 2026-10-15 裁示 ①B）；信件頁尾「本信件由「機房與帳號權限管理系統」自動發送」不改（使用者 2026-10-15 裁示）
+- UAT 撞名疑慮已排除（2026-10-15）：原 Infra_Manager 在不同主機，跑在 port 3200 的根路徑、沒有網址前綴；Infra_Manager_Java 沒有部署；舊系統是 Node.js，批 2 的 Java 套件 `com.mpx.infra_manager` 不會撞名（Java 改寫版是 `com.mpx.infra_manager_java`）
 - 與既有系統的關係（使用者 2026-10-15 說明）：Infra_Manager_Java 是原有 Infra_Manager 改寫到一半的版本；未來方向是本專案完成後把原 Infra_Manager 整併進來（BACKLOG 第 69 項），Infra_Manager_Java 應已無用。程式註解裡「比照 Infra_Manager_Java」的字樣是來源記錄，不改。
 
 ## 二、新舊名稱對照表
@@ -62,7 +65,7 @@
 - **前端**
   - `vite.config.ts`（base、dev proxy 路徑；outDir 的目錄路徑留到批 2）
   - `src\api\http.ts`（baseURL）
-  - `index.html`（favicon 路徑、title）
+  - `index.html`（favicon 路徑；title 改「Infra Manager」）
   - `src\api\tokenStore.ts`（兩個 key）
   - `package.json`／`package-lock.json` 的 name
   - `tests\session.spec.ts`
