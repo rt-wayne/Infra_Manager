@@ -200,8 +200,6 @@
 | CERT＝憑證/金鑰 | 0 | 1 | Alex、Alan |
 | DOOR＝機房門禁卡 | 1 | 0 | Alex、Alan |
 
-上表「初始執行人」為各類別的專責人員；測試 DB 另有 Gary、Hank、Kevin 三位是 8 類全部的執行人（見「初始資料」使用者表）。
-
 - 開放開關（IS_ENABLED）只管「新增」：新增表單類別下拉只列 IS_ENABLED＝1 且 STATUS＝1；既有帳號照常可異動；帳號列表 8 個類別頁籤始終顯示。
 - 改 DB 的 IS_ENABLED 不需重新部署：後端每個請求都讀 DB，立即生效；前端的代碼表（`/codes`）在同一個登入期間有快取（`useSession.ts:108-127`），使用者要重新整理頁面或重新登入才看到新的下拉選項。在此之前若送出已關閉的類別，後端回 400 E05。
 - 退件重送新增申請時帳號類別鎖定（見「退件重送」）；若原類別已被關閉，送出後後端回 400 E05，且無法改選其他類別、系統也沒有撤回功能，該單停在已退件，申請人須另提新申請。
@@ -982,16 +980,18 @@ END
 | IM_ACCT_CATG | 8 | 見下 |
 | IM_ASSET_CLASS | 15 | 見「資產分類碼」與下方 CTRL_DESCR，SORT_SEQ 1～15 依代碼順序 |
 | IM_INSP_ITEM | 14 | 見「巡檢項目」，SORT_SEQ 1～14，ITEM_DESCR 為空 |
-| IM_EXEC_MAP | 52 | 啟用 36 筆；見下 |
+| IM_EXEC_MAP | 52 | 啟用 12 筆；見下 |
 | IM_ACCT_USER | 13 | 見下 |
-| IM_ACCT_ROLE_USER | 54 | 啟用 38 筆；見下 |
+| IM_ACCT_ROLE_USER | 54 | 啟用 22 筆；見下 |
 | 其他業務與紀錄表 | 0 | IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
 
 測試 DB 使用者（皆為真實人員：本文件只記英文名，工號、中文姓名、部門等個資一律不寫進 repo，以 DB 的 IM_ACCT_USER 為準；13 位皆啟用、未鎖定、有密碼雜湊）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
 
 | 英文名 | 角色（GENERAL 不列） | 執行人類別 |
 |---|---|---|
-| Gary、Hank、Kevin | 全部 8 個：SYS_ADMIN、DC_ADMIN、INFRA_MGR、GOV、GOV_MGR、IT_HEAD、ACCT_REGISTRY、INSP_STAFF | 8 類全部 |
+| Gary | SYS_ADMIN、IT_HEAD、ACCT_REGISTRY、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
+| Hank | SYS_ADMIN | —（8 類對照皆為 STATUS＝0） |
+| Kevin | SYS_ADMIN、GOV、INSP_STAFF | —（8 類對照皆為 STATUS＝0） |
 | Molly | GOV、GOV_MGR、ACCT_REGISTRY、INSP_STAFF | — |
 | Terry | INFRA_MGR、ACCT_REGISTRY、INSP_STAFF | DB |
 | Wensen | INFRA_MGR、INSP_STAFF | — |
@@ -1002,7 +1002,7 @@ END
 | Sage | 僅 GENERAL | VENDOR |
 | Wayne、Brian | 僅 GENERAL（8 個角色指派皆為 STATUS＝0） | —（8 類對照皆為 STATUS＝0） |
 
-完整帳號列表（ACC_LIST_FULL，經 ACCT_REGISTRY）只有 Gary、Hank、Kevin、Molly、Terry。Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單；Terry 同時是關卡 3 核准人與 DB 類執行人。查詢某人生效角色、某權限碼給了哪些角色的 SQL 見 `SETUP.md` 第 6 節「各操作的可執行 SQL」。
+完整帳號列表（ACC_LIST_FULL，經 ACCT_REGISTRY）只有 Gary、Molly、Terry。關卡 5（IT_HEAD）只有 Gary 一人；緊急存取補核准（EMG_DECIDE）為 Gary、Molly、Terry、Wensen。Michael、Sage 沒有任何清單權限，待辦只看到被指派執行的單；Terry 同時是關卡 3 核准人與 DB 類執行人。查詢某人生效角色、某權限碼給了哪些角色的 SQL 見 `SETUP.md` 第 6 節「各操作的可執行 SQL」。
 
 帳號類別初始資料：
 
