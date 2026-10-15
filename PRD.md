@@ -985,7 +985,7 @@ END
 | IM_ACCT_ROLE_USER | 54 | 啟用 22 筆；見下 |
 | 其他業務與紀錄表 | 0 | IM_ACCT、IM_ACCT_REQ、IM_ACCT_ATTACH、IM_ACCT_HIST、IM_INSP、IM_INSP_RESULT、IM_ACCT_NOTIFY_LOG、IM_ACCT_JOB_RUN、IM_ACCT_LOGIN_TOKEN、IM_ACCT_ADMIN_LOG、IM_DOC_SEQ |
 
-測試 DB 使用者（皆為真實人員：本文件只記英文名，工號、中文姓名、部門等個資一律不寫進 repo，以 DB 的 IM_ACCT_USER 為準；13 位皆啟用、未鎖定、有密碼雜湊）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
+測試 DB 使用者（皆為真實人員；本表只記英文名，工號、中文姓名、部門以 DB 的 IM_ACCT_USER 為準；13 位皆啟用、未鎖定、有密碼雜湊）。表中只列啟用中（STATUS＝1）的角色指派與執行人對照：
 
 | 英文名 | 角色（GENERAL 不列） | 執行人類別 |
 |---|---|---|
