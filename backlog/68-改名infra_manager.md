@@ -5,7 +5,6 @@
 
 ## 待確認
 
-1. **GitHub repo 名稱衝突（擋批 1 的 repo 改名）**：Infra_Manager_Java 的 repo 是 `rt-wayne/Infra_Manager`，GitHub repo 名稱不分大小寫，本 repo 無法改名為 `infra_manager`。處理方式待 BACKLOG 第 69 項的整併做法（architect 評估中）決定後再裁示。
 1a. Infra_Manager_Java 的殼 jar 已叫 `infra_manager_web`（context-path `/infra_manager_web`），與本專案改名後的殼 jar 同名。該版未部署，正式與 UAT 不衝突；同一台開發機兩個都跑時，log 會寫進同一個 `/home/tomcat/log/infra_manager_web/`。
 2. 本專案 UAT 的附件根目錄現在設在哪、要不要隨改名搬到新目錄（DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定即可，不用動資料）。
 3. 批 2 的 Java 套件改名做法（批 2 動工前裁示）。
@@ -23,6 +22,7 @@
   - UAT 端（Apache 轉發規則、啟動指令、log 目錄權限、UAT 設定檔）由專案負責人做；Claude 碰不到 UAT 主機，只把步驟寫進 SETUP
   - 殼 jar 與前端名稱比照現行「加 _web 後綴」規則：infra_manager_web、infra_manager_web_frontend
 - 瀏覽器分頁標題（`index.html` 的 `<title>`，目前是代號 `im_acct_insp_web`）改為「Infra Manager」（使用者 2026-10-15 裁示 ①B）；信件頁尾「本信件由「機房與帳號權限管理系統」自動發送」不改（使用者 2026-10-15 裁示）
+- GitHub repo 名稱衝突已解決（2026-10-16）：Infra_Manager_Java 的 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存，本機 origin 已更新（詳見第 69 項詳情檔）。
 - UAT 撞名疑慮已排除（2026-10-15）：原 Infra_Manager 在不同主機，跑在 port 3200 的根路徑、沒有網址前綴；Infra_Manager_Java 沒有部署；舊系統是 Node.js，批 2 的 Java 套件 `com.mpx.infra_manager` 不會撞名（Java 改寫版是 `com.mpx.infra_manager_java`）
 - 與既有系統的關係（使用者 2026-10-15 說明）：Infra_Manager_Java 是原有 Infra_Manager 改寫到一半的版本；未來方向是本專案完成後把原 Infra_Manager 整併進來（BACKLOG 第 69 項），Infra_Manager_Java 應已無用。程式註解裡「比照 Infra_Manager_Java」的字樣是來源記錄，不改。
 
@@ -69,7 +69,7 @@
   - `src\api\tokenStore.ts`（兩個 key）
   - `package.json`／`package-lock.json` 的 name
   - `tests\session.spec.ts`
-- **GitHub**：`gh repo rename infra_manager`，`git remote set-url origin` 改新網址，PRD 第 4 行同步
+- **GitHub**：repo 改名為 `infra_manager`。本機沒有 GitHub CLI（`gh`），改名改由使用者在 GitHub 網頁 Settings 操作（repo 未封存，Repository name 欄位直接可改）；完成後 Claude 執行 `git remote set-url origin https://github.com/rt-wayne/infra_manager.git` 並 fetch 驗證，PRD 第 4 行同步。以 `curl https://api.github.com/repositories/<repo 編號>` 查名稱（本 repo 編號 1412912882，2026-10-16 查 `api.github.com/repos/rt-wayne/im_acct_insp` 取得）；以名稱查 API 改名後短時間會回 Not Found，是快取
 - **文件**
   - PRD：網址、jar、log、設定鍵、repo 網址；加一句舊名 im_acct_insp
   - SETUP：第 2、3、4、7、8 節，並新增給負責人的「改名部署步驟」
@@ -97,7 +97,7 @@
 ## 四、批 2：內部搬家（使用者看不到差別）
 
 - `git mv` 四個目錄（約 263 個進版控檔）；Windows 上要先關掉 VS Code 的 Java 語言服務與執行中的 jar，否則可能鎖檔
-- Java 套件改名：後端 132 個檔（main 114、test 18）、殼 jar 15 個檔，改 `package`／`import` 與全名引用。做法待使用者批 2 動工前裁示（逐檔 Edit 約需數百次工具呼叫、要拆多個回合）
+- Java 套件改名：後端 132 個檔（main 114、test 18）、殼 jar 15 個檔，改 `package`／`import` 與全名引用。做法待使用者批 2 動工前裁示（逐檔 Edit 約需數百次工具呼叫、要拆多個回合）。第 69 項（整併原 Infra_Manager）路線採 C（以本專案為底、從 Infra_Manager_Java 搬業務層），建議批 2 在整併開工前做完，搬進來的程式直接放新套件
 - `vite.config.ts` 的 outDir 路徑、`PwdHashTool.java` 註解裡的執行指令類別全名
 - DB 腳本 3 個檔改名，連同 SQL 註解、PRD、SETUP、README、BACKLOG（如第 48 項）裡的引用
 - 文件中的目錄路徑：PRD、SETUP、兩份子 README、BACKLOG 中描述現況的項目（如第 17、44 項）
