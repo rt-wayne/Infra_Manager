@@ -17,7 +17,8 @@
   - ②A 設定鍵前綴 `im.acct.insp.*` 改為 `infra.manager.*`
   - ③A DB 表前綴 `IM_ACCT_*`／`IM_INSP_*`／`IM_EMG_*` 不動：IM 就是專案名縮寫
   - ④A 歷史記錄不動，PRD 加一句「舊名 im_acct_insp」
-  - GitHub repo 改名由 Claude 執行（`gh repo rename`），改完更新本機 remote 與 PRD 第 4 行「遠端倉庫：」
+  - GitHub repo 改名由使用者在 GitHub 網頁操作，Claude 改完本機 remote 與 PRD 第 4 行「遠端倉庫：」（原定 Claude 用 `gh repo rename`，因本機沒有 `gh`，2026-10-16 改為網頁操作）
+  - 其他電腦沒有 clone 過 Infra_Manager_Java（使用者 2026-10-16 確認），改名後只需改本機那份的 remote（已改）
   - 最外層資料夾「機房巡檢與帳號權限管理系統」不改
   - UAT 端（Apache 轉發規則、啟動指令、log 目錄權限、UAT 設定檔）由專案負責人做；Claude 碰不到 UAT 主機，只把步驟寫進 SETUP
   - 殼 jar 與前端名稱比照現行「加 _web 後綴」規則：infra_manager_web、infra_manager_web_frontend
