@@ -16,6 +16,11 @@
   AI版本  : Claude Fable 5 (claude-fable-5)
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S10：狀態欄加紅色「審查異常」標籤（isReviewFlag；滑鼠懸停顯示原因）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: BACKLOG 第 80 項：工具列加「匯出 Excel」（只對 ACC_EXPORT 顯示；後端不另檢查，能看列表者即 ACC_LIST_FULL）
+            匯出目前篩選結果（含前端「未分類」篩選、所有分頁），一律排除已刪除；狀態篩選選「已刪除」時停用並提示；
+            查詢中、匯出中、沒有資料時停用；帳號名稱、所屬系統、到期日三欄改用 utils/accountExport 的共用函式（畫面與檔案同一套文字）
 -->
 <template>
   <main>
@@ -37,8 +42,19 @@
           <option v-for="a in codes?.assetClasses ?? []" :key="a.assetClassId" :value="a.assetClassId">{{ a.assetClassId }}</option>
         </select>
       </form>
-      <RouterLink v-if="can('ACC_APPLY')" class="btn btn-primary" to="/requests/new">＋ 新增申請</RouterLink>
+      <div class="toolbar-actions">
+        <button
+          v-if="can('ACC_EXPORT')"
+          type="button"
+          class="btn export-btn"
+          :disabled="!canExport"
+          :title="exportBlockedHint"
+          @click="doExport"
+        >{{ exporting ? '匯出中…' : '匯出 Excel' }}</button>
+        <RouterLink v-if="can('ACC_APPLY')" class="btn btn-primary" to="/requests/new">＋ 新增申請</RouterLink>
+      </div>
     </div>
+    <div v-if="can('ACC_EXPORT') && exportBlockedHint" class="hint export-hint">{{ exportBlockedHint }}</div>
 
     <div v-if="expiringOnly" class="filter-chip">
       目前只顯示 30 天內到期或已逾期的帳號
@@ -88,11 +104,11 @@
                 <span class="tag tag-cat">{{ catgNameOf(codes, a.catgId, a.catgName) }}</span>
                 <span v-if="isOn(a.isPriv)" class="tag tag-priv">特權</span>
               </td>
-              <td>{{ a.acctName || (a.catgId === DOOR_CATG_ID ? '（門禁卡，待發卡）' : '—') }}</td>
-              <td>{{ a.catgId === DOOR_CATG_ID ? label(DOOR_SCOPE_LABEL, a.doorScopeCode) : a.sysName || '—' }}</td>
+              <td>{{ acctNameText(a) }}</td>
+              <td>{{ sysText(a) }}</td>
               <td>{{ a.holderName || '—' }}</td>
               <td>{{ a.assetClassId || '未分類' }}</td>
-              <td>{{ a.expiryTypeCode === 'DATE' ? dateOnly(a.expiryDate) || '—' : '永久' }}</td>
+              <td>{{ expiryText(a) }}</td>
               <td>
                 <span class="tag" :class="stateTagClass(a.acctStateCode)">{{ label(ACCT_STATE_LABEL, a.acctStateCode) }}</span>
                 <span v-if="isOn(a.isReviewFlag)" class="tag tag-flag review-flag" :title="a.reviewFlagReason || ''">審查異常</span>
@@ -136,13 +152,11 @@ import { usePaging } from '../composables/usePaging'
 import { useSession } from '../composables/useSession'
 import { useToast } from '../composables/useToast'
 import type { Account } from '../types/account'
+import { acctNameText, expiryText, exportAccounts, exportableRows, sysText } from '../utils/accountExport'
 import { catgNameOf } from '../utils/codes'
-import { dateOnly } from '../utils/date'
 import {
   ACCT_STATE_LABEL,
   ACCT_STATE_ORDER,
-  DOOR_CATG_ID,
-  DOOR_SCOPE_LABEL,
   accountOps,
   isOn,
   label,
@@ -179,6 +193,28 @@ const allCatgCount = computed(() => Object.values(catgCounts.value).reduce((s, n
 const allStateCount = computed(() =>
   Object.entries(stateCounts.value).reduce((s, [k, n]) => (k === 'DELETED' ? s : s + n), 0)
 )
+
+const exporting = ref(false)
+/** 匯出停用原因（有值才顯示）；已刪除依 SA 第 8.2 節不提供匯出 */
+const exportBlockedHint = computed(() => {
+  if (stateCode.value === 'DELETED') return '已刪除的帳號不提供匯出，請改選其他狀態'
+  if (loaded.value && exportableRows(viewRows.value).length === 0) return '目前沒有可匯出的帳號'
+  return ''
+})
+const canExport = computed(() => loaded.value && !loading.value && !exporting.value && !exportBlockedHint.value)
+
+/** 匯出目前篩選結果（全部分頁）；失敗只 toast，不影響列表 */
+async function doExport(): Promise<void> {
+  if (!canExport.value) return
+  exporting.value = true
+  try {
+    await exportAccounts(codes.value, viewRows.value)
+  } catch {
+    toast('匯出失敗，請稍後再試', 'amber')
+  } finally {
+    exporting.value = false
+  }
+}
 
 function openHistory(a: Account): void {
   hist.value = { acctId: a.acctId, title: a.acctName ? `${a.acctId}（${a.acctName}）` : a.acctId }
@@ -245,4 +281,6 @@ onMounted(async () => {
 .cat-count { background: #eef1f5; color: var(--gray); border-radius: 999px; padding: 0 8px; font-size: 15px; font-weight: 700; }
 .cat-tab.active .cat-count { background: rgba(255, 255, 255, .22); color: #fff; }
 a.btn { display: inline-flex; align-items: center; min-height: 48px; text-decoration: none; }
+.toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.export-hint { margin: -6px 0 10px; text-align: right; }
 </style>

@@ -70,7 +70,7 @@ java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 - 開啟 `http://localhost:<殼 jar 的 server.port>/infra_manager_web/`。
 - 開發時可另開 `npm run dev`（Vite dev server），`/infra_manager_web/api` 會 proxy 到本機殼 jar，殼 jar 須先啟動。proxy 目標寫在 `infra_manager_web_frontend\vite.config.ts` 的 `server.proxy`（目前 `http://localhost:8787`），殼 jar 改 `server.port` 時要一起改，否則 API 會連不上。
 - 殼 jar log：`/home/tomcat/log/infra_manager_web/infra_manager_web.yyyy-MM-dd.log`（Windows 依啟動磁碟機），保留 30 天。
-- 用殼 jar 開的畫面空白、樣式或圖片沒出來時，按 F12 看 Console：出現 `Content Security Policy`（Chrome／Edge）或 `Content-Security-Policy`（Firefox）字樣的錯誤，代表前端用了外站資源、行內程式、`<style>` 區塊或 data: 圖片，被殼 jar 的安全標頭擋下（HTML 的 style 屬性已放行）。`npm run dev` 開的畫面不經過殼 jar、不帶這個標頭，所以這類問題開發時看不到，只在殼 jar 開的畫面出現。放寬步驟：
+- 用殼 jar 開的畫面空白、樣式或圖片沒出來時，按 F12 看 Console：出現 `Content Security Policy`（Chrome／Edge）或 `Content-Security-Policy`（Firefox）字樣的錯誤，代表前端用了外站資源、行內程式、`<style>` 區塊或 data: 圖片，被殼 jar 的安全標頭擋下（HTML 的 style 屬性、以 blob 網址建立的背景執行緒已放行）。`npm run dev` 開的畫面不經過殼 jar、不帶這個標頭，所以這類問題開發時看不到，只在殼 jar 開的畫面出現。放寬步驟：
   1. 改 `infra_manager_web\src\main\java\com\mpx\infra_manager_web\config\SecurityHeadersConfig.java` 的 `CSP`，加上錯誤訊息點名的項目。來源只填協定加主機，不帶路徑（帶路徑就只對得到那一個檔）。例如外站字型通常要先載外站的 CSS，`style-src` 與 `font-src` 都要加：`style-src 'self' https://字型主機; font-src 'self' https://字型主機`。
   2. 同步改 `src\test\java\com\mpx\infra_manager_web\config\SecurityHeadersConfigTest.java` 裡寫死的 CSP 預期值，否則 `.\mvnw.cmd clean package` 會測試失敗。
   3. 同步改 `PRD.md`「安全標頭」那段的 CSP 值。

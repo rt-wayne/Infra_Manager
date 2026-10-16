@@ -119,7 +119,7 @@
 | SYS_ROLE＝角色指派、SYS_EXECUTOR＝執行人對照維護、SYS_AUDIT_VIEW＝查詢系統管理軌跡 | SYS | 1（只有碼，無對應功能） |
 | SYS_IMPERSONATE＝切換身分 | SYS | 1 |
 | SYS_JOB_RUN＝手動觸發排程 | SYS | 1 |
-| ACC_EXPORT＝帳號權限清單匯出 | ACCT | 2 |
+| ACC_EXPORT＝帳號權限清單匯出（帳號列表「匯出 Excel」） | ACCT | 1（同碼的「批次匯出帳號歷史」仍為階段 2，見 BACKLOG 第 14 項） |
 | REVIEW_LIST、REVIEW_SIGN_INFRA、REVIEW_SIGN_GOV＝定期審查清單／Infra 半簽核／治理半簽核 | REVIEW | 2 |
 | EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE＝緊急存取申請／看全部／補核准退回結案 | EMG | 2 |
 | STATS_VIEW＝統計頁 | STATS | 2 |
@@ -152,6 +152,7 @@
 | 對既有帳號提出異動（查詢） | ACC_SELF_SERVICE | 帳號名稱**完整精確比對**（去前後空白、區分大小寫），狀態為已核准／已逾期／已停用；不提供模糊查詢或瀏覽 |
 | 異動表單帶入 | ACC_APPLY | 須同時帶帳號名稱且精確相符，或我「可看該帳號」；狀態同上；否則 404 |
 | 完整帳號列表 | ACC_LIST_FULL | 全部（預設不含已刪除） |
+| 帳號列表匯出 | ACC_EXPORT（**只在前端判斷**是否顯示按鈕） | 目前列表已查到的資料，一律排除已刪除；檔案在瀏覽器產生、沒有匯出 API，資料來源是完整帳號列表（後端檢查 ACC_LIST_FULL）。目前只有 ACCT_REGISTRY 同時有這兩個碼，日後兩碼拆給不同角色時要改後端產檔（BACKLOG 第 81 項） |
 | 帳號明細、歷史 | 登入 | 「可看帳號」者 |
 | 申請單明細、附件下載與網頁開啟 | 登入 | 「可看申請單」者 |
 | 待辦 | 登入 | 我此刻能處理的 |
@@ -586,7 +587,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | `/login` | 登入 | 無 | 工號、密碼；錯誤顯示後端訊息；已登入導向首頁 |
 | `/` | 首頁 | 登入 | 8 卡片，分帳號權限管理、緊急存取、機房巡檢三區 |
 | `/todo` | 待辦簽核 | 登入 | 核准／退件／回報／複驗彈窗 |
-| `/accounts` | 帳號列表 | ACC_LIST_FULL | 橫幅 U14（點擊套用到期篩選）；關鍵字（帳號單號、帳號名稱、使用人）、類別頁籤（含數量，8 類都顯示）、狀態（含數量，預設全部不含已刪除）、資產分類可同時套用；列顯示特權標籤與 U11；帳號掛審查異常旗標時狀態欄旁顯示紅色「審查異常」標籤，滑鼠移上顯示原因；操作按鈕依可做的申請類型 |
+| `/accounts` | 帳號列表 | ACC_LIST_FULL | 橫幅 U14（點擊套用到期篩選）；關鍵字（帳號單號、帳號名稱、使用人）、類別頁籤（含數量，8 類都顯示）、狀態（含數量，預設全部不含已刪除）、資產分類可同時套用；列顯示特權標籤與 U11；帳號掛審查異常旗標時狀態欄旁顯示紅色「審查異常」標籤，滑鼠移上顯示原因；操作按鈕依可做的申請類型。有 ACC_EXPORT 時工具列有「匯出 Excel」：匯出目前篩選結果（所有分頁，含「未分類」篩選），一律排除已刪除（SA v0.5 第 8.2 節）；狀態篩選選「已刪除」時停用並顯示「已刪除的帳號不提供匯出，請改選其他狀態」，沒有資料時停用並顯示「目前沒有可匯出的帳號」；檔名 `帳號權限清單_YYYYMMDD.xlsx`（本機日期）、工作表「帳號權限清單」，標題列粗體並凍結；欄位只有畫面 8 欄（單號、類別、帳號名稱、所屬系統、使用人、資產分類、到期日、狀態；SA 寫「欄位依規格 6.2」但原始規格書缺件，見 BACKLOG 第 16 項，由使用者 2026-10-16 裁示），儲存格文字同畫面（`utils\accountExport.ts` 與畫面共用），類別格加「、特權」，狀態格加「、審查異常」與「、待複驗」或「、申請處理中」；匯出失敗 toast「匯出失敗，請稍後再試」 |
 | `/requests` | 帳號申請單列表 | ACC_SELF_SERVICE | 三區塊：① 對既有帳號提出異動（完整名稱輸入＋U05；查無 U06；在途不顯示操作）② 我的申請單（狀態篩選；已退件顯示原因與「重新送出」；標題列收合鈕，預設展開）③ 我曾申請新增的帳號（在途只有查看、歷史；標題列收合鈕，預設收合）。收合只藏內容不卸載（資料照常載入、篩選與頁碼保留），狀態不記住、每次進頁回預設 |
 | `/requests/new` | 帳號權限申請 | ACC_APPLY | 新增；異動（帶 reqType、acctId、acctName）；重送（帶 resubmit＝單號）；刪除顯示 U03 |
 | `/emergency` | 緊急存取 | 登入 | 關鍵字（單號、申請人、帳號或系統）、狀態（五種，加「未處理（含逾期）」；網址 `?state=` 為合法值時當預設，首頁卡導入用）、送出日期（預設全部，可選近 7／30／90 天或自訂區間）；無 EMG_VIEW_ALL 顯示「只顯示您送出的緊急存取單」；有 EMG_APPLY 才有「＋ 緊急存取申請」；「查看」開詳情 |
@@ -635,7 +636,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 |---|---|---|---|---|
 | 後端 API | `infra_manager\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/infra_manager`，API 根 `/infra_manager/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
 | 殼 jar | `infra_manager_web\infra_manager_web\` | Spring Boot；context `/infra_manager_web` | 提供前端靜態頁；把 `/infra_manager_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
-| 前端 | `infra_manager_web\infra_manager_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
+| 前端 | `infra_manager_web\infra_manager_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios、write-excel-file 4.1.1（帳號匯出 xlsx，按匯出時才載入）；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
 | DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
 
 ```
@@ -652,7 +653,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
 - **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/infra_manager/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
-- **安全標頭**：殼 jar `/infra_manager_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；`<style>` 區塊與行內程式仍不放行）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/infra_manager_web` 未加斜線時的 302 轉址、`/infra_manager_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
+- **安全標頭**：殼 jar `/infra_manager_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；背景執行緒（Web Worker）放行 blob 網址，因為帳號列表匯出 xlsx 的壓縮（`write-excel-file` 交給 `fflate`）在子檔超過約 160 KB 時以 blob 網址建背景執行緒，被擋時帳號一多就匯出失敗；`<style>` 區塊與行內程式仍不放行，頁面本身的程式仍只准本站）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/infra_manager_web` 未加斜線時的 302 轉址、`/infra_manager_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
 - **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
   - 與本系統同站的網站嵌入時，框內沿用使用者原本的登入，可直接誘騙使用者在框內點擊（例如簽核按鈕）。同站範圍依開系統的網址而定：用 IP 或單段主機名開時，是同一台主機的其他服務（含其他 port）；用完整網域名（如 `xxx.pxmart.com.tw`）開時，是同協定、同屬 `pxmart.com.tw` 的網站。
   - 不同站的網站嵌入時，框內拿不到原本的登入；但外站仍可誘導使用者在框內重新登入，之後 token 留在「外站那一份」，8 小時內再造訪該外站時框內仍是登入狀態，可接著誘騙點擊，門檻較高。
@@ -672,7 +673,7 @@ Vue 單頁應用，經瀏覽器操作；瀏覽器分頁標題為「機房與帳�
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
-**前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
+**前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\accountExport.ts`（帳號列表匯出與共用儲存格文字）、`utils\perms.ts`、`utils\codes.ts`。
 
 **殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 

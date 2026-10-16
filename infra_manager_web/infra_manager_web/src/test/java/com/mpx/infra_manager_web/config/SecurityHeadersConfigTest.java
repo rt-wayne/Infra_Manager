@@ -13,6 +13,9 @@ package com.mpx.infra_manager_web.config;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp_web 改名為 com.mpx.infra_manager_web（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 80 項：CSP 預期值加 worker-src 'self' blob:（帳號列表匯出 xlsx 的壓縮背景執行緒需要）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,7 +101,7 @@ class SecurityHeadersConfigTest {
 
 	private static void assertHeaders(MockHttpServletResponse res) {
 		assertThat(res.getHeaderValues("Content-Security-Policy"))
-				.containsExactly("default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'");
+				.containsExactly("default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:");
 		assertThat(res.getHeaderValues("X-Content-Type-Options")).containsExactly("nosniff");
 		assertThat(res.getHeaderValues("Referrer-Policy")).containsExactly("same-origin");
 		assertThat(res.getHeaderValues("Permissions-Policy"))

@@ -18,6 +18,12 @@ package com.mpx.infra_manager_web.config;
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 2：Java 套件 com.mpx.im_acct_insp_web 改名為 com.mpx.infra_manager_web（專案改名 infra_manager），只改 package／import／全名引用
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 80 項（帳號列表匯出 xlsx）：CSP 加 worker-src 'self' blob:（使用者裁示）。
+//           write-excel-file 壓縮時交給 fflate，子檔超過約 160 KB 就以 blob 網址建 Web Worker；
+//           原本 worker-src 退回 default-src 'self' 會擋下，帳號多時匯出失敗（npm run dev 不帶此標頭，開發時看不到）。
+//           只放行背景執行緒，不放行頁面載入 blob 程式（script-src 仍是 'self'）
 // ============================================================
 
 import java.io.IOException;
@@ -35,7 +41,7 @@ import jakarta.servlet.http.HttpServletResponse;
 @Configuration
 public class SecurityHeadersConfig {
 
-	static final String CSP = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'";
+	static final String CSP = "default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'; worker-src 'self' blob:";
 	/** 連到外站時不帶本站網址；站內照常帶 */
 	static final String REFERRER_POLICY = "same-origin";
 	/** 本系統用不到的瀏覽器功能一律關閉 */
