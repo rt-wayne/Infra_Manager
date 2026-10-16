@@ -1,6 +1,6 @@
 # infra_manager 帳號權限管理／機房巡檢系統
 
-> 專案名稱 `infra_manager`，舊名 `im_acct_insp`。網址、jar、log、設定鍵已用新名；目錄、Java 套件與 DB 腳本檔名仍為舊名，本文件中的這些路徑照實際寫舊名。本功能分批施工中，進度見 `BACKLOG.md` 第 68 項。系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
+> 專案名稱 `infra_manager`，舊名 `im_acct_insp`。網址、jar、log、設定鍵、Java 套件已用新名；目錄與 DB 腳本檔名仍為舊名，本文件中的這些路徑照實際寫舊名。本功能分批施工中，進度見 `BACKLOG.md` 第 68 項。系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
 > 遠端倉庫：https://github.com/rt-wayne/infra_manager.git
 > 待辦見 `BACKLOG.md`；版本與變更歷史見 `CHANGELOG.md`；建置、設定、啟動與 DB 維護步驟見 `SETUP.md`。
 
@@ -659,7 +659,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
 - **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
 
-**後端主要程式**（`im_acct_insp\src\main\java\com\mpx\im_acct_insp\`）
+**後端主要程式**（`im_acct_insp\src\main\java\com\mpx\infra_manager\`）
 
 | 層 | 檔案與職責 |
 |---|---|

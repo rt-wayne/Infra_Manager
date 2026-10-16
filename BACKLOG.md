@@ -14,10 +14,10 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 未開工 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
+| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 施工中 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 68 項批 1 已結案（2026-10-16，審查必須修正已修、測試全過）。批 2（內部搬家：目錄、Java 套件、DB 腳本檔名）動工前先請使用者裁示詳情檔待確認 3（套件改名做法）；開工時記下本階段起點。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署（時程由負責人決定）
+- 下一步：第 68 項批 2 回合 2——四個外層目錄搬家（`im_acct_insp\` → `infra_manager\` 等，含不進版控的本機設定檔、`target\`、`node_modules\`，要整個資料夾搬；搬前請使用者關閉 VS Code Java 語言服務）、DB 腳本 3 檔改名、vite outDir、文件中的目錄路徑、兩份子 README 標題、刪 PRD 第 3 行過渡說明句；之後階段末平行派 code-reviewer（起點 `238e59d`）與 test-runner。回合 1（Java 套件改名，147 檔）已 commit，兩邊編譯通過、測試未跑（留階段末）。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署（時程由負責人決定）
 - 已改動（未 commit）：無。本機不進版控的 4 個設定檔（後端 `application.properties`、`config\environment.properties`，殼 jar `application.properties`、`config\host.properties`）已改新名，改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）；本機兩支 jar 已重新打包為新檔名
 - 卡住／待確認：UAT 兩支 jar 實際讀的 `environment.properties`、`host.properties` 是打進 jar 的那份還是共用 config 目錄的同名檔（需向 UAT 負責人確認；SETUP 修正寫法兩種情況都涵蓋，不卡修正）
 ## 僅記錄未拍板

@@ -7,7 +7,6 @@
 
 1a. Infra_Manager_Java 的殼 jar 已叫 `infra_manager_web`（context-path `/infra_manager_web`），與本專案改名後的殼 jar 同名。該版未部署，正式與 UAT 不衝突；同一台開發機兩個都跑時，log 會寫進同一個 `/home/tomcat/log/infra_manager_web/`。
 2. 本專案 UAT 的附件根目錄現在設在哪、要不要隨改名搬到新目錄（DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定即可，不用動資料）。
-3. 批 2 的 Java 套件改名做法（批 2 動工前裁示）。
 
 ## 一、背景與裁示（2026-10-15）
 
@@ -98,8 +97,8 @@
 ## 四、批 2：內部搬家（使用者看不到差別）
 
 - `git mv` 四個目錄（約 263 個進版控檔）；Windows 上要先關掉 VS Code 的 Java 語言服務與執行中的 jar，否則可能鎖檔
-- Java 套件改名：後端 132 個檔（main 114、test 18）、殼 jar 15 個檔，改 `package`／`import` 與全名引用。做法待使用者批 2 動工前裁示（逐檔 Edit 約需數百次工具呼叫、要拆多個回合）。第 69 項（整併原 Infra_Manager）路線採 C（以本專案為底、從 Infra_Manager_Java 搬業務層），建議批 2 在整併開工前做完，搬進來的程式直接放新套件
-- `vite.config.ts` 的 outDir 路徑、`PwdHashTool.java` 註解裡的執行指令類別全名
+- Java 套件改名（**回合 1 已完成**，2026-10-16）：做法裁示 ①A（使用者 2026-10-16）＝平行派 6 個 subagent 逐檔 Edit（`replace_all` 套件字串＋檔頭加新歷史條目），不用腳本、套件名不保留舊名。實際 147 個檔（後端 131、殼 jar 16；`com.mpx.Application`、`com.mpx.common.*` 不含專案名不用改）；套件目錄以 `git mv` 搬移；`PwdHashTool.java` 的執行指令在歷史條目內，由主對話只改 package／import、新指令寫進新條目。第 69 項（整併原 Infra_Manager）路線採 C（以本專案為底、從 Infra_Manager_Java 搬業務層），建議批 2 在整併開工前做完，搬進來的程式直接放新套件
+- `vite.config.ts` 的 outDir 路徑
 - DB 腳本 3 個檔改名，連同 SQL 註解、PRD、SETUP、README、BACKLOG（如第 48 項）裡的引用
 - 文件中的目錄路徑：PRD、SETUP、兩份子 README、BACKLOG 中描述現況的項目（如第 17、44 項）
 - 兩份子 README 標題（`# im_acct_insp 專案說明`、`# im_acct_insp_web 專案說明`）
@@ -123,5 +122,5 @@
 
 ## 交接狀態
 
-- 目前階段：批 1 已完成（2026-10-16，起點 `4fc1f79`；審查與測試通過）；批 2 未開工，動工前先裁示待確認 3
-- 本階段起點：（批 2 開工時填）
+- 目前階段：批 1 已完成（2026-10-16，起點 `4fc1f79`；審查與測試通過）；批 2 施工中，回合 1（Java 套件改名）已完成，下一步回合 2（外層目錄搬家等，見本檔第四節其餘各條）
+- 本階段起點：`238e59d`

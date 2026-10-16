@@ -27,7 +27,7 @@
 |---|---|---|
 | `im_acct_insp_web\src\main\java\com\mpx\Application.java` | 殼 jar 啟動類別（掃描根 `com.mpx`） | 不可 |
 | `im_acct_insp_web\src\main\java\com\mpx\common\web\` | `RestTemplateConfig`：殼 jar 唯一共用元件，提供 `RestTemplate` bean（connect 5 秒、read 120 秒），Controller 注入使用 | 不可 |
-| `im_acct_insp_web\src\main\java\com\mpx\im_acct_insp_web\` | 呼叫後端的 Controller 放這裡（子套件自訂，例 `controller`）；目前只有佔位用的 `package-info.java` | 自由新增 |
+| `im_acct_insp_web\src\main\java\com\mpx\infra_manager_web\` | 呼叫後端的 Controller 放這裡（子套件自訂，例 `controller`）；目前只有佔位用的 `package-info.java` | 自由新增 |
 | `im_acct_insp_web\src\main\resources\` | `application.properties`、`config\host.properties`、`logback-spring.xml` | 可改值 |
 | `im_acct_insp_web\src\frontend\` | 前端 build 產物（由 `npm run build` 寫入，不進 git）；平時只有 `.gitkeep` | 不要手改 |
 | `im_acct_insp_web_frontend\src\types\` | API 請求／回應型別；目前只有佔位用的 `.gitkeep` | 新增功能時新增 |
@@ -49,10 +49,10 @@
 
 ### 3.1 殼 jar Controller
 
-新增 `im_acct_insp_web\src\main\java\com\mpx\im_acct_insp_web\controller\ItemController.java`：
+新增 `im_acct_insp_web\src\main\java\com\mpx\infra_manager_web\controller\ItemController.java`：
 
 ```java
-package com.mpx.im_acct_insp_web.controller;
+package com.mpx.infra_manager_web.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -434,7 +434,7 @@ describe('ItemView', () => {
 - [ ] 已讀完本檔。
 - [ ] 新功能都是新增檔案（照第 3 節片段），沒有刪除範本既有檔與佔位檔。
 - [ ] 沒有修改 `com.mpx.common.web`（`RestTemplateConfig`）與 `com.mpx.Application`。
-- [ ] 新 Controller 放在 `com.mpx.im_acct_insp_web` 底下，注入 `RestTemplate` 呼叫後端、本文以 `byte[]` 接並原樣回傳、回傳前去掉 `Content-Length`／`Transfer-Encoding`／`Connection`；不解析 payload、沒有 CrossOrigin。
+- [ ] 新 Controller 放在 `com.mpx.infra_manager_web` 底下，注入 `RestTemplate` 呼叫後端、本文以 `byte[]` 接並原樣回傳、回傳前去掉 `Content-Length`／`Transfer-Encoding`／`Connection`；不解析 payload、沒有 CrossOrigin。
 - [ ] 後端位址只用 `@Value("${infra.manager.domain.path}")` 取得，程式裡沒有寫死的主機、port 或路徑前綴。
 - [ ] 失敗時記 log（路徑、例外類別，不含 payload）後 rethrow，沒有吞掉例外。
 - [ ] 若後端需要登入資訊，已自行決定 Cookie／Authorization 的處理方式（範本不處理）。

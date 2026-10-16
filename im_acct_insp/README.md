@@ -10,7 +10,7 @@ JSON 使用 Jackson 3（套件 `tools.jackson`，例 `tools.jackson.databind.Obj
 **請先讀完本檔再動手。** 三條鐵律：
 
 1. `com.mpx.common` 底下（含 `src/test/java/com/mpx/common`）任何檔案都**不可修改**；`com.mpx.Application` 也不要改。
-2. 業務程式一律放在 `com.mpx.im_acct_insp` 底下（子套件自訂，例 `controller`、`service`、`dao`、`model`）。
+2. 業務程式一律放在 `com.mpx.infra_manager` 底下（子套件自訂，例 `controller`、`service`、`dao`、`model`）。
 3. SQL 一律用 `:name` 具名參數綁定，**不可**用字串拼接組 SQL。
 
 若專案根目錄有 `CLAUDE.md`，請一併遵守其中的規則。
@@ -23,12 +23,12 @@ JSON 使用 Jackson 3（套件 `tools.jackson`，例 `tools.jackson.databind.Obj
 |---|---|---|
 | `com.mpx.Application` | 啟動類別；掃描根 `com.mpx`；排除 `DataSourceAutoConfiguration`；載入 `config/database.properties` | 不可 |
 | `com.mpx.common.db` | 共用 DB 連線元件（`DbClient`、`DbConnectionManager`、`DbConnectApiClient` 等 6 個類別） | 不可 |
-| `com.mpx.im_acct_insp` | 業務程式（帳號權限管理／機房巡檢，spec v2.0；概要見第 10 節） | 自由新增 |
+| `com.mpx.infra_manager` | 業務程式（帳號權限管理／機房巡檢，spec v2.0；概要見第 10 節） | 自由新增 |
 | `src/main/resources/application.properties` | 專案名、port | 可改值 |
 | `src/main/resources/config/*.properties` | 連線資訊 API、DB 別名、自訂設定（見第 4 節） | 可改值 |
 | `src/main/resources/logback-spring.xml` | log 設定（見第 6 節） | 一般不需改 |
 | `src/test/java/com/mpx/common/db` | common.db 的 42 個單元測試 | 不可 |
-| `src/test/java/com/mpx/im_acct_insp` | 業務程式的測試 | 自由新增 |
+| `src/test/java/com/mpx/infra_manager` | 業務程式的測試 | 自由新增 |
 
 ## 2. 新增一支 API 的標準寫法
 
@@ -51,8 +51,8 @@ nova.db.alias=<alias>
 最小範例（四個檔，可直接編譯）：
 
 ```java
-// src/main/java/com/mpx/im_acct_insp/model/Item.java
-package com.mpx.im_acct_insp.model;
+// src/main/java/com/mpx/infra_manager/model/Item.java
+package com.mpx.infra_manager.model;
 
 import java.math.BigDecimal;
 
@@ -71,8 +71,8 @@ public class Item {
 ```
 
 ```java
-// src/main/java/com/mpx/im_acct_insp/dao/ItemDao.java
-package com.mpx.im_acct_insp.dao;
+// src/main/java/com/mpx/infra_manager/dao/ItemDao.java
+package com.mpx.infra_manager.dao;
 
 import java.util.HashMap;
 import java.util.List;
@@ -82,7 +82,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import com.mpx.common.db.DbClient;
-import com.mpx.im_acct_insp.model.Item;
+import com.mpx.infra_manager.model.Item;
 
 @Repository
 public class ItemDao {
@@ -106,15 +106,15 @@ public class ItemDao {
 ```
 
 ```java
-// src/main/java/com/mpx/im_acct_insp/service/ItemService.java
-package com.mpx.im_acct_insp.service;
+// src/main/java/com/mpx/infra_manager/service/ItemService.java
+package com.mpx.infra_manager.service;
 
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import com.mpx.im_acct_insp.dao.ItemDao;
-import com.mpx.im_acct_insp.model.Item;
+import com.mpx.infra_manager.dao.ItemDao;
+import com.mpx.infra_manager.model.Item;
 
 @Service
 public class ItemService {
@@ -132,8 +132,8 @@ public class ItemService {
 ```
 
 ```java
-// src/main/java/com/mpx/im_acct_insp/controller/ItemController.java
-package com.mpx.im_acct_insp.controller;
+// src/main/java/com/mpx/infra_manager/controller/ItemController.java
+package com.mpx.infra_manager.controller;
 
 import java.util.List;
 
@@ -142,8 +142,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.mpx.im_acct_insp.model.Item;
-import com.mpx.im_acct_insp.service.ItemService;
+import com.mpx.infra_manager.model.Item;
+import com.mpx.infra_manager.service.ItemService;
 
 @RestController
 @RequestMapping("/api/items")
@@ -208,7 +208,7 @@ public class ItemController {
 建置與啟動步驟見根目錄 `SETUP.md`。
 
 - 既有 42 個 common.db 單元測試不可修改、不可刪除；`./mvnw clean package` 必須全過。
-- 業務程式的測試放 `src/test/java/com/mpx/im_acct_insp/`。單元測試不要依賴真 DB 或真 API。
+- 業務程式的測試放 `src/test/java/com/mpx/infra_manager/`。單元測試不要依賴真 DB 或真 API。
 
 ## 8. 給 AI 的檢查清單
 
@@ -216,7 +216,7 @@ public class ItemController {
 
 - [ ] 已讀完本檔。
 - [ ] 改動的檔案都不在 `com.mpx.common` 底下，也沒改 `com.mpx.Application`。
-- [ ] 業務程式都在 `com.mpx.im_acct_insp` 底下。
+- [ ] 業務程式都在 `com.mpx.infra_manager` 底下。
 - [ ] SQL 全部用 `:name` 具名參數，沒有字串拼接。
 - [ ] 新增的 properties key 已同步寫進 `PRD.md`「環境設定」表，並已通知專案負責人。
 - [ ] 沒有把 `*.properties` 真檔、帳密或真實位址加進 git。
@@ -224,7 +224,7 @@ public class ItemController {
 
 ## 9. 密碼雜湊工具（spec v2.0 §9.2）
 
-`IM_ACCT_USER.PWD_HASH` 由工具類別 `com.mpx.im_acct_insp.tools.PwdHashTool` 產生（雜湊本體為 `com.mpx.im_acct_insp.common.PasswordHasher`：
+`IM_ACCT_USER.PWD_HASH` 由工具類別 `com.mpx.infra_manager.tools.PwdHashTool` 產生（雜湊本體為 `com.mpx.infra_manager.common.PasswordHasher`：
 PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310000，輸出 `PBKDF2$310000$base64(salt)$base64(hash)`）。
 
 執行步驟見根目錄 `SETUP.md`。
