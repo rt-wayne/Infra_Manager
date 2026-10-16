@@ -93,7 +93,7 @@
 
 | 系統 | 現況 |
 |---|---|
-| 本專案 | Spring Boot 4.1.1＋Java 25 後端＋殼 jar＋Vue 前端，Oracle；UAT 已部署、未上正式；即將改名 infra_manager（第 68 項） |
+| 本專案 | Spring Boot 4.1.1＋Java 25 後端＋殼 jar＋Vue 前端，Oracle；UAT 已部署、未上正式；已改名 infra_manager（第 68 項，2026-10-16 結案；Java 套件 `com.mpx.infra_manager`） |
 | 原 Infra_Manager（舊系統） | 「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑、正式機運作中；程式在 `D:\ai\Infra_Manager_OLD`（說明見其 `SYSTEM_README.md`） |
 | Infra_Manager_Java（Java 版） | 未部署；程式在 `D:\ai\Infra_Manager_Java改寫`，repo `rt-wayne/Infra_Manager_Java`（已封存）；217 個 Java 檔、套件 `com.mpx.infra_manager_java`、殼 jar `infra_manager_web`；停在 S8b R4，單元測試 445 項。開發時在測試 DB RD_USER 建了 31 張表（含 S4 種子單、wayne 帳號），目前沒有系統在用 |
 

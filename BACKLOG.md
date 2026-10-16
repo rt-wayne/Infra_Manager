@@ -14,12 +14,18 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 程式與文件已完成、待階段末審查與測試 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 68 項批 2 程式與文件已 commit；階段末審查進行中——平行派 code-reviewer（起點 `238e59d`）與 test-runner（後端、殼 jar、前端測試＋重新打包啟動實測，確認新目錄下 build、vite outDir 正常）。通過後第 68 項結案（從本檔移除、詳情檔可刪或留作記錄由使用者決定）。下次開工先試刪根目錄空的 `im_acct_insp\`（使用者 2026-10-16 裁示 ②A）。UAT：jar 由開發機打包後使用者人工交給 UAT 負責人，負責人照 SETUP 第 8 節第 5 步起部署
-- 已改動（未 commit）：無。本機不進版控的設定檔已隨資料夾整包搬到新目錄（仍被 .gitignore 忽略），改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）；搬目錄後本機尚未重新編譯，交由階段末 test-runner
-- 卡住／待確認：UAT 兩支 jar 實際讀共用 config 目錄同名檔還是 jar 內那份，仍待向 UAT 負責人確認（第 74 項；SETUP 第 8 節兩種都涵蓋，不卡）
+- 下一步：
+- 已改動（未 commit）：
+- 卡住／待確認：
+
+## 已拍板待實作
+
+| ID | 摘要 | 詳情 |
+|----|------|------|
+| 78 | 刪除根目錄空的 `im_acct_insp\` 資料夾（第 68 項改名搬家留下，不在 git；目錄本身被本機不明行程鎖住，VS Code 重開或重新開機後才刪得掉）。使用者 2026-10-16 裁示刪除；下次開工先試刪，刪不掉再告知使用者 | — |
+
 ## 僅記錄未拍板
 
 | ID | 摘要 | 提出日 | 詳情 |
@@ -70,7 +76,8 @@
 | 71 | `infra_manager\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
-| 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔優先於 jar 內那份——若 UAT 共用目錄有 `host.properties`，改它重啟即可，只改 jar 內那份則要在開發機重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
+| 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔**有寫到的鍵**優先於 jar 內的值（逐鍵合併）——若 UAT 共用目錄的 `host.properties` 有那個鍵，改它重啟即可，否則要在開發機改 jar 內那份並重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
+| 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
 
