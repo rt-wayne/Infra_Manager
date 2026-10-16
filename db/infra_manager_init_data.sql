@@ -4,7 +4,7 @@
 -- 內容：7 張代碼表共 116 筆（角色 9、權限 28、角色權限 35、簽核關卡 7、
 --       帳號類別 8、資產分類 15、巡檢項目 14），加上檔尾的初始管理者「範本」。
 -- 來源：2026-10-10 自測試 DB 反向產出後整理；審計欄改為 SYSDATE／SYSTEM。
--- 前提：先執行 im_acct_insp_create_table.sql；檔案編碼 UTF-8——SQL*Plus 執行前
+-- 前提：先執行 infra_manager_create_table.sql；檔案編碼 UTF-8——SQL*Plus 執行前
 --       先設 NLS_LANG=.AL32UTF8、SQL Developer 開檔時選 UTF-8，否則中文資料
 --       會無聲變成亂碼（不會報錯）。
 -- VENDOR 類別 IS_ENABLED 依交接文件寫 0；測試 DB 原為 1，2026-10-11 已改為 0，

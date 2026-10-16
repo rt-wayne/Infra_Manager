@@ -20,6 +20,7 @@
   - 其他電腦沒有 clone 過 Infra_Manager_Java（使用者 2026-10-16 確認），改名後只需改本機那份的 remote（已改）
   - 最外層資料夾「機房巡檢與帳號權限管理系統」不改
   - UAT 端（Apache 轉發規則、啟動指令、log 目錄權限、UAT 設定檔）由專案負責人做；Claude 碰不到 UAT 主機，只把步驟寫進 SETUP
+  - UAT 不自行建置：jar 一律由 Claude 在開發機打包，使用者人工交給 UAT 負責人（使用者 2026-10-16 說明）。所以打進 jar 的本機設定檔由開發機負責改，UAT 負責人只改共用 config 目錄的同名檔；批 2 搬目錄時開發機的本機設定檔已隨資料夾整包搬走，不需另補搬檔步驟
   - 殼 jar 與前端名稱比照現行「加 _web 後綴」規則：infra_manager_web、infra_manager_web_frontend
 - 瀏覽器分頁標題（`index.html` 的 `<title>`，目前是代號 `im_acct_insp_web`）改為「Infra Manager」（使用者 2026-10-15 裁示 ①B）；信件頁尾「本信件由「機房與帳號權限管理系統」自動發送」不改（使用者 2026-10-15 裁示）
 - GitHub repo 名稱衝突已解決（2026-10-16）：Infra_Manager_Java 的 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存，本機 origin 已更新（詳見第 69 項詳情檔）。
@@ -69,7 +70,7 @@
   - `src\api\tokenStore.ts`（兩個 key）
   - `package.json`／`package-lock.json` 的 name
   - `tests\session.spec.ts`
-- **GitHub**：✅ 已於 2026-10-16 提前單獨完成（repo 已是 `rt-wayne/infra_manager`，本機 origin 與 PRD 第 4 行已更新；UAT 建置機不從 GitHub 抓程式，不受影響）。以下為當時做法記錄：repo 改名為 `infra_manager`。本機沒有 GitHub CLI（`gh`），改名改由使用者在 GitHub 網頁 Settings 操作（repo 未封存，Repository name 欄位直接可改）；完成後 Claude 執行 `git remote set-url origin https://github.com/rt-wayne/infra_manager.git` 並 fetch 驗證，PRD 第 4 行同步。以 `curl https://api.github.com/repositories/<repo 編號>` 查名稱（本 repo 編號 1412912882，2026-10-16 查 `api.github.com/repos/rt-wayne/im_acct_insp` 取得）；以名稱查 API 改名後短時間會回 Not Found，是快取
+- **GitHub**：✅ 已於 2026-10-16 提前單獨完成（repo 已是 `rt-wayne/infra_manager`，本機 origin 與 PRD 第 4 行已更新；UAT 不從 GitHub 抓程式，不受影響）。以下為當時做法記錄：repo 改名為 `infra_manager`。本機沒有 GitHub CLI（`gh`），改名改由使用者在 GitHub 網頁 Settings 操作（repo 未封存，Repository name 欄位直接可改）；完成後 Claude 執行 `git remote set-url origin https://github.com/rt-wayne/infra_manager.git` 並 fetch 驗證，PRD 第 4 行同步。以 `curl https://api.github.com/repositories/<repo 編號>` 查名稱（本 repo 編號 1412912882，2026-10-16 查 `api.github.com/repos/rt-wayne/im_acct_insp` 取得）；以名稱查 API 改名後短時間會回 Not Found，是快取
 - **文件**
   - PRD：網址、jar、log、設定鍵、repo 網址；加一句舊名 im_acct_insp
   - SETUP：第 2、3、4、7、8 節，並新增給負責人的「改名部署步驟」
@@ -122,5 +123,5 @@
 
 ## 交接狀態
 
-- 目前階段：批 1 已完成（2026-10-16，起點 `4fc1f79`；審查與測試通過）；批 2 施工中，回合 1（Java 套件改名）已完成，下一步回合 2（外層目錄搬家等，見本檔第四節其餘各條）
+- 目前階段：批 1 已完成（2026-10-16，起點 `4fc1f79`；審查與測試通過）；批 2 程式與文件全部完成（回合 1 Java 套件、回合 2 目錄搬家／DB 腳本／vite outDir／文件），剩階段末審查與測試。根目錄空的 `im_acct_insp\`（目錄本身被不明行程鎖住，內容已逐項移到 `infra_manager\`）使用者 2026-10-16 裁示刪除，下次開工時試刪
 - 本階段起點：`238e59d`

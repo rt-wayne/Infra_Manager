@@ -14,12 +14,12 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 施工中 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
+| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 程式與文件已完成、待階段末審查與測試 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 68 項批 2 回合 2——四個外層目錄搬家（`im_acct_insp\` → `infra_manager\` 等，含不進版控的本機設定檔、`target\`、`node_modules\`，要整個資料夾搬；搬前請使用者關閉 VS Code Java 語言服務）、DB 腳本 3 檔改名、vite outDir、文件中的目錄路徑、兩份子 README 標題、刪 PRD 第 3 行過渡說明句；之後階段末平行派 code-reviewer（起點 `238e59d`）與 test-runner。回合 1（Java 套件改名，147 檔）已 commit，兩邊編譯通過、測試未跑（留階段末）。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署（時程由負責人決定）
-- 已改動（未 commit）：無。本機不進版控的 4 個設定檔（後端 `application.properties`、`config\environment.properties`，殼 jar `application.properties`、`config\host.properties`）已改新名，改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）；本機兩支 jar 已重新打包為新檔名
-- 卡住／待確認：UAT 兩支 jar 實際讀的 `environment.properties`、`host.properties` 是打進 jar 的那份還是共用 config 目錄的同名檔（需向 UAT 負責人確認；SETUP 修正寫法兩種情況都涵蓋，不卡修正）
+- 下一步：第 68 項批 2 程式與文件已 commit；階段末審查進行中——平行派 code-reviewer（起點 `238e59d`）與 test-runner（後端、殼 jar、前端測試＋重新打包啟動實測，確認新目錄下 build、vite outDir 正常）。通過後第 68 項結案（從本檔移除、詳情檔可刪或留作記錄由使用者決定）。下次開工先試刪根目錄空的 `im_acct_insp\`（使用者 2026-10-16 裁示 ②A）。UAT：jar 由開發機打包後使用者人工交給 UAT 負責人，負責人照 SETUP 第 8 節第 5 步起部署
+- 已改動（未 commit）：無。本機不進版控的設定檔已隨資料夾整包搬到新目錄（仍被 .gitignore 忽略），改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）；搬目錄後本機尚未重新編譯，交由階段末 test-runner
+- 卡住／待確認：UAT 兩支 jar 實際讀共用 config 目錄同名檔還是 jar 內那份，仍待向 UAT 負責人確認（第 74 項；SETUP 第 8 節兩種都涵蓋，不卡）
 ## 僅記錄未拍板
 
 | ID | 摘要 | 提出日 | 詳情 |
@@ -30,7 +30,7 @@
 | 13 | 顯示名兩種算法不一致：`AcctReqDao.nameExpr`（第 42 行，用於第 56-58、181 行與 `AttachDao.java:43`）不 trim、無工號退回；快照用的 `Texts.displayName`（`Texts.java:35-42`）有 trim 與英文名 → 中文名 → 工號退回 | 2026-10-10 | — |
 | 14 | 第二階段功能：定期審查、統計頁、帳號與巡檢匯出、資產分類與巡檢項目維護（緊急存取已拆出為第 46 項）；目前只有權限碼與預留欄位，無程式 | 2026-10-10 | — |
 | 16 | 原始規格書缺件：子 README 與 `.example` 註解（範本已於 2026-10-14 刪除）引用 `spec_im_acct_insp_v2.0.md`、變更單 #1～#4，但 repo 與使用者手上都沒有；PRD 不引用 | 2026-10-10 | — |
-| 17 | `im_acct_insp_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
+| 17 | `infra_manager_web\README.md` 第 2 節「兩包結構」表仍是範本初始描述：說 Controller 目錄只有 `package-info.java`、`src\types\` 與 `src\views\` 只有 `.gitkeep`、router 的 routes 是空陣列，實際都已有程式（4 個型別檔、10 個畫面、14 個 path） | 2026-10-10 | — |
 | 18 | 登入查詢後才被改成停用（STATUS＝0）的帳號，該次登入仍取得 token 與回應中的權限清單；下一次呼叫 API 即因 `TokenIdentityProvider` 檢查 STATUS 而回 A03，攻擊面接近零 | 2026-10-10 | — |
 | 19 | 人工鎖定（DB 直接寫 LOCK_DATE）只擋之後的登入，不擋已發出的 token；`TokenIdentityProvider` 每次請求只查 STATUS 不查 LOCK_DATE。要不要讓鎖定也立即作廢既有 token 屬設計決策 | 2026-10-10 | — |
 | 20 | 門禁卡新增複驗退回後再次回報、卡號沒變時不應更新主表帳號名稱（`RequestService.java:465` 的 `else if`），此分支沒有測試；只有換卡號會更新的測試（`RequestServiceTest.java:231`） | 2026-10-10 | — |
@@ -43,11 +43,11 @@
 | 36 | 測試 DB 的附件 14～18、20 在 DB 有紀錄但實體檔不存在，後端下載回 500「附件檔案不存在」，真實附件下載無法實測（第 30 項瀏覽器實測改以模擬 PDF 驗證下載）。要補檔、刪紀錄或維持現狀未定 | 2026-10-11 | — |
 | 37 | 帳號歷史彈窗在視窗高 900px 時，底部「關閉」鈕被畫面底緣切掉一半（按得到、關得掉）；第 30 項瀏覽器補測發現，與安全標頭無關 | 2026-10-11 | — |
 | 41 | `PRD.md` 表單欄位表「使用人聯絡方式」列寫「灰底範例『#1614 或 Email』」，但畫面（`RequestFormView.vue` 的 `#holderCntct`）是一般 placeholder「請填寫使用人的分機、電話或 Email（外部廠商請務必填寫）」、無灰底；第 40 項審查時發現的既有落差，要改 PRD 照現況或改畫面照 PRD 未定 | 2026-10-11 | — |
-| 44 | `SETUP.md` 第 71 行寫 `npm run build` 會清掉 `im_acct_insp_web\src\frontend\.gitkeep`、要用 `git checkout` 還原，且「該目錄只有 `.gitkeep` 時殼 jar 也能建置」；但使用者已確認刪除該 `.gitkeep`（第 43 項動工前快照 `83a5f62` 一併 commit），現在 git 還原不回來，新 clone 沒有該目錄時殼 jar 能否建置未驗證。`im_acct_insp_web\README.md` 第 32 行「平時只有 `.gitkeep`」同樣過時。第 43 項 test-runner 發現。補充（第 46 項 S3 審查，2026-10-13）：`im_acct_insp_web\im_acct_insp_web\.gitignore` 第 12 行 `!src/frontend/.gitkeep` 例外仍在但檔已不在 git；單純補回沒用，每次 `npm run build`（vite 清空輸出目錄）都會再刪，要一併改建置設定或改用其他方式保留目錄 | 2026-10-12 | — |
+| 44 | `SETUP.md` 第 71 行寫 `npm run build` 會清掉 `infra_manager_web\src\frontend\.gitkeep`、要用 `git checkout` 還原，且「該目錄只有 `.gitkeep` 時殼 jar 也能建置」；但使用者已確認刪除該 `.gitkeep`（第 43 項動工前快照 `83a5f62` 一併 commit），現在 git 還原不回來，新 clone 沒有該目錄時殼 jar 能否建置未驗證。`infra_manager_web\README.md` 第 32 行「平時只有 `.gitkeep`」同樣過時。第 43 項 test-runner 發現。補充（第 46 項 S3 審查，2026-10-13）：`infra_manager_web\infra_manager_web\.gitignore` 第 12 行 `!src/frontend/.gitkeep` 例外仍在但檔已不在 git；單純補回沒用，每次 `npm run build`（vite 清空輸出目錄）都會再刪，要一併改建置設定或改用其他方式保留目錄 | 2026-10-12 | — |
 | 45 | 處理中的按鈕沒有停用外觀：`src/assets/app.css` 第 84 行 `.btn-link` 無 `:disabled` 樣式（只有 `.btn:disabled` 半透明，第 79 行），附件檔名鈕與下載鈕在處理中停用時外觀、游標都不變，下載大檔時看不出在處理。改法一行 `.btn-link:disabled { opacity: .55; cursor: default; }`，但屬全站共用樣式，要目視確認其他畫面的停用連結鈕。第 43 項 code-reviewer 發現，使用者裁示（2026-10-12）留到下一批 | 2026-10-12 | — |
 | 31 | 一個分頁收到 401 清 token 時，其他分頁被連帶整頁重新整理後落在空白登入頁，看不到「登入已逾時」原因（`loginNotice` 只在記憶體，`useSession.ts`）；可在重新整理前把訊息暫存 sessionStorage、登入頁讀出即刪。使用者裁示（2026-10-11）先只記錄：8 小時到期一天只遇一次 | 2026-10-11 | — |
 | 47 | IM_ACCT_JOB_RUN 沒有清理機制；J03（每 15 分鐘）上線後每天約 96 列、一年約 3.5 萬列。第 46 項 architect 發現 | 2026-10-12 | — |
-| 48 | `db\im_acct_insp_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（原本只有 `database.properties.example:20` 一句「有 Public Synonym」，該範本已於 2026-10-14 刪除），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
+| 48 | `db\infra_manager_create_table.sql` 與 `SETUP.md` 都沒有記載 public synonym 與 ap_user 授權怎麼建（原本只有 `database.properties.example:20` 一句「有 Public Synonym」，該範本已於 2026-10-14 刪除），新環境照 SETUP 建好後殼 jar 可能 ORA-00942 讀不到表。第 46 項 architect 發現；S1 會把緊急存取新表的 synonym／GRANT 寫進遞增腳本，但第一階段 21 表的建法仍待補 | 2026-10-12 | — |
 | 49 | 第一階段 21 張表對照 `DB規範_V1_20261002_JLA.xlsx` 規則 3（單字超過 6 碼要用字典縮寫）有 7 個字未縮寫：AFFECTED_CNT、CONTENT_JSON、IS_ENABLED、IS_SELECTABLE、SUGGEST_*、IS_REVIEW_TRIGGER、VERSION_NO；「IM_」前綴也不在規範的業務簡碼表。已上線欄位改名要動程式、PRD 與既有資料。第 46 項 DB 規範對照時發現，使用者裁示（2026-10-12）只登記 | 2026-10-12 | — |
 | 50 | `SqlConstantScanTest` 的黏字檢查目前只抓 `END` 接下一個字（`\bEND[A-Z]`）；同類拼接錯誤還有 `)AS`、`'X'AS`、`:nowAND`、`NULLAS`、漏逗號、連兩個逗號等沒抓。可擴充方向：關鍵字前必須有空白、`,\s*,`、`,\s*(FROM\|WHERE)\b`，要先確認不誤報既有 SQL。另：掃描清單比對只認 `@Repository`，DAO 日後改標 `@Component`、用 `@Bean` 建立或寫成介面／抽象類別時會漏掃而測試照過（目前 15 支都有標），可改依「含 static final String 的類別」或類別名 `*Dao` 比對。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 51 | Service 單元測試把 DAO 全 mock，SQL 文法錯誤要連 DB 才會發現（第 46 項 ENDAS 即此）。不連 DB 的做法有四種：(a) 在片段接縫處斷言前後有空白 (b) 擴充第 50 項的規則 (c) 把各 SQL 常數存快照逐字比對 (d) 引入 JSqlParser 解析（新套件要先審查）；連 DB 的話可在測試環境以 `WHERE 1=0` 包住執行，或呼叫 `DBMS_SQL.PARSE` 只解析不執行。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
@@ -67,10 +67,10 @@
 | 67 | 未來不再有英文名（IM_ACCT_USER.USER_EN_NAME）：顯示名目前都是「英文名 (中文名)」，影響登入身分、切換身分、申請單／待辦／緊急存取／附件人名、Email 內文、三種稽核快照欄、DDL 的 NOT NULL、SETUP 的 SQL 與約 14 個測試檔；先盤點、未定改法（刪欄位或不填、顯示改什麼、舊快照怎麼辦），可與第 13 項（顯示名兩種算法不一致）一起處理。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/67-移除英文名.md](backlog/67-移除英文名.md) |
 | 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫；那些表是開發 Infra_Manager_Java 時建的，目前沒有任何系統在用；使用者 2026-10-15 裁示維持整併後再清、留作整併設計參考，DROP 前逐表列清單給使用者確認）。現況（2026-10-15 查看）：原 Infra_Manager＝「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑，正式機運作中，程式在 `D:\ai\Infra_Manager_OLD`；Infra_Manager_Java 未部署，程式在 `D:\ai\Infra_Manager_Java改寫`（repo `rt-wayne/Infra_Manager_Java`、Java 檔 217 個、套件 `com.mpx.infra_manager_java`、殼 jar 名 `infra_manager_web`，最後程式 commit 2026-10-13，2026-10-16 文件加註停止開發 `3986ec2`）。路線已裁示（使用者 2026-10-16）：①C 以本專案為底，舊 Node 系統（原 Infra_Manager）當需求與驗收依據，從 Infra_Manager_Java 搬業務層、DDL 與測試；②A Java 版 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存（唯讀）；③A 舊系統取號漏洞維持現狀、不改正式機 Node 程式，等整併上線。整併範圍細節（詳情檔待確認 ④～⑩）、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/69-整併原Infra_Manager.md](backlog/69-整併原Infra_Manager.md) |
 | 70 | `PRD.md` 第 11 行與第 660 行（DB 共用硬規則）把 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表寫成同 schema「既有『機房異動申請』模組」的表；實際上那些是開發 Infra_Manager_Java 時建的、沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔，使用者 2026-10-15 說明）。「本模組不可建立、刪除、修改或引用」的規則目前無害，整併（第 69 項）開工時要改寫。第 69 項 architect 評估時發現 | 2026-10-15 | — |
-| 71 | `im_acct_insp\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
+| 71 | `infra_manager\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
-| 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `im_acct_insp_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
+| 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔優先於 jar 內那份——若 UAT 共用目錄有 `host.properties`，改它重啟即可，只改 jar 內那份則要在開發機重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 
 ## 已拍板不做
 

@@ -1,4 +1,4 @@
-# im_acct_insp 專案說明（給接手開發的 AI 助理）
+# infra_manager 專案說明（給接手開發的 AI 助理）
 
 本專案由 template_jdk25_vue_3_5/backend 範本產生於 2026-10-07
 

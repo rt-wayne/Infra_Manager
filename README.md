@@ -1,7 +1,7 @@
-# im_acct_insp 帳號權限管理／機房巡檢系統
+# infra_manager 帳號權限管理／機房巡檢系統
 
 資訊處用的 Web 系統：管理系統帳號、憑證與機房門禁卡的申請、7 關簽核、生效與到期追蹤，並提供機房巡檢紀錄與異常處理。
-由後端 API（`im_acct_insp\`）、殼 jar 與 Vue 前端（`im_acct_insp_web\`）組成，資料存在 Oracle。
+由後端 API（`infra_manager\`）、殼 jar 與 Vue 前端（`infra_manager_web\`）組成，資料存在 Oracle。
 
 - 要跑起來：看 `SETUP.md`
 - 系統規格（現況）：看 `PRD.md`

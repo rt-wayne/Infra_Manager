@@ -1,6 +1,6 @@
 # infra_manager 帳號權限管理／機房巡檢系統
 
-> 專案名稱 `infra_manager`，舊名 `im_acct_insp`。網址、jar、log、設定鍵、Java 套件已用新名；目錄與 DB 腳本檔名仍為舊名，本文件中的這些路徑照實際寫舊名。本功能分批施工中，進度見 `BACKLOG.md` 第 68 項。系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
+> 專案名稱 `infra_manager`，舊名 `im_acct_insp`。系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
 > 遠端倉庫：https://github.com/rt-wayne/infra_manager.git
 > 待辦見 `BACKLOG.md`；版本與變更歷史見 `CHANGELOG.md`；建置、設定、啟動與 DB 維護步驟見 `SETUP.md`。
 
@@ -630,9 +630,9 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 | 程式 | 路徑 | 技術 | 負責 | 不做 |
 |---|---|---|---|---|
-| 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/infra_manager`，API 根 `/infra_manager/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
-| 殼 jar | `im_acct_insp_web\im_acct_insp_web\` | Spring Boot；context `/infra_manager_web` | 提供前端靜態頁；把 `/infra_manager_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
-| 前端 | `im_acct_insp_web\im_acct_insp_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
+| 後端 API | `infra_manager\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/infra_manager`，API 根 `/infra_manager/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
+| 殼 jar | `infra_manager_web\infra_manager_web\` | Spring Boot；context `/infra_manager_web` | 提供前端靜態頁；把 `/infra_manager_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
+| 前端 | `infra_manager_web\infra_manager_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
 | DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
 
 ```
@@ -659,7 +659,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
 - **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
 
-**後端主要程式**（`im_acct_insp\src\main\java\com\mpx\infra_manager\`）
+**後端主要程式**（`infra_manager\src\main\java\com\mpx\infra_manager\`）
 
 | 層 | 檔案與職責 |
 |---|---|
@@ -669,7 +669,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
-**前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
+**前端主要程式**（`infra_manager_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
 
 **殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
@@ -692,7 +692,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 ### 資料結構
 
-23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/im_acct_insp_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/im_acct_insp_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/im_acct_insp_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
+23 張表、47 個索引（PK 23＋一般 24）、5 個 SEQUENCE；不建實體 FK，參照由程式維護。第一階段 21 張表已於 2026-10-10 對照測試 DB（Oracle 19c、RD_USER）逐表核對：表、PK、欄位、序列、IND_IM_ACCT_REQ_04 運算式皆相符。建表 DDL 與初始資料 SQL 在 repo 的 `db/infra_manager_create_table.sql`（23 張表、含全部欄位 COMMENT 與 IND_IM_ACCT_REQ_04 不得改名警語）與 `db/infra_manager_init_data.sql`（7 張代碼表 116 筆＋註解掉的初始管理者範本，不含帳密；VENDOR 類別 IS_ENABLED 依交接文件寫 0，測試 DB 相同），第一階段部分自測試 DB 反向產出並逐句比對一致。緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT 另有既有環境升級腳本 `db/infra_manager_phase2_emg.sql`（可重跑；含兩表的 PUBLIC synonym 與授權給殼 jar 連線帳號 AP_USER：IM_EMG_ACCESS 授 SELECT／INSERT／UPDATE、IM_EMG_AFFECT_ACCT 授 SELECT／INSERT，無 DELETE；建表檔沒有 synonym 與授權，新環境建完表仍須跑本腳本補上；測試 DB 已於 2026-10-13 執行並核對），命名依公司 DB 規範 V1（2026-10-02 版；規範檔不在 repo，向專案負責人索取）。測試 DB 字元集為 AL32UTF8（2026-10-11 查詢）。日常 DB 維護 SQL 與手動觸發排程的 curl 範例見 `SETUP.md` 第 6、7 節。
 
 **慣例**
 
@@ -969,7 +969,7 @@ END
 
 **顯示名的兩種算法**：快照欄（*_NAME）由 `Texts.displayName` 產生（含 trim、英文名空白退回中文名再退回工號）；申請單明細的 applyByName／execByName／verifyByName 與附件上傳人則由 SQL 即時 JOIN 計算（`AcctReqDao.nameExpr`：中文名為空只顯示英文名，否則「英文名 (中文名)」，不 trim、無工號退回）。見 BACKLOG 第 13 項。
 
-**初始資料**（代碼表 7 張隨 `db\im_acct_insp_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔，以 DB 手動維護；筆數為測試 DB 實查值）
+**初始資料**（代碼表 7 張隨 `db\infra_manager_init_data.sql` 建立，CREATE_BY＝SYSTEM、STATUS＝1；人員三表 IM_ACCT_USER、IM_ACCT_ROLE_USER、IM_EXEC_MAP 不在該檔，以 DB 手動維護；筆數為測試 DB 實查值）
 
 | 表 | 筆數 | 內容 |
 |---|---|---|
@@ -1193,7 +1193,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 實際設定檔不進 git，repo 內也沒有範本，向專案負責人取得；以下只列 key 與用途，取得後怎麼放、要改哪些值見 `SETUP.md`。
 
-**後端 `im_acct_insp\src\main\resources\`**
+**後端 `infra_manager\src\main\resources\`**
 
 | 檔案 | key | 用途 |
 |---|---|---|
@@ -1217,7 +1217,7 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 `environment.properties` 不存在時後端仍可啟動、缺 key 用程式預設值（附件根目錄除外）。
 
-**殼 jar `im_acct_insp_web\im_acct_insp_web\src\main\resources\`**
+**殼 jar `infra_manager_web\infra_manager_web\src\main\resources\`**
 
 | 檔案 | key | 用途 |
 |---|---|---|

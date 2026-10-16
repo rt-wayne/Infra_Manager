@@ -9,7 +9,7 @@
 |---|---|---|
 | JDK | 25 | 後端與殼 jar（`JAVA_HOME` 指向 JDK 25） |
 | Maven | 不需安裝 | 兩個 jar 都附 Maven Wrapper（`mvnw`／`mvnw.cmd`，固定 Maven 3.9.16） |
-| Node.js | 24 以上 | 前端（`im_acct_insp_web\im_acct_insp_web_frontend\.nvmrc`） |
+| Node.js | 24 以上 | 前端（`infra_manager_web\infra_manager_web_frontend\.nvmrc`） |
 | Oracle | 19c | schema RD_USER，須已有本模組 23 張表與初始資料（建表與初始資料 SQL 在 `db\`，用法見第 6 節；只有第一階段 21 張表的環境先跑第 6 節的升級腳本） |
 | DB 連線資訊 API | — | 後端執行期向它取得 DB 連線資訊，須能連到 |
 
@@ -19,14 +19,14 @@
 
 | 目錄 | 檔案 | 必填重點 |
 |---|---|---|
-| `im_acct_insp\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager`；`server.port`；`server.servlet.context-path=/infra_manager`（少了這行，殼 jar 轉送會回 404）；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
-| `im_acct_insp\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
-| `im_acct_insp\src\main\resources\` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
-| `im_acct_insp\src\main\resources\` | `config\environment.properties` | `infra.manager.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
-| `im_acct_insp_web\im_acct_insp_web\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager_web`；`server.port`；`server.servlet.context-path=/infra_manager_web`；`spring.servlet.multipart.enabled` 保持關閉 |
-| `im_acct_insp_web\im_acct_insp_web\src\main\resources\` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留。`backend.api.domain` 只寫協定＋主機、不帶 port；`infra.manager.path` 含後端前綴，填 `/infra_manager/api/v1`；`infra.manager.domain.path` 填 `${backend.api.domain}${backend.api.port}${infra.manager.path}` |
+| `infra_manager\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager`；`server.port`；`server.servlet.context-path=/infra_manager`（少了這行，殼 jar 轉送會回 404）；要實際寄信填 `spring.mail.host=mail.pxmart.com.tw` |
+| `infra_manager\src\main\resources\` | `config\host.properties` | DB 連線資訊 API 的三個 key；四個 key 都要保留（值可空） |
+| `infra_manager\src\main\resources\` | `config\database.properties` | 取消 `itflow.db.alias` 的註解並填入 DB 別名 |
+| `infra_manager\src\main\resources\` | `config\environment.properties` | `infra.manager.attach.dir` 填附件根目錄絕對路徑；寄信的寄件人與寄送名單見下方 |
+| `infra_manager_web\infra_manager_web\src\main\resources\` | `application.properties` | `spring.application.name=infra_manager_web`；`server.port`；`server.servlet.context-path=/infra_manager_web`；`spring.servlet.multipart.enabled` 保持關閉 |
+| `infra_manager_web\infra_manager_web\src\main\resources\` | `config\host.properties` | 後端 API 的三個 key；四個 key 都要保留。`backend.api.domain` 只寫協定＋主機、不帶 port；`infra.manager.path` 含後端前綴，填 `/infra_manager/api/v1`；`infra.manager.domain.path` 填 `${backend.api.domain}${backend.api.port}${infra.manager.path}` |
 
-**既有環境升級（2026-10-14 起的版本）**：DB 別名的 key 由 `db.connect.itflow` 改名為 `itflow.db.alias`。已有 `config\database.properties` 的環境（各開發機、UAT／正式的建置機），重新建置前把該行 key 改名、值不變（例 `db.connect.itflow=itflow_uat` → `itflow.db.alias=itflow_uat`）。沒改的話建置會成功、但後端啟動失敗，log 出現 `Could not resolve placeholder 'itflow.db.alias'`。
+**既有環境升級（2026-10-14 起的版本）**：DB 別名的 key 由 `db.connect.itflow` 改名為 `itflow.db.alias`。已有 `config\database.properties` 的環境（各開發機，含打包 UAT／正式 jar 的那台），重新建置前把該行 key 改名、值不變（例 `db.connect.itflow=itflow_uat` → `itflow.db.alias=itflow_uat`）。沒改的話建置會成功、但後端啟動失敗，log 出現 `Could not resolve placeholder 'itflow.db.alias'`。
 
 - 附件根目錄在 Windows 要用 `/` 或 `\\`（例 `D:/home/infra_manager/attach`）；寫成單一 `\` 會被當跳脫字元，變成相對路徑而啟動失敗。目錄須讓執行帳號可讀寫。
 - 測試環境若要用 baseDate 手動跑排程，把 `infra.manager.job.allow-base-date` 設為 true；正式環境保持 false。J03（緊急存取逾期通知）預設每 15 分鐘跑一次，不想在本機跑就把 `infra.manager.job.j03.cron` 設為 `-`。
@@ -39,7 +39,7 @@
 
 ## 3. 後端建置與啟動
 
-在 `im_acct_insp\` 下：
+在 `infra_manager\` 下：
 
 ```
 .\mvnw.cmd clean package
@@ -53,25 +53,25 @@ java -jar target\infra_manager-0.0.1-SNAPSHOT.jar
 
 ## 4. 前端與殼 jar 建置與啟動
 
-先啟動後端，再於 `im_acct_insp_web\` 下：
+先啟動後端，再於 `infra_manager_web\` 下：
 
 ```
-cd im_acct_insp_web_frontend
+cd infra_manager_web_frontend
 npm install
 npm test
 npm run build
-cd ..\im_acct_insp_web
+cd ..\infra_manager_web
 .\mvnw.cmd clean package
 java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 ```
 
 - `npm test` 跑 Vitest（jsdom），測試檔在 `tests\`。
-- `npm run build` 先做型別檢查（`vue-tsc --build`）再輸出到 `im_acct_insp_web\src\frontend`，會清空該目錄（含 `.gitkeep`）；要還原 `.gitkeep` 用 `git checkout`。該目錄只有 `.gitkeep` 時殼 jar 也能建置。型別檢查也可單獨跑 `npm run type-check`。
+- `npm run build` 先做型別檢查（`vue-tsc --build`）再輸出到 `infra_manager_web\src\frontend`，會清空該目錄（含 `.gitkeep`）；要還原 `.gitkeep` 用 `git checkout`。該目錄只有 `.gitkeep` 時殼 jar 也能建置。型別檢查也可單獨跑 `npm run type-check`。
 - 開啟 `http://localhost:<殼 jar 的 server.port>/infra_manager_web/`。
-- 開發時可另開 `npm run dev`（Vite dev server），`/infra_manager_web/api` 會 proxy 到本機殼 jar，殼 jar 須先啟動。proxy 目標寫在 `im_acct_insp_web_frontend\vite.config.ts` 的 `server.proxy`（目前 `http://localhost:8787`），殼 jar 改 `server.port` 時要一起改，否則 API 會連不上。
+- 開發時可另開 `npm run dev`（Vite dev server），`/infra_manager_web/api` 會 proxy 到本機殼 jar，殼 jar 須先啟動。proxy 目標寫在 `infra_manager_web_frontend\vite.config.ts` 的 `server.proxy`（目前 `http://localhost:8787`），殼 jar 改 `server.port` 時要一起改，否則 API 會連不上。
 - 殼 jar log：`/home/tomcat/log/infra_manager_web/infra_manager_web.yyyy-MM-dd.log`（Windows 依啟動磁碟機），保留 30 天。
 - 用殼 jar 開的畫面空白、樣式或圖片沒出來時，按 F12 看 Console：出現 `Content Security Policy`（Chrome／Edge）或 `Content-Security-Policy`（Firefox）字樣的錯誤，代表前端用了外站資源、行內程式、`<style>` 區塊或 data: 圖片，被殼 jar 的安全標頭擋下（HTML 的 style 屬性已放行）。`npm run dev` 開的畫面不經過殼 jar、不帶這個標頭，所以這類問題開發時看不到，只在殼 jar 開的畫面出現。放寬步驟：
-  1. 改 `im_acct_insp_web\src\main\java\com\mpx\infra_manager_web\config\SecurityHeadersConfig.java` 的 `CSP`，加上錯誤訊息點名的項目。來源只填協定加主機，不帶路徑（帶路徑就只對得到那一個檔）。例如外站字型通常要先載外站的 CSS，`style-src` 與 `font-src` 都要加：`style-src 'self' https://字型主機; font-src 'self' https://字型主機`。
+  1. 改 `infra_manager_web\src\main\java\com\mpx\infra_manager_web\config\SecurityHeadersConfig.java` 的 `CSP`，加上錯誤訊息點名的項目。來源只填協定加主機，不帶路徑（帶路徑就只對得到那一個檔）。例如外站字型通常要先載外站的 CSS，`style-src` 與 `font-src` 都要加：`style-src 'self' https://字型主機; font-src 'self' https://字型主機`。
   2. 同步改 `src\test\java\com\mpx\infra_manager_web\config\SecurityHeadersConfigTest.java` 裡寫死的 CSP 預期值，否則 `.\mvnw.cmd clean package` 會測試失敗。
   3. 同步改 `PRD.md`「安全標頭」那段的 CSP 值。
   4. 重建殼 jar，重新啟動。
@@ -96,14 +96,14 @@ java -jar target\infra_manager_web-0.0.1-SNAPSHOT.jar
 
 正式環境一律用 `db\` 兩個檔案在空 schema 建，**不要從測試 DB 匯出或複製**（測試 DB 有真實員工的測試帳號與測試單據）。依序執行：
 
-1. `db\im_acct_insp_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
-2. `db\im_acct_insp_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
+1. `db\infra_manager_create_table.sql`：在空 schema 建 23 張表、索引、5 個序列與欄位 COMMENT（需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額）。本檔沒有遇錯即停，且 DDL 每句自動提交：中途失敗時，先 DROP 已建立的表與序列（或請 DBA 清空 schema）再從頭重跑，否則已存在的表會報 ORA-00955。
+2. `db\infra_manager_init_data.sql`：代碼表 116 筆初始資料（檔首 `WHENEVER SQLERROR EXIT ROLLBACK`，遇錯即停並回滾）。
 
-**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\im_acct_insp_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表的 synonym 與授權建法仍未記載（見 `BACKLOG.md` 第 48 項）。
+**既有環境升級到第二階段緊急存取**（已照上面建好 21 張表的測試、正式環境）：以 RD_USER 執行 `db\infra_manager_phase2_emg.sql`（SQL Developer 用「執行指令碼」F5；SQL*Plus 同樣先 `set NLS_LANG=.AL32UTF8`）。本檔可重跑：表與索引已存在就印「已存在，略過」，COMMENT 重覆執行無害；本檔也會建兩張新表的 PUBLIC synonym 並授權給殼 jar 連線帳號 AP_USER（`IM_EMG_ACCESS` 授 SELECT／INSERT／UPDATE、`IM_EMG_AFFECT_ACCT` 授 SELECT／INSERT；比照第一階段的 PUBLIC synonym 建法，RD_USER 自己有 CREATE PUBLIC SYNONYM 權限）。檔尾五句查詢會列出兩張表、三個 IND_ 索引（主鍵索引已排除）、兩表欄數（30、11）及無 COMMENT 欄位數（期望 0）、兩個 PUBLIC synonym、AP_USER 的 5 筆授權供核對，期望值寫在該段註解。檔頭設了遇錯即停、檔尾已解除，中途失敗直接從頭重跑。全新環境用建表檔建完表後**仍須跑本檔**：建表檔沒有 synonym 與授權，本檔重跑時表與索引會印「已存在，略過」，只補上這兩張表的 synonym 與 GRANT；第一階段 21 張表的 synonym 與授權建法仍未記載（見 `BACKLOG.md` 第 48 項）。
 
 建完補第一位管理者，**用 SQL Developer 另開一個連線**執行（姓名含中文；也不要接在跑 init_data 檔的 SQL*Plus 連線裡——該檔的遇錯即停設定整個連線都有效，之後任何一句打錯都會直接結束 SQL*Plus 並回滾）：
 
-1. 打開 `im_acct_insp_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【密碼雜湊】等占位符換成實際值。
+1. 打開 `infra_manager_init_data.sql` 檔尾的「初始管理者範本」，把最下面兩句 INSERT 複製到 SQL 工具，**只去掉這幾行行首的「-- 」**（沒去掉的話整段都是註解，執行不會報錯、但什麼都沒寫入），把【工號】【密碼雜湊】等占位符換成實際值。
 2. 要讓這位管理者能處理申請單的執行回報，再依下方第 6a 段為**每個帳號類別各加一列**（關卡 6 認執行人對照表 IM_EXEC_MAP、不認角色；類別代碼用下方查代碼的第二句查）。
 3. 執行以上全部 INSERT，確認每句都影響 1 筆後，執行 `COMMIT;`。
 
@@ -261,7 +261,7 @@ DELETE FROM IM_ACCT_NOTIFY_LOG
 
 ### 產生密碼雜湊（PwdHashTool）
 
-在 `im_acct_insp\` 下（`JAVA_HOME` 已指向 JDK 25）：
+在 `infra_manager\` 下（`JAVA_HOME` 已指向 JDK 25）：
 
 ```
 .\mvnw.cmd -q compile
@@ -381,7 +381,7 @@ UAT 上兩個 jar 由 tomcat 帳號以 `java -jar -Dserver.port=<port> <jar> --s
        → 後端 /infra_manager/api/v1/...（context-path /infra_manager）
 ```
 
-- **後端必須有 context-path `/infra_manager`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。前綴寫在後端 `application.properties` 的 `server.servlet.context-path=/infra_manager`，隨 jar 打包，啟動指令不用加任何參數。該檔不進 git，打包前先確認建置機那份有這一行。
+- **後端必須有 context-path `/infra_manager`**：Apache 轉過去時不拿掉前綴，後端沒有前綴就一律回 404。前綴寫在後端 `application.properties` 的 `server.servlet.context-path=/infra_manager`，隨 jar 打包，啟動指令不用加任何參數。該檔不進 git，打包前先確認開發機（打包 jar 的機器）那份有這一行。
 - **不要把 context-path 寫進共用 config 目錄的設定檔**：該目錄所有 jar（含其他系統）都會讀，寫進去它們會一起多一段前綴而壞掉。反過來，共用目錄任何一個檔（不限 `application.properties`）若有這個 key，會蓋掉 jar 內的那一行。部署前兩項檢查：`grep -rn "context-path" <共用 config 目錄>` 應無輸出；`unzip -p <後端 jar> BOOT-INF/classes/application.properties | grep context-path` 應印出 `server.servlet.context-path=/infra_manager`。
 - 殼 jar 的 `config\host.properties`：`backend.api.domain` 直接填 Apache 的協定＋主機實際值（不帶 port），**不要沿用 `${itflow.domain}`**：共用 config 目錄的檔案優先於 jar 內設定，`itflow.domain` 是共用 key，值由其他系統決定，可能不是 Apache。`backend.api.port` 填 `:<Apache port>`；留空會連到該協定的預設 port（http 為 80、https 為 443），不是 Apache 這個 port。`infra.manager.path` 填 `/infra_manager/api/v1`。
 - 實際 port 查法：`ps -ef | grep -v grep | grep java | grep -o -- '-Dserver.port=[0-9]*'` 只取出各 jar 的 port（完整的 `ps` 輸出含同台所有系統的啟動參數，可能夾著密碼，不要整段貼到工單或對話）；`ss -ltnp` 看哪些 port 在聽；Apache 規則用 `grep -ri proxypass /etc/httpd/` 查。
@@ -410,25 +410,30 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/j
 
 專案由 `im_acct_insp` 改名為 `infra_manager`：網址前綴、jar 檔名、log 目錄與設定鍵都換了新名。UAT 從舊版換到這一版時照下列順序做一次；之後的換版回到上方平常流程。
 
+jar 一律在開發機打包，再由專案擁有者人工交給 UAT 負責人（UAT 不自行建置）。第 2～4 步在開發機做（打包 jar 時處理，UAT 負責人不用做）；第 5 步起由 UAT 負責人在 UAT 主機做。
+
 1. **新 jar 與設定檔要在同一次部署一起更新。** 程式只認新設定鍵 `infra.manager.*`，設定檔還是舊鍵 `im.acct.insp.*` 時：有預設值的鍵會默默退回預設、不報錯（例如寄件人變成留空＝只寫 log、不寄信，排程與寄送名單也回到預設）；附件根目錄沒有預設值，讀不到時後端直接啟動失敗。
-2. **建置機的 `application.properties`**（不進 git，打包前改好）：
+2. **〔開發機〕`application.properties`**（不進 git，打包前改好）：
    - 後端：`spring.application.name=infra_manager`、`server.servlet.context-path=/infra_manager`
    - 殼 jar：`spring.application.name=infra_manager_web`、`server.servlet.context-path=/infra_manager_web`
-
-   第 3、4 步的兩個設定檔同樣會打進 jar，要一起改好再到第 5 步打包；先打包再改，jar 裡帶的仍是舊鍵，兩支 jar 都會啟動失敗。
-3. **後端 `config\environment.properties`**（建置機上打進 jar 的那份先改；UAT 共用 config 目錄若另有同名檔，也一併改）：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`）。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。另把 `infra.manager.mail.site-url` 的值改成新前端網址 `http://<主機>:<殼 jar port>/infra_manager_web/`，否則信末「前往系統」連結會指到舊網址。
-4. **殼 jar `config\host.properties`**（同第 3 步：建置機那份先改，共用 config 目錄若有同名檔也一併改）：刪掉 `im.acct.insp.path`、`im.acct.insp.domain.path` 兩行，改成：
-   ```
-   infra.manager.path=/infra_manager/api/v1
-   infra.manager.domain.path=${backend.api.domain}${backend.api.port}${infra.manager.path}
-   ```
-   `backend.api.domain`、`backend.api.port` 不變。
-5. **打包與檢查**：照本文件第 3、4 節（後端、殼 jar 的建置）重新打包，產出 `infra_manager-0.0.1-SNAPSHOT.jar` 與 `infra_manager_web-0.0.1-SNAPSHOT.jar`。確認 jar 內已無舊鍵（排除 `#`／`!` 開頭的註解行；只印出現次數、不印設定值），兩條都應印出 `0`：
+3. **〔開發機〕打進 jar 的另兩個設定檔**（不進 git；同樣要在第 4 步打包前改好，先打包再改，jar 裡帶的仍是舊鍵）：
+   - 後端 `config\environment.properties`：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變。
+   - 殼 jar `config\host.properties`：`im.acct.insp.path`、`im.acct.insp.domain.path` 兩行改成 `infra.manager.path=/infra_manager/api/v1`、`infra.manager.domain.path=${backend.api.domain}${backend.api.port}${infra.manager.path}`。
+4. **〔開發機〕打包與檢查**：照本文件第 3、4 節（後端、殼 jar 的建置）重新打包，產出 `infra_manager-0.0.1-SNAPSHOT.jar` 與 `infra_manager_web-0.0.1-SNAPSHOT.jar`。確認 jar 內已無舊鍵（排除 `#`／`!` 開頭的註解行；只印出現次數、不印設定值），兩條都應印出 `0`；context-path 檢查應印出 `server.servlet.context-path=/infra_manager`。檢查通過後把兩個 jar 交給 UAT 負責人：
    ```bash
    unzip -p infra_manager-0.0.1-SNAPSHOT.jar BOOT-INF/classes/config/environment.properties | grep -v '^[[:space:]]*[#!]' | grep -c 'im\.acct\.insp'
    unzip -p infra_manager_web-0.0.1-SNAPSHOT.jar BOOT-INF/classes/config/host.properties | grep -v '^[[:space:]]*[#!]' | grep -c 'im\.acct\.insp'
+   unzip -p infra_manager-0.0.1-SNAPSHOT.jar BOOT-INF/classes/application.properties | grep context-path
    ```
-   共用 config 目錄：`grep -rn "im\.acct\.insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略）；有的話那幾行一起改成 `infra.manager.` 開頭。context-path 的兩項檢查照上方第二點做，`unzip` 那條應印出 `server.servlet.context-path=/infra_manager`。
+5. **〔UAT〕共用 config 目錄的設定檔**（啟動參數 `--spring.config.additional-location` 指的目錄；這裡的同名檔優先於 jar 內那份）：
+   - `environment.properties`：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`）。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。另把 `infra.manager.mail.site-url` 的值改成新前端網址 `http://<主機>:<殼 jar port>/infra_manager_web/`，否則信末「前往系統」連結會指到舊網址。
+   - `host.properties`：刪掉 `im.acct.insp.path`、`im.acct.insp.domain.path` 兩行，改成：
+     ```
+     infra.manager.path=/infra_manager/api/v1
+     infra.manager.domain.path=${backend.api.domain}${backend.api.port}${infra.manager.path}
+     ```
+     `backend.api.domain`、`backend.api.port` 不變。
+   - 改完檢查：`grep -rn "im\.acct\.insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略）；有的話那幾行一起改成 `infra.manager.` 開頭。`grep -rn "context-path" <共用 config 目錄>` 應無輸出（見上方第二點）。
 6. **Apache 新增轉發規則**：`ProxyPass /infra_manager http://localhost:<後端 port>/infra_manager`；原本若有 `/im_acct_insp` 的 `ProxyPassReverse`，也比照新增一條 `/infra_manager` 的。舊的 `/im_acct_insp` 規則先留著，等第 9 步驗證通過後再移除。
 7. **建立新 log 目錄**：`/home/tomcat/log/infra_manager/`、`/home/tomcat/log/infra_manager_web/`，並給 tomcat 帳號寫入權限。舊 log 留在舊目錄 `/home/tomcat/log/im_acct_insp/`、`/home/tomcat/log/im_acct_insp_web/`，不用搬。
 8. **停掉舊版兩個 jar，改用新 jar 檔名啟動**：啟動指令照本節開頭的格式，只把 jar 換成 `infra_manager-0.0.1-SNAPSHOT.jar`、`infra_manager_web-0.0.1-SNAPSHOT.jar`，port 與其他參數不變。

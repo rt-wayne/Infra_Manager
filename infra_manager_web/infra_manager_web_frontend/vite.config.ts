@@ -12,6 +12,9 @@
 // 修改日期: 2026-10-16
 // 變更說明: BACKLOG 第 68 項批 1：base 與 dev proxy 路徑改 /infra_manager_web（隨殼 jar context-path 改名）；
 //           outDir 的目錄名留到批 2 搬目錄時再改
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 2：outDir 改 ../infra_manager_web/src/frontend（殼 jar 目錄改名）
 // ============================================================
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -20,7 +23,7 @@ export default defineConfig({
   plugins: [vue()],
   base: '/infra_manager_web/',
   build: {
-    outDir: '../im_acct_insp_web/src/frontend',
+    outDir: '../infra_manager_web/src/frontend',
     emptyOutDir: true
   },
   server: {

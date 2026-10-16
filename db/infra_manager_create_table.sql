@@ -5,13 +5,13 @@
 --       本系統無外鍵、無觸發器；交易表（申請單、巡檢單等）初始為空。
 -- 來源：2026-10-10 以 DBMS_METADATA 自測試 DB（Oracle 19c）反向產出後整理；
 --       2026-10-12 加入第二階段緊急存取兩表（IM_EMG_ACCESS、IM_EMG_AFFECT_ACCT）與相關 COMMENT，
---       與既有環境升級腳本 im_acct_insp_phase2_emg.sql 內容一致。
+--       與既有環境升級腳本 infra_manager_phase2_emg.sql 內容一致。
 -- 約定：欄位型別、必填、索引與文件衝突時，以本檔為準（交接文件開頭的約定）。
 -- 前提：在空 schema 執行，需 CREATE TABLE、CREATE SEQUENCE 權限與表空間配額；
 --       檔案編碼 UTF-8，DB 字元集需可存中文（如 AL32UTF8）。
 --       SQL*Plus 執行前先設 NLS_LANG=.AL32UTF8、SQL Developer 開檔時選 UTF-8，
 --       否則 COMMENT 的中文會無聲變成亂碼（不會報錯）。
--- 注意：本檔不含任何帳密、主機位址；初始資料見 im_acct_insp_init_data.sql。
+-- 注意：本檔不含任何帳密、主機位址；初始資料見 infra_manager_init_data.sql。
 -- ============================================================================
 
 -- ===== TABLE IM_ACCT

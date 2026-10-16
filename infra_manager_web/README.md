@@ -1,8 +1,8 @@
-# im_acct_insp_web 專案說明（給接手開發的 AI 助理）
+# infra_manager_web 專案說明（給接手開發的 AI 助理）
 
 本專案由 template_jdk25_vue_3_5/frontend 範本產生於 2026-10-07
 
-這是一個前端 Web 專案，由公司開發範本產生，分成兩包：Spring Boot 4.1／Java 25 殼 jar（`im_acct_insp_web\`）與 Vue 3.5＋TypeScript 前端（`im_acct_insp_web_frontend\`）。
+這是一個前端 Web 專案，由公司開發範本產生，分成兩包：Spring Boot 4.1／Java 25 殼 jar（`infra_manager_web\`）與 Vue 3.5＋TypeScript 前端（`infra_manager_web_frontend\`）。
 殼 jar 服務前端 build 出來的頁面；頁面的 API 呼叫由殼 jar 裡各功能自己寫的 Controller 以 `RestTemplate` 呼叫後端 API，並把回應原樣回傳。本專案**不連 DB、沒有 SQL**。
 
 ## 1. 開場與鐵律
@@ -25,18 +25,18 @@
 
 | 位置 | 用途 | 可否修改 |
 |---|---|---|
-| `im_acct_insp_web\src\main\java\com\mpx\Application.java` | 殼 jar 啟動類別（掃描根 `com.mpx`） | 不可 |
-| `im_acct_insp_web\src\main\java\com\mpx\common\web\` | `RestTemplateConfig`：殼 jar 唯一共用元件，提供 `RestTemplate` bean（connect 5 秒、read 120 秒），Controller 注入使用 | 不可 |
-| `im_acct_insp_web\src\main\java\com\mpx\infra_manager_web\` | 呼叫後端的 Controller 放這裡（子套件自訂，例 `controller`）；目前只有佔位用的 `package-info.java` | 自由新增 |
-| `im_acct_insp_web\src\main\resources\` | `application.properties`、`config\host.properties`、`logback-spring.xml` | 可改值 |
-| `im_acct_insp_web\src\frontend\` | 前端 build 產物（由 `npm run build` 寫入，不進 git）；平時只有 `.gitkeep` | 不要手改 |
-| `im_acct_insp_web_frontend\src\types\` | API 請求／回應型別；目前只有佔位用的 `.gitkeep` | 新增功能時新增 |
-| `im_acct_insp_web_frontend\src\api\` | `http.ts`（axios 實例，baseURL `/infra_manager_web/api/v1`）；各功能的 API 函式新增在這裡 | 新增功能時新增 |
-| `im_acct_insp_web_frontend\src\views\` | 畫面；目前只有佔位用的 `.gitkeep` | 自由新增 |
-| `im_acct_insp_web_frontend\src\router\index.ts` | 路由（hash 模式），`routes` 目前是空陣列 | 新增畫面時加一筆 |
-| `im_acct_insp_web_frontend\src\composables\useToast.ts` | toast 通知（查詢失敗提示用） | 可沿用 |
-| `im_acct_insp_web_frontend\src\assets\main.css` | 色票與基礎字級 | 謹慎修改 |
-| `im_acct_insp_web_frontend\tests\` | Vitest 測試；目前有 8 個 `*.spec.ts` 與共用的 `helpers.ts` | 自由新增 |
+| `infra_manager_web\src\main\java\com\mpx\Application.java` | 殼 jar 啟動類別（掃描根 `com.mpx`） | 不可 |
+| `infra_manager_web\src\main\java\com\mpx\common\web\` | `RestTemplateConfig`：殼 jar 唯一共用元件，提供 `RestTemplate` bean（connect 5 秒、read 120 秒），Controller 注入使用 | 不可 |
+| `infra_manager_web\src\main\java\com\mpx\infra_manager_web\` | 呼叫後端的 Controller 放這裡（子套件自訂，例 `controller`）；目前只有佔位用的 `package-info.java` | 自由新增 |
+| `infra_manager_web\src\main\resources\` | `application.properties`、`config\host.properties`、`logback-spring.xml` | 可改值 |
+| `infra_manager_web\src\frontend\` | 前端 build 產物（由 `npm run build` 寫入，不進 git）；平時只有 `.gitkeep` | 不要手改 |
+| `infra_manager_web_frontend\src\types\` | API 請求／回應型別；目前只有佔位用的 `.gitkeep` | 新增功能時新增 |
+| `infra_manager_web_frontend\src\api\` | `http.ts`（axios 實例，baseURL `/infra_manager_web/api/v1`）；各功能的 API 函式新增在這裡 | 新增功能時新增 |
+| `infra_manager_web_frontend\src\views\` | 畫面；目前只有佔位用的 `.gitkeep` | 自由新增 |
+| `infra_manager_web_frontend\src\router\index.ts` | 路由（hash 模式），`routes` 目前是空陣列 | 新增畫面時加一筆 |
+| `infra_manager_web_frontend\src\composables\useToast.ts` | toast 通知（查詢失敗提示用） | 可沿用 |
+| `infra_manager_web_frontend\src\assets\main.css` | 色票與基礎字級 | 謹慎修改 |
+| `infra_manager_web_frontend\tests\` | Vitest 測試；目前有 8 個 `*.spec.ts` 與共用的 `helpers.ts` | 自由新增 |
 
 佔位檔只是讓空資料夾能進 git，新增檔案後留著即可，不必刪。
 
@@ -49,7 +49,7 @@
 
 ### 3.1 殼 jar Controller
 
-新增 `im_acct_insp_web\src\main\java\com\mpx\infra_manager_web\controller\ItemController.java`：
+新增 `infra_manager_web\src\main\java\com\mpx\infra_manager_web\controller\ItemController.java`：
 
 ```java
 package com.mpx.infra_manager_web.controller;
@@ -147,7 +147,7 @@ public class ItemController {
 
 ### 3.2 型別
 
-新增 `im_acct_insp_web_frontend\src\types\item.ts`：
+新增 `infra_manager_web_frontend\src\types\item.ts`：
 
 ```ts
 /** POST /item/search 的請求本文 */
@@ -164,7 +164,7 @@ export interface Item {
 
 ### 3.3 前端 API
 
-新增 `im_acct_insp_web_frontend\src\api\item.ts`：
+新增 `infra_manager_web_frontend\src\api\item.ts`：
 
 ```ts
 import http from './http'
@@ -183,7 +183,7 @@ export function listItems(): Promise<Item[]> {
 
 ### 3.4 畫面
 
-新增 `im_acct_insp_web_frontend\src\views\ItemView.vue`（搜尋列＋表格＋每頁 20 筆分頁＋空狀態＋toast）：
+新增 `infra_manager_web_frontend\src\views\ItemView.vue`（搜尋列＋表格＋每頁 20 筆分頁＋空狀態＋toast）：
 
 ```vue
 <template>
@@ -299,7 +299,7 @@ async function doSearch(): Promise<void> {
 
 ### 3.5 註冊 route
 
-把 `im_acct_insp_web_frontend\src\router\index.ts` 的 `routes` 由空陣列改成下面這一行（檔案其餘不動）：
+把 `infra_manager_web_frontend\src\router\index.ts` 的 `routes` 由空陣列改成下面這一行（檔案其餘不動）：
 
 ```ts
 const routes: RouteRecordRaw[] = [{ path: '/', component: () => import('../views/ItemView.vue') }]
@@ -309,7 +309,7 @@ const routes: RouteRecordRaw[] = [{ path: '/', component: () => import('../views
 
 ### 3.6 Vitest 測試
 
-新增 `im_acct_insp_web_frontend\tests\ItemView.spec.ts`（以 `vi.mock` 替換 API，不打真後端）：
+新增 `infra_manager_web_frontend\tests\ItemView.spec.ts`（以 `vi.mock` 替換 API，不打真後端）：
 
 ```ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -381,8 +381,8 @@ describe('ItemView', () => {
 
 | 檔案 | 內容 |
 |---|---|
-| `im_acct_insp_web\src\main\resources\application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path`（＝`/infra_manager_web`，前端 `base`、`http.ts` 的 `baseURL` 都以此為前綴） |
-| `im_acct_insp_web\src\main\resources\config\host.properties` | 後端 API 位址（下表四個 key）；Controller 以 `@PropertySource("classpath:config/host.properties")` 載入 |
+| `infra_manager_web\src\main\resources\application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path`（＝`/infra_manager_web`，前端 `base`、`http.ts` 的 `baseURL` 都以此為前綴） |
+| `infra_manager_web\src\main\resources\config\host.properties` | 後端 API 位址（下表四個 key）；Controller 以 `@PropertySource("classpath:config/host.properties")` 載入 |
 
 ### host.properties 的四個 key
 

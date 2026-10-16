@@ -7,8 +7,8 @@
 --       兩表的 PUBLIC synonym 與授權給 AP_USER（比照第一階段 synonym 建法，權限採最小範圍）。
 --       不建序列（EMG_ID 由 IM_DOC_SEQ 取號；子表為複合主鍵）、不加既有表欄位、
 --       不寫任何資料列。
--- 對象：已依 im_acct_insp_create_table.sql 建好第一階段 21 張表的既有環境（測試、正式）。
---       全新環境：im_acct_insp_create_table.sql 已含這兩張表與全部 COMMENT，但建表檔沒有 synonym 與授權，
+-- 對象：已依 infra_manager_create_table.sql 建好第一階段 21 張表的既有環境（測試、正式）。
+--       全新環境：infra_manager_create_table.sql 已含這兩張表與全部 COMMENT，但建表檔沒有 synonym 與授權，
 --       建完表仍須執行本檔（表、索引會印「已存在，略過」，只會補上檔尾的 PUBLIC synonym 與 GRANT）。
 -- 可重跑：每個 CREATE 先查 USER_TABLES／USER_INDEXES／ALL_SYNONYMS，已存在就略過（印出「已存在，略過」）；
 --       COMMENT 與 GRANT 本身可重覆執行。跑到一半失敗直接從頭再跑即可。
@@ -194,14 +194,14 @@ COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_DATE IS '審查異常標記時間';
 COMMENT ON COLUMN IM_ACCT.REVIEW_FLAG_BY IS '審查異常標記人工號（有效身分）';
 
 -- ===== COMMENTS：S4b 主管處理（補核准／退回）上線後的補充（S4-⑮⑯）；S6 異常結案再補 EMG_CLOSE_MODIFY 的寫法
--- （只改說明、不動結構；重覆執行無害）。與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
+-- （只改說明、不動結構；重覆執行無害）。與 db\infra_manager_create_table.sql 同句，兩檔同步維護
 COMMENT ON TABLE IM_ACCT IS '帳號主表。被管理的帳號／憑證／門禁卡清冊，存目前生效的內容；新增申請送出時建立（狀態 REVIEW），關卡 6 執行回報時依申請內容更新；審查異常旗標 5 欄（IS_REVIEW_FLAG、REVIEW_FLAG_REASON、REVIEW_FLAG_SOURCE_CODE、REVIEW_FLAG_DATE、REVIEW_FLAG_BY）由緊急存取寫入，修改／停用／重新啟用申請在關卡 7 複驗通過時清除（決策 D42）。帳號單號（ACCT_ID）＝建立它的新增申請 REQ_ID。資料來源：IM_ACCT_REQ 流程寫入、緊急存取旗標。主鍵：ACCT_ID。保留：永久（刪除為狀態 DELETED）';
 COMMENT ON COLUMN IM_ACCT_HIST.STAGE_ID IS '發生關卡，參照 IM_ACCT_APPR_STAGE.STAGE_ID；系統事件為空，緊急存取事件亦為空';
 COMMENT ON COLUMN IM_ACCT_HIST.RESULT_DESCR IS '結果文字（送出時含申請原因、退件時含原因；EMG_MODIFY 帶單號、處理結果（退回含原因）、申請人回報說明與該帳號異動說明；EMG_CLOSE_MODIFY 帶單號、結案人、結案說明與該帳號異動說明）';
 COMMENT ON COLUMN IM_ACCT_HIST.IS_SELF_ACTION IS '自行核准／同人兼任旗標：1＝是、0＝否；EMG_MODIFY＝處理人即申請人、EMG_CLOSE_MODIFY＝結案人即申請人（皆以有效身分比對）。default 0';
 
 -- ===== COMMENTS：S7 排程 J03 上線後的補充（S7-⑧：AFFECTED_CNT 補 J03 定義、ERR_MSG 補「單號」）
--- （只改說明、不動結構；重覆執行無害）。與 db\im_acct_insp_create_table.sql 同句，兩檔同步維護
+-- （只改說明、不動結構；重覆執行無害）。與 db\infra_manager_create_table.sql 同句，兩檔同步維護
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.AFFECTED_CNT IS '處理筆數（J01＝轉逾期筆數＋寄出轉逾期信的帳號數＋寄出到期前 7 天信的帳號數；J02＝彙總列出的帳號數，本週已寄過則為 0；J03＝本次寫入逾期通知紀錄的緊急存取單數，每張算 1 不論收件人幾位）。default 0';
 COMMENT ON COLUMN IM_ACCT_JOB_RUN.ERR_MSG IS '錯誤摘要（失敗筆的帳號或單號與例外類別）';
 
