@@ -9,6 +9,9 @@ package com.mpx.im_acct_insp_web.controller;
 //           SA v0.5 改版（2026-10-07，Claude Opus 5.5，spec_im_acct_insp_v2.0.md 第 6.6、7.2 節）：路徑不變；
 //           改傳 HttpServletRequest 給 BackendForwarder（Authorization、Content-Type、查詢字串原樣轉送），
 //           不再接 X-User-Id 與 @RequestBody
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：說明註解的網址前綴改 /infra_manager_web（專案改名 infra_manager），程式未動
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 頁面打 /im_acct_insp_web/api/v1/inspection-items、/inspections/...，原樣轉給後端同路徑。
+ * 頁面打 /infra_manager_web/api/v1/inspection-items、/inspections/...，原樣轉給後端同路徑。
  * 不解析 payload、不開 CrossOrigin。
  */
 @RestController

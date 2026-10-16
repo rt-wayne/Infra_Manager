@@ -14,18 +14,12 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
+| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 施工中 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：
-- 已改動（未 commit）：
-- 卡住／待確認：
-
-## 已拍板待實作
-
-| ID | 摘要 | 優先 | 詳情 |
-|----|------|------|------|
-| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示 | — | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
-
+- 下一步：第 68 項批 1 程式與文件已 commit（2026-10-16）；階段末審查進行中——平行派 code-reviewer（起點 `4fc1f79`）與 test-runner（後端、殼 jar、前端測試＋重新打包啟動實測新網址）。通過後批 1 結案，再請使用者裁示第 68 項待確認 3（批 2 套件改名做法）後開批 2。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署
+- 已改動（未 commit）：後端 `pom.xml`（artifactId／name）、`logback-spring.xml`（LOG_DIR／檔名）、MailConfig、AttachmentService、JobService、MailAllowList、MailHtml 的設定鍵改 `infra.manager.*`（檔頭只加新變更說明、歷史條目原文保留；AppConfig 只有歷史條目提到舊鍵，不改）、測試 MailConfigContextTest、AttachmentServiceTest、JobAndNotifyTest；本機不進版控的後端 `application.properties`（application.name、context-path `/infra_manager`）與 `config\environment.properties`（鍵名改前綴；附件目錄的值刻意維持 `D:/home/im_acct_insp/attach`，目錄內有既有附件）。回合 2：殼 jar `pom.xml`、`logback-spring.xml`、BackendForwarder 與 package-info 的組合 key 改 `infra.manager.domain.path`、8 支 Controller 說明註解網址、BackendForwarderTest；本機殼 jar `application.properties`（context-path `/infra_manager_web`）與 `config\host.properties`（`infra.manager.path=/infra_manager/api/v1`）；前端 `vite.config.ts`（base、dev proxy；outDir 留批 2）、`http.ts`、`index.html`（標題「Infra Manager」）、`tokenStore.ts`、`package.json`／`package-lock.json`、`session.spec.ts`。四個本機設定檔改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）。程式改完但**尚未重新打包**，本機要重新 build 兩個 jar（前端先 `npm run build`）後才會用新網址；測試尚未跑
+- 卡住／待確認：無
 ## 僅記錄未拍板
 
 | ID | 摘要 | 提出日 | 詳情 |
@@ -59,7 +53,7 @@
 | 51 | Service 單元測試把 DAO 全 mock，SQL 文法錯誤要連 DB 才會發現（第 46 項 ENDAS 即此）。不連 DB 的做法有四種：(a) 在片段接縫處斷言前後有空白 (b) 擴充第 50 項的規則 (c) 把各 SQL 常數存快照逐字比對 (d) 引入 JSqlParser 解析（新套件要先審查）；連 DB 的話可在測試環境以 `WHERE 1=0` 包住執行，或呼叫 `DBMS_SQL.PARSE` 只解析不執行。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 52 | `NotificationService` 把寄信流程的 RuntimeException 一律 catch 後只寫 log：寄信前讀單失敗（例如第 46 項 ENDAS 那種 SQL 錯）時，送出仍成功、主管收不到通知，系統沒有任何可見警示（畫面、排程失敗通知都沒有）。「寄信失敗不影響送出結果」是既定規則，要補的是可見性。第 46 項 ENDAS 修正審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 53 | 前端「字數按碼點、去頭尾空白」的寫法 `[...s.trim()].length` 重複 5 次，分布在 `EmergencyDetailModal.vue`、`EmergencyReportModal.vue`（兩處）、`EmgAcctPicker.vue`、`EmergencyFormView.vue`；可抽成 `utils` 共用函式。使用者看不到差別，這是內部品質問題；日後改字數規則要改 5 處。第 46 項 S5 回合 2 審查時提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
-| 56 | 上線前確認正式環境後端 `im_acct_insp` 是否只跑一個實例：排程鎖（`JobService` 的 AtomicBoolean）只在單一 JVM 內有效，多台會重複寄 J01／J02／J03 的信、互相把執行中的紀錄誤記成失敗；殼 jar 不跑排程、不算。多台或要做高可用時另立項改 DB 鎖。第 46 項排程階段動工時使用者未回答實際部署，先照單台施工 | 2026-10-13 | — |
+| 56 | 上線前確認正式環境後端 `infra_manager` 是否只跑一個實例：排程鎖（`JobService` 的 AtomicBoolean）只在單一 JVM 內有效，多台會重複寄 J01／J02／J03 的信、互相把執行中的紀錄誤記成失敗；殼 jar 不跑排程、不算。多台或要做高可用時另立項改 DB 鎖。第 46 項排程階段動工時使用者未回答實際部署，先照單台施工 | 2026-10-13 | — |
 | 57 | J03 逾期通知在「信已寄出但通知紀錄全部寫不進 DB」（例如新環境沒補 `SEQ_IM_ACCT_NOTIFY_LOG` synonym 或 INSERT 權限、tablespace 滿）時，`NOT EXISTS` 仍成立，同一張單每 15 分鐘重寄給所有 EMG_DECIDE 持有人、一天約 96 封；排程失敗信（回合 2 起當天一封）只警示管理者，擋不住逾期信本身。可改為程式記憶體記住本次執行期間寄過的單號（重啟就清空）。J01 有同樣模式但一天一次。第 46 項 S7 回合 1 審查提出，使用者裁示（2026-10-13）維持現狀只登記 | 2026-10-13 | — |
 | 54 | 待辦頁（`TodoView.vue`）疑似有「彈窗關閉後通知被丟掉」問題：第 46 項 S5 回合 2 審查指出它與緊急存取詳情彈窗同款（彈窗卸載後 emit 遺失），原始細節未留存。2026-10-13 查看結果：核准／退回等動作是在頁面本身的 `run()` 執行（第 221-245 行，成功或 409 時清狀態並重載），但四個彈窗的 `@close`（第 71、88、104、118 行）處理中沒有擋，處理中關掉彈窗後結果是否真的沒顯示未證實，動工前先在瀏覽器重現。使用者裁示（2026-10-13）登記 | 2026-10-13 | — |
 | 59 | 鈴鐺徽章查詢（`useSession.ts` 的 `refreshBadges`）有「舊回應蓋掉新狀態」競態：只在開頭檢查 token，await 回來直接寫入；請求未回時登出（或 401 觸發 `resetSession`）後，晚到的回應會把上一位使用者的資料寫回模組狀態，下一位登入者首次 refresh 完成前可能短暫看到上一位的徽章（含緊急存取單號與申請人姓名）。視窗很窄（請求要比登出慢）；改法：模組層遞增序號，`resetSession` 與每次 `refreshBadges` 開頭 +1，await 回來序號不符就丟棄。既有問題，第 46 項 S9 把外洩範圍擴大到緊急存取資料；S9 審查提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
@@ -67,12 +61,14 @@
 | 61 | 鈴鐺面板視覺與排序小問題：(1) 沒有「查看全部到期清單」鈕時，第二節標題緊貼最後一筆到期項目（`.bell-panel-title` 只有 `margin-bottom`）；(2) `.bell-item:last-of-type` 依元素類型比對，兩節項目都是 `button`，第一節最後一筆的底線會保留；(3) 類別 3 依後端送出時間遞減排序，畫面顯示的卻是退回日期，日期可能看起來不是遞減（SA 沒規定排序，可不改或改顯示送出日）。第 46 項 S9 審查提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
 | 62 | 「我曾申請新增的帳號」區塊的列（`RequestListView.vue` 的 `.mine-row`）在前端測試完全沒有渲染驗證（tests 底下搜尋 `mine-row` 零筆）：門禁卡待發卡顯示、在途「申請處理中」與查看／歷史鈕、AcctOpButtons 權限分支都沒鎖住。既有缺口，申請單列表加收合（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
 | 58 | `AppLayout.vue` 第 80 行 router-view 的 key 含 `route.fullPath`（同一畫面換 query 就整頁重建），三頁靠它在換網址參數時重置：申請表單 `RequestFormView.vue`（setup 一次讀完 resubmit／reqType／acctId／acctName、不監看 query；最嚴重——在異動表單點側欄「＋ 新增申請」會留在異動表單，使用者以為填新增、送出的卻是異動）、帳號列表 `?expiring=1`、緊急存取清單 `?state=`。目前沒有測試鎖住，key 被拿掉時三頁同時退化而測試全綠。可在 `tests/AppLayout.spec.ts` 補測試，以「新增 ↔ 異動切換後表單重建」為主案例。第 46 項 S8 回合 2 審查提出，使用者裁示（2026-10-13）只登記 | 2026-10-13 | — |
-| 63 | UAT 的 Apache 有 `ProxyPass /im_acct_insp` 直通後端，等於後端 API 在 Apache 的 port 上對外可達：繞過殼 jar（前端連不到後端的設計、11 MB 上傳上限都失效），只剩後端自己的 token 檢查。要問 UAT 管理者該 port 是否只限內網；正式環境上線前要確認是否沿用同一條規則。後端加網址前綴（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
+| 63 | UAT 的 Apache 有 `ProxyPass /infra_manager` 直通後端，等於後端 API 在 Apache 的 port 上對外可達：繞過殼 jar（前端連不到後端的設計、11 MB 上傳上限都失效），只剩後端自己的 token 檢查。要問 UAT 管理者該 port 是否只限內網；正式環境上線前要確認是否沿用同一條規則。後端加網址前綴（2026-10-14）時 code-reviewer 發現，使用者裁示登記 | 2026-10-14 | — |
 | 64 | `SETUP.md` 第 26 行寫了郵件主機名稱，與檔頭「不記主機位址」的規則衝突；要移到 PRD 環境設定、改成「向負責人取得」或維持現狀未定。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
-| 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/im_acct_insp/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
+| 65 | `im_acct_insp_交接文件.md` 第 22、29 行仍寫後端根路徑 `/api/v1`，後端已加前綴改為 `/infra_manager/api/v1`；與第 21 項同一題：先決定這份初始交付文件是否持續隨程式維護。後端加網址前綴（2026-10-14）時 code-reviewer 發現 | 2026-10-14 | — |
 | 67 | 未來不再有英文名（IM_ACCT_USER.USER_EN_NAME）：顯示名目前都是「英文名 (中文名)」，影響登入身分、切換身分、申請單／待辦／緊急存取／附件人名、Email 內文、三種稽核快照欄、DDL 的 NOT NULL、SETUP 的 SQL 與約 14 個測試檔；先盤點、未定改法（刪欄位或不填、顯示改什麼、舊快照怎麼辦），可與第 13 項（顯示名兩種算法不一致）一起處理。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/67-移除英文名.md](backlog/67-移除英文名.md) |
 | 69 | 本專案完成後，把原有的 Infra_Manager 整併進本專案；Infra_Manager_Java（原 Infra_Manager 改寫到一半的版本，本專案寄信寫法與信件版面曾比照它）預計不再使用。整併完成後要清掉 DB 中沒有用到的 IM_ 開頭表（IM 即專案名縮寫；那些表是開發 Infra_Manager_Java 時建的，目前沒有任何系統在用；使用者 2026-10-15 裁示維持整併後再清、留作整併設計參考，DROP 前逐表列清單給使用者確認）。現況（2026-10-15 查看）：原 Infra_Manager＝「機房設備異動申請系統」，Node.js（Express＋EJS）、資料存 JSON 檔、port 3200 根路徑，正式機運作中，程式在 `D:\ai\Infra_Manager_OLD`；Infra_Manager_Java 未部署，程式在 `D:\ai\Infra_Manager_Java改寫`（repo `rt-wayne/Infra_Manager_Java`、Java 檔 217 個、套件 `com.mpx.infra_manager_java`、殼 jar 名 `infra_manager_web`，最後程式 commit 2026-10-13，2026-10-16 文件加註停止開發 `3986ec2`）。路線已裁示（使用者 2026-10-16）：①C 以本專案為底，舊 Node 系統（原 Infra_Manager）當需求與驗收依據，從 Infra_Manager_Java 搬業務層、DDL 與測試；②A Java 版 repo 已改名為 `rt-wayne/Infra_Manager_Java` 並封存（唯讀）；③A 舊系統取號漏洞維持現狀、不改正式機 Node 程式，等整併上線。整併範圍細節（詳情檔待確認 ④～⑩）、時程未定。使用者 2026-10-15 交代記錄 | 2026-10-15 | [backlog/69-整併原Infra_Manager.md](backlog/69-整併原Infra_Manager.md) |
 | 70 | `PRD.md` 第 11 行與第 660 行（DB 共用硬規則）把 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表寫成同 schema「既有『機房異動申請』模組」的表；實際上那些是開發 Infra_Manager_Java 時建的、沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔，使用者 2026-10-15 說明）。「本模組不可建立、刪除、修改或引用」的規則目前無害，整併（第 69 項）開工時要改寫。第 69 項 architect 評估時發現 | 2026-10-15 | — |
+| 71 | `im_acct_insp\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
+| 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 
 ## 已拍板不做
 

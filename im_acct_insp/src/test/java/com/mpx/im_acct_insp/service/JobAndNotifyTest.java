@@ -54,6 +54,9 @@ package com.mpx.im_acct_insp.service;
 //           J03 排程失敗信同一種失敗當天只寄一封（PARTIAL 整天一封、FAIL 依例外類別名、開始／結束紀錄寫入失敗同規則、隔天再寄）、J01／J02 不受影響；
 //           審查修補：結束紀錄寫入失敗一律以該例外為類別（FAIL／PARTIAL＋結束失敗各自一種，⑩B）、沒寄到任何人不算已寄下一輪再寄（⑧B）、
 //           SendResult.reached 五種組合、開始紀錄寫入失敗段正向斷言、jobFail 回 boolean
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：排程 cron 設定鍵改為 infra.manager.job.*、網址範例改 /infra_manager_web/（專案改名 infra_manager）
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -751,12 +754,12 @@ class JobAndNotifyTest {
 	void 排程時間與開關有預設值() throws Exception {
 		var m = JobService.class.getMethod("scheduledJ01");
 		var s = m.getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
-		assertThat(s.cron()).isEqualTo("${im.acct.insp.job.j01.cron:0 10 0 * * *}");
+		assertThat(s.cron()).isEqualTo("${infra.manager.job.j01.cron:0 10 0 * * *}");
 		assertThat(s.zone()).isEqualTo("Asia/Taipei");
 		var s2 = JobService.class.getMethod("scheduledJ02").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
-		assertThat(s2.cron()).isEqualTo("${im.acct.insp.job.j02.cron:0 0 8 * * *}");
+		assertThat(s2.cron()).isEqualTo("${infra.manager.job.j02.cron:0 0 8 * * *}");
 		var s3 = JobService.class.getMethod("scheduledJ03").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class);
-		assertThat(s3.cron()).isEqualTo("${im.acct.insp.job.j03.cron:0 */15 * * * *}");
+		assertThat(s3.cron()).isEqualTo("${infra.manager.job.j03.cron:0 */15 * * * *}");
 		assertThat(s3.zone()).isEqualTo("Asia/Taipei");
 		assertThat(new ApiException(HttpStatus.CONFLICT, AcctMsg.E16).getStatus()).isEqualTo(HttpStatus.CONFLICT);
 	}
@@ -871,7 +874,7 @@ class JobAndNotifyTest {
 		assertThat(MailHtml.normalize(" https://h/ctx// ")).isEqualTo("https://h/ctx");
 		assertThat(MailHtml.normalize("HTTP://H/ctx")).isEqualTo("HTTP://H/ctx");
 		// 從瀏覽器網址列整串貼上
-		assertThat(MailHtml.normalize("http://h:8787/im_acct_insp_web/#/")).isEqualTo("http://h:8787/im_acct_insp_web");
+		assertThat(MailHtml.normalize("http://h:8787/infra_manager_web/#/")).isEqualTo("http://h:8787/infra_manager_web");
 		assertThat(MailHtml.normalize("http://h/ctx/#/requests?x=1")).isEqualTo("http://h/ctx");
 		assertThat(MailHtml.normalize("http://h/ctx/index.html")).isEqualTo("http://h/ctx");
 		assertThat(MailHtml.normalize("http://h/ctx/INDEX.HTML#/todo")).isEqualTo("http://h/ctx");

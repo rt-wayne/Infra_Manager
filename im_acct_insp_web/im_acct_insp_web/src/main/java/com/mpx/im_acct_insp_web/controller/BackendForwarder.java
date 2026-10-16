@@ -14,6 +14,9 @@ package com.mpx.im_acct_insp_web.controller;
 //           POST 不再強制標 JSON：Content-Type 照請求原值（含 multipart 的 boundary），本文自行從請求串流讀成 byte[]
 //           本文超過 11 MB（11×1024×1024 byte）直接回 413 E15、不轉送（Content-Length 已超過時不讀本文）
 //           GET／POST 查詢字串一律原樣轉送；二進位下載的 Content-Type、Content-Disposition 隨 header 照抄回傳
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：後端位址組合 key 改讀 infra.manager.domain.path（原 im.acct.insp.domain.path；專案改名 infra_manager）
 // ============================================================
 
 import java.io.IOException;
@@ -42,8 +45,8 @@ import org.springframework.web.util.UriUtils;
 
 /**
  * 各 Controller 共用的後端呼叫：組後端 URL、原樣帶 Authorization／Content-Type、byte[] 原樣送出與回傳。
- * 不解析 payload、不驗 token；後端位址只讀 host.properties 的組合 key {@code im.acct.insp.domain.path}
- * （變更單 #2：key 名稱由使用者訂，原範本的 backend.api.domain.path 已改名）。
+ * 不解析 payload、不驗 token；後端位址只讀 host.properties 的組合 key {@code infra.manager.domain.path}
+ * （變更單 #2：key 名稱由使用者訂，原範本的 backend.api.domain.path 已改名；2026-10-16 隨專案改名由 im.acct.insp.domain.path 改為現名）。
  * 殼 jar 的 multipart 解析已關閉（application.properties 的 spring.servlet.multipart.enabled=false），
  * 所以 multipart 本文會完整留在請求串流裡，由這裡原樣轉給後端。
  */
@@ -65,7 +68,7 @@ public class BackendForwarder {
 	/** 後端 API 根位址：host.properties 的組合 key（domain＋port＋path），不得寫死在程式 */
 	private final String backendApi;
 
-	public BackendForwarder(RestTemplate restTemplate, @Value("${im.acct.insp.domain.path}") String backendApi) {
+	public BackendForwarder(RestTemplate restTemplate, @Value("${infra.manager.domain.path}") String backendApi) {
 		this.restTemplate = restTemplate;
 		this.backendApi = backendApi;
 	}

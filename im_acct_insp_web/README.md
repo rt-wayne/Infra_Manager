@@ -10,9 +10,9 @@
 **請先讀完本檔再動手。**
 
 1. `com.mpx.common.web` 底下（目前只有 `RestTemplateConfig`，含其測試）任何檔案都**不可修改**；`com.mpx.Application` 也不要改。
-2. 頁面只呼叫**自己殼 jar** 的 `/im_acct_insp_web/api/v1/...`，不可直接打後端 API 或其他網站。
+2. 頁面只呼叫**自己殼 jar** 的 `/infra_manager_web/api/v1/...`，不可直接打後端 API 或其他網站。
 3. 殼 jar 的 Controller **只做呼叫後端與回傳**：**不解析 payload**、**不開 CrossOrigin**；業務邏輯放後端 API。
-4. 後端 URL **只從 `config\host.properties` 的組合 key `im.acct.insp.domain.path` 取得**，不得寫死在程式；換環境只改 host.properties（第 6 節）。
+4. 後端 URL **只從 `config\host.properties` 的組合 key `infra.manager.domain.path` 取得**，不得寫死在程式；換環境只改 host.properties（第 6 節）。
 5. 這兩包都沒有 SQL、沒有 DB 設定；要查資料就在後端 API 加端點，再由這裡的 Controller 呼叫。
 6. **範本不含任何範例程式，照第 3 節片段新增檔案即可，不需刪檔**；佔位檔（`package-info.java`、`.gitkeep`）留著不影響建置。
 
@@ -31,7 +31,7 @@
 | `im_acct_insp_web\src\main\resources\` | `application.properties`、`config\host.properties`、`logback-spring.xml` | 可改值 |
 | `im_acct_insp_web\src\frontend\` | 前端 build 產物（由 `npm run build` 寫入，不進 git）；平時只有 `.gitkeep` | 不要手改 |
 | `im_acct_insp_web_frontend\src\types\` | API 請求／回應型別；目前只有佔位用的 `.gitkeep` | 新增功能時新增 |
-| `im_acct_insp_web_frontend\src\api\` | `http.ts`（axios 實例，baseURL `/im_acct_insp_web/api/v1`）；各功能的 API 函式新增在這裡 | 新增功能時新增 |
+| `im_acct_insp_web_frontend\src\api\` | `http.ts`（axios 實例，baseURL `/infra_manager_web/api/v1`）；各功能的 API 函式新增在這裡 | 新增功能時新增 |
 | `im_acct_insp_web_frontend\src\views\` | 畫面；目前只有佔位用的 `.gitkeep` | 自由新增 |
 | `im_acct_insp_web_frontend\src\router\index.ts` | 路由（hash 模式），`routes` 目前是空陣列 | 新增畫面時加一筆 |
 | `im_acct_insp_web_frontend\src\composables\useToast.ts` | toast 通知（查詢失敗提示用） | 可沿用 |
@@ -71,7 +71,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * 頁面打 /im_acct_insp_web/api/v1/item/...，由這裡呼叫後端 API 並把回應原樣回傳。
+ * 頁面打 /infra_manager_web/api/v1/item/...，由這裡呼叫後端 API 並把回應原樣回傳。
  * 不解析 payload：請求與回應本文都以 byte[] 接，原樣轉送，不重新序列化；後端欄位變動時本檔不需改。
  * 不開 CrossOrigin：頁面與殼 jar 同源，無跨域需求。
  */
@@ -86,14 +86,14 @@ public class ItemController {
 	private final RestTemplate restTemplate;
 
 	/** 後端 API 根位址：host.properties 的組合 key（domain＋port＋path），不得寫死在程式 */
-	@Value("${im.acct.insp.domain.path}")
+	@Value("${infra.manager.domain.path}")
 	private String backendApi;
 
 	public ItemController(RestTemplate restTemplate) {
 		this.restTemplate = restTemplate;
 	}
 
-	/** 查詢：呼叫後端 <im.acct.insp.domain.path>/item/search */
+	/** 查詢：呼叫後端 <infra.manager.domain.path>/item/search */
 	@PostMapping("/search")
 	public ResponseEntity<byte[]> search(@RequestBody byte[] body) {
 		String path = "/item/search";
@@ -112,7 +112,7 @@ public class ItemController {
 		}
 	}
 
-	/** 清單：呼叫後端 <im.acct.insp.domain.path>/item/list */
+	/** 清單：呼叫後端 <infra.manager.domain.path>/item/list */
 	@GetMapping("/list")
 	public ResponseEntity<byte[]> list() {
 		String path = "/item/list";
@@ -170,12 +170,12 @@ export interface Item {
 import http from './http'
 import type { Item, ItemSearchRequest } from '../types/item'
 
-/** 查詢：POST /im_acct_insp_web/api/v1/item/search；失敗時 Promise reject，由畫面提示 */
+/** 查詢：POST /infra_manager_web/api/v1/item/search；失敗時 Promise reject，由畫面提示 */
 export function searchItems(payload: ItemSearchRequest): Promise<Item[]> {
   return http.post<Item[]>('/item/search', payload).then(r => r.data)
 }
 
-/** 清單：GET /im_acct_insp_web/api/v1/item/list */
+/** 清單：GET /infra_manager_web/api/v1/item/list */
 export function listItems(): Promise<Item[]> {
   return http.get<Item[]>('/item/list').then(r => r.data)
 }
@@ -381,7 +381,7 @@ describe('ItemView', () => {
 
 | 檔案 | 內容 |
 |---|---|
-| `im_acct_insp_web\src\main\resources\application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path`（＝`/im_acct_insp_web`，前端 `base`、`http.ts` 的 `baseURL` 都以此為前綴） |
+| `im_acct_insp_web\src\main\resources\application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path`（＝`/infra_manager_web`，前端 `base`、`http.ts` 的 `baseURL` 都以此為前綴） |
 | `im_acct_insp_web\src\main\resources\config\host.properties` | 後端 API 位址（下表四個 key）；Controller 以 `@PropertySource("classpath:config/host.properties")` 載入 |
 
 ### host.properties 的四個 key
@@ -390,11 +390,11 @@ describe('ItemView', () => {
 |---|---|---|
 | `backend.api.domain` | 協定＋主機 | `http://<api-host>` |
 | `backend.api.port` | 冒號＋port；走協定預設 port 時留空 | `:<port>` |
-| `im.acct.insp.path` | 後端 API 的根路徑（含後端的 context-path），以 `/` 開頭、結尾不加 `/` | `/<backend-context-path>/api/v1` |
-| `im.acct.insp.domain.path` | 組合 key，值固定為 `${backend.api.domain}${backend.api.port}${im.acct.insp.path}`，**不要改** | 組合結果 `http://<api-host>:<port>/<backend-context-path>/api/v1` |
+| `infra.manager.path` | 後端 API 的根路徑（含後端的 context-path），以 `/` 開頭、結尾不加 `/` | `/<backend-context-path>/api/v1` |
+| `infra.manager.domain.path` | 組合 key，值固定為 `${backend.api.domain}${backend.api.port}${infra.manager.path}`，**不要改** | 組合結果 `http://<api-host>:<port>/<backend-context-path>/api/v1` |
 
 - 組合規則：三段**直接串接**，不會自動補 `:` 或 `/`，所以 port 要含冒號、path 要以 `/` 開頭；Controller 再接上以 `/` 開頭的功能路徑（例 `/item/search`）。
-- **程式只讀組合 key** `im.acct.insp.domain.path`（`@Value("${im.acct.insp.domain.path}")`），不要在程式裡讀前三個 key 自己拼，也不要把位址寫死。
+- **程式只讀組合 key** `infra.manager.domain.path`（`@Value("${infra.manager.domain.path}")`），不要在程式裡讀前三個 key 自己拼，也不要把位址寫死。
 - 四個 key 名稱固定、都要保留（值可空）：被 `${}` 引用的 key 不存在時殼 jar 會啟動失敗；值留空時能啟動，呼叫 API 時才失敗（回 500）。
 - 本機、UAT、正式環境**只改這個檔的值、不改程式**；檔案打包在 jar 內，改完要重新建置。
 
@@ -425,7 +425,7 @@ describe('ItemView', () => {
 - 前端 axios timeout（120 秒，`http.ts`）與殼 jar 的 read timeout（120 秒，`RestTemplateConfig`）一致，改一邊就要改另一邊。
 - 後端錯誤或連不上時，Controller 記 log 後 rethrow，殼 jar 回 Spring 預設的 500；前端一律提示「查詢失敗，請稍後再試」，**不得把失敗顯示成「查無資料」**。
 - 殼 jar 不會自動把瀏覽器的 cookie／header 帶給後端（第 6 節「cookie 與 header」）。
-- log 落點 `/home/tomcat/log/im_acct_insp_web/im_acct_insp_web.yyyy-MM-dd.log`（Windows 依啟動磁碟機）。Controller 自己的 log 只記方法、路徑與例外類別，不記 payload；rethrow 後 Spring 預設的錯誤 log 仍含完整後端 URL 與堆疊，後端回 4xx／5xx 時含後端回應內容。
+- log 落點 `/home/tomcat/log/infra_manager_web/infra_manager_web.yyyy-MM-dd.log`（Windows 依啟動磁碟機）。Controller 自己的 log 只記方法、路徑與例外類別，不記 payload；rethrow 後 Spring 預設的錯誤 log 仍含完整後端 URL 與堆疊，後端回 4xx／5xx 時含後端回應內容。
 - 不內建登入、選店或與外框頁面的整合；需要時由專案自行加。
 - 真檔（`*.properties`）、`node_modules`、`coverage`、build 產物都不進 git。
 
@@ -435,10 +435,10 @@ describe('ItemView', () => {
 - [ ] 新功能都是新增檔案（照第 3 節片段），沒有刪除範本既有檔與佔位檔。
 - [ ] 沒有修改 `com.mpx.common.web`（`RestTemplateConfig`）與 `com.mpx.Application`。
 - [ ] 新 Controller 放在 `com.mpx.im_acct_insp_web` 底下，注入 `RestTemplate` 呼叫後端、本文以 `byte[]` 接並原樣回傳、回傳前去掉 `Content-Length`／`Transfer-Encoding`／`Connection`；不解析 payload、沒有 CrossOrigin。
-- [ ] 後端位址只用 `@Value("${im.acct.insp.domain.path}")` 取得，程式裡沒有寫死的主機、port 或路徑前綴。
+- [ ] 後端位址只用 `@Value("${infra.manager.domain.path}")` 取得，程式裡沒有寫死的主機、port 或路徑前綴。
 - [ ] 失敗時記 log（路徑、例外類別，不含 payload）後 rethrow，沒有吞掉例外。
 - [ ] 若後端需要登入資訊，已自行決定 Cookie／Authorization 的處理方式（範本不處理）。
-- [ ] API 型別放在 `src\types\`，前端只透過 `api/http.ts` 打 `/im_acct_insp_web/api/v1`。
+- [ ] API 型別放在 `src\types\`，前端只透過 `api/http.ts` 打 `/infra_manager_web/api/v1`。
 - [ ] 沒有 `any`（或已註明原因）；`npm run type-check` 通過。
 - [ ] 查詢失敗走 toast，不顯示成「查無資料」；清單每頁 20 筆；1024 寬無橫向捲軸。
 - [ ] 新增的 properties key 已同步寫進 `PRD.md`「環境設定」表並通知專案負責人；沒有把真檔或真實位址加進 git。

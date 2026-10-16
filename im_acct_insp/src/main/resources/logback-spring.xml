@@ -9,12 +9,13 @@
 	          變更單 #2：不再由 spring.application.name 間接取得專案名，LOG_DIR 與檔名直接寫專案名；
 	          產生器建專案時換成新專案名，手動複製者改 LOG_DIR 與 fileNamePattern 兩處；spring.application.name 不再影響 log 落點
 	          jdk25：移除 scan／scanPeriod（設定檔在 jar 內無法監看，Boot 4 的 logback 會印 WARN）
+	          2026-10-16 BACKLOG 第 68 項批 1（Claude Opus 5.5）：專案改名 infra_manager，LOG_DIR 與檔名改新名
 	============================================================
 -->
 <configuration debug="false">
 
     <!-- 專案名直接寫在 LOG_DIR 與 fileNamePattern 兩處；產生器建專案時會換成新專案名 -->
-    <property name="LOG_DIR" value="/home/tomcat/log/im_acct_insp"/>
+    <property name="LOG_DIR" value="/home/tomcat/log/infra_manager"/>
     <property name="PATTERN_FORMAT" value="%d [%thread] [%logger{36}] %-5level - %msg%n"/>
 
     <!--輸出到 Console-->
@@ -27,7 +28,7 @@
     <!--輸出到檔案-->
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_DIR}/im_acct_insp.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${LOG_DIR}/infra_manager.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>

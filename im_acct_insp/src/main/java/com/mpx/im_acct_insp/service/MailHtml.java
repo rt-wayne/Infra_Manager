@@ -13,6 +13,9 @@ package com.mpx.im_acct_insp.service;
 // AI版本  : Claude Fable 5.1 (claude-fable-5-1)
 // 修改日期: 2026-10-13
 // 變更說明: BACKLOG 第 46 項 S2：新增前端路徑 PATH_EMG（#/emergency，連結文字「緊急存取」）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：設定鍵改為 infra.manager.mail.site-url（專案改名 infra_manager）；信件內的系統名稱 SITE_NAME 不變
 // ============================================================
 
 import java.net.URI;
@@ -52,7 +55,7 @@ public class MailHtml {
 	private final String siteUrl;
 	private final Clock clock;
 
-	public MailHtml(@Value("${im.acct.insp.mail.site-url:}") String siteUrl, Clock clock) {
+	public MailHtml(@Value("${infra.manager.mail.site-url:}") String siteUrl, Clock clock) {
 		this.siteUrl = normalize(siteUrl);
 		this.clock = clock;
 	}
@@ -70,13 +73,13 @@ public class MailHtml {
 		}
 		String lower = u.toLowerCase(Locale.ROOT);
 		if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
-			log.warn("寄信：im.acct.insp.mail.site-url 不是 http:// 或 https:// 開頭，信件不放「前往系統」連結");
+			log.warn("寄信：infra.manager.mail.site-url 不是 http:// 或 https:// 開頭，信件不放「前往系統」連結");
 			return "";
 		}
 		// 用 authority 判斷有無主機（getHost 遇到含底線的主機名會回 null）；不記原值（網址可能帶帳號密碼）
 		URI uri = parse(u);
 		if (uri == null || uri.getRawAuthority() == null || uri.getRawAuthority().isBlank()) {
-			log.warn("寄信：im.acct.insp.mail.site-url 格式不正確或沒有主機（例如含空白、雙引號），信件不放「前往系統」連結");
+			log.warn("寄信：infra.manager.mail.site-url 格式不正確或沒有主機（例如含空白、雙引號），信件不放「前往系統」連結");
 			return "";
 		}
 		u = stripSlash(u);

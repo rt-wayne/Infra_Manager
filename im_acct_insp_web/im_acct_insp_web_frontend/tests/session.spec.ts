@@ -16,6 +16,9 @@
 //           從上一頁快取還原（pageshow persisted）也反應；回傳的函式可移除監聽
 //           同日審查後：還原時 token 與通知值跟離開（pagehide）時相同就不反應；
 //           非快取還原（persisted=false）不反應；還原時讀不到 localStorage 視為有變
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：baseURL 與 localStorage key 改 infra_manager_web（專案改名）
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
@@ -70,7 +73,7 @@ describe('token 與 http', () => {
     await http.get('/me', { adapter: adapter(200, {}, seen) })
     expect(seen.cfg?.headers.get('Authorization')).toBe('Bearer tok-123')
     expect(seen.cfg?.headers.get('X-User-Id')).toBeUndefined()
-    expect(seen.cfg?.baseURL).toBe('/im_acct_insp_web/api/v1')
+    expect(seen.cfg?.baseURL).toBe('/infra_manager_web/api/v1')
   })
 
   it('沒有 token 時不帶 Authorization', async () => {
@@ -118,7 +121,7 @@ describe('token 與 http', () => {
         return Promise.resolve({ data: [], status: 200, statusText: 'OK', headers: {}, config })
       }
     })
-    expect(url).toBe('/im_acct_insp_web/api/v1/accounts/lookup?acctName=a%5B1%5D%20b%26c%3D%25&catgId=DB')
+    expect(url).toBe('/infra_manager_web/api/v1/accounts/lookup?acctName=a%5B1%5D%20b%26c%3D%25&catgId=DB')
     expect(serializeParams({ 'k[]': ['x', 'y'], n: null })).toBe('k%5B%5D=x&k%5B%5D=y')
   })
 })
@@ -145,12 +148,12 @@ describe('跨分頁同步（watchOtherTabs）', () => {
   it('其他分頁換 token、發身分變更通知或 clear() 時執行 onChange；其他 key 與 sessionStorage 不理', () => {
     const onChange = vi.fn()
     unwatch = watchOtherTabs(onChange)
-    fire('im_acct_insp_web.token')
-    fire('im_acct_insp_web.identityChanged')
+    fire('infra_manager_web.token')
+    fire('infra_manager_web.identityChanged')
     fire(null)
     expect(onChange).toHaveBeenCalledTimes(3)
     fire('other.app.key')
-    fire('im_acct_insp_web.token', sessionStorage)
+    fire('infra_manager_web.token', sessionStorage)
     expect(onChange).toHaveBeenCalledTimes(3)
   })
 
@@ -169,7 +172,7 @@ describe('跨分頁同步（watchOtherTabs）', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     // 快取期間其他分頁切換身分（token 沒變、通知值變）
     window.dispatchEvent(new Event('pagehide'))
-    localStorage.setItem('im_acct_insp_web.identityChanged', 'x')
+    localStorage.setItem('infra_manager_web.identityChanged', 'x')
     firePageShow(true)
     expect(onChange).toHaveBeenCalledTimes(2)
     // 狀態有變但不是從上一頁快取還原（一般載入）：不理
@@ -208,7 +211,7 @@ describe('跨分頁同步（watchOtherTabs）', () => {
   it('移除監聽後不再反應', () => {
     const onChange = vi.fn()
     watchOtherTabs(onChange)()
-    fire('im_acct_insp_web.token')
+    fire('infra_manager_web.token')
     firePageShow(true)
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -233,8 +236,8 @@ describe('useSession', () => {
     await s.login('0000001', 'pw')
     expect(login).toHaveBeenCalledWith('0000001', 'pw')
     expect(getToken()).toBe('tok-new')
-    expect(localStorage.getItem('im_acct_insp_web.token')).toBe('tok-new')
-    expect(sessionStorage.getItem('im_acct_insp_web.token')).toBeNull()
+    expect(localStorage.getItem('infra_manager_web.token')).toBe('tok-new')
+    expect(sessionStorage.getItem('infra_manager_web.token')).toBeNull()
     expect(s.userName.value).toBe('Kevin (李凱鈞)')
 
     await s.logout()
@@ -279,11 +282,11 @@ describe('useSession', () => {
     expect(s.canImpersonate.value).toBe(true)
 
     const before = s.viewKey.value
-    expect(localStorage.getItem('im_acct_insp_web.identityChanged')).toBeNull()
+    expect(localStorage.getItem('infra_manager_web.identityChanged')).toBeNull()
     const stay = await s.impersonate('0000010', () => s.can('ACC_LIST_FULL'))
     expect(impersonate).toHaveBeenCalledWith('0000010')
     // 寫了身分變更通知，其他分頁會收到 storage 事件
-    const signal1 = localStorage.getItem('im_acct_insp_web.identityChanged')
+    const signal1 = localStorage.getItem('infra_manager_web.identityChanged')
     expect(signal1).toBeTruthy()
     expect(stay).toBe(false)
     expect(s.viewKey.value).toBe(before)
@@ -296,7 +299,7 @@ describe('useSession', () => {
     expect(stay2).toBe(true)
     expect(s.viewKey.value).toBe(before + 1)
     // 切回也通知，且值與上次不同（值相同時瀏覽器不觸發 storage 事件）
-    expect(localStorage.getItem('im_acct_insp_web.identityChanged')).not.toBe(signal1)
+    expect(localStorage.getItem('infra_manager_web.identityChanged')).not.toBe(signal1)
     expect(s.impersonating.value).toBe(false)
   })
 })

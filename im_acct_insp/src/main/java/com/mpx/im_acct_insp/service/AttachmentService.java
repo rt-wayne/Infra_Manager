@@ -19,6 +19,10 @@ package com.mpx.im_acct_insp.service;
 // 變更說明: 檢查順序對齊前端選檔檢查：副檔名 E14 → 大小 E15 → 空檔視同未上傳 → 檔名欄寬 → 檔頭 E14
 //           （原為空檔 → 大小 → 副檔名）；空檔但副檔名不符改回 E14，沒選檔（無檔名的空 part）仍視同未上傳。
 //           超過 multipart 上限（預設 10 MB）的檔案在進入本方法前即由框架回 413 E15，此處的大小檢查僅在上限調高時生效
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：設定鍵改為 infra.manager.attach.dir（原 im.acct.insp.attach.dir），
+//           錯誤訊息範例路徑改為 D:/home/infra_manager/attach（專案改名 infra_manager）
 // ============================================================
 
 import java.io.IOException;
@@ -61,7 +65,7 @@ public class AttachmentService {
 
 	private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
 
-	static final String KEY_ATTACH_DIR = "im.acct.insp.attach.dir";
+	static final String KEY_ATTACH_DIR = "infra.manager.attach.dir";
 	static final int FILE_NAME_MAX = 255;
 	static final Map<String, String> MIME = Map.of(
 			"pdf", "application/pdf",
@@ -91,7 +95,7 @@ public class AttachmentService {
 
 	/** 寫法錯誤時的 ERROR log／例外訊息（不含設定值） */
 	static final String MSG_ATTACH_DIR_INVALID = KEY_ATTACH_DIR
-			+ " 必須是絕對路徑，Windows 請用 / 或 \\\\，例：D:/home/im_acct_insp/attach";
+			+ " 必須是絕對路徑，Windows 請用 / 或 \\\\，例：D:/home/infra_manager/attach";
 
 	@PostConstruct
 	void validateAttachDir() {

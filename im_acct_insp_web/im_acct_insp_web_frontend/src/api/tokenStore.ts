@@ -11,11 +11,15 @@
 //           watchOtherTabs（其他分頁換 token、清 token 或發通知時，本分頁整頁重新整理成新身分；
 //           從上一頁快取還原時也重新整理，避免漏接凍結期間的通知）
 //           同日審查後：上一頁快取還原時，只有 token 或通知值跟離開時不同才重新整理（身分沒變時保留填到一半的表單）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：localStorage key 前綴改 infra_manager_web（專案改名）；換版時舊 key 的 token
+//           讀不到，所有人須重新登入一次（舊 key 留在瀏覽器無害，不另清除）
 // ============================================================
 
-const KEY = 'im_acct_insp_web.token'
+const KEY = 'infra_manager_web.token'
 /** 身分變更通知；值每次不同（storage 事件只在值改變時觸發），內容無意義 */
-const SIGNAL_KEY = 'im_acct_insp_web.identityChanged'
+const SIGNAL_KEY = 'infra_manager_web.identityChanged'
 
 /** 目前 token；沒有或無法讀 localStorage 時回空字串 */
 export function getToken(): string {

@@ -11,6 +11,9 @@ package com.mpx.im_acct_insp_web.controller;
 //           POST /requests、/resubmit、/exec-done 改為 multipart（form＋docFile／proofFile），其餘 POST 為 JSON；
 //           殼 jar 一律不解析，本文與 Content-Type（含 boundary）由 BackendForwarder 原樣轉送、超過 11 MB 回 413；
 //           改傳 HttpServletRequest（Authorization 原樣轉送），不再接 X-User-Id 與 @RequestBody
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：說明註解的網址前綴改 /infra_manager_web（專案改名 infra_manager），程式未動
 // ============================================================
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,7 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 頁面打 /im_acct_insp_web/api/v1/requests/...，原樣轉給後端同路徑。
+ * 頁面打 /infra_manager_web/api/v1/requests/...，原樣轉給後端同路徑。
  * 不解析 payload（multipart 也不解析）、不開 CrossOrigin。
  */
 @RestController

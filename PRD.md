@@ -1,7 +1,7 @@
-# im_acct_insp 帳號權限管理／機房巡檢系統
+# infra_manager 帳號權限管理／機房巡檢系統
 
-> 系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
-> 遠端倉庫：https://github.com/rt-wayne/infra_manager.git（2026-10-16 由 `im_acct_insp` 改名；程式內名稱改名中，見 `BACKLOG.md` 第 68 項）
+> 專案名稱 `infra_manager`，舊名 `im_acct_insp`。網址、jar、log、設定鍵已用新名；目錄、Java 套件與 DB 腳本檔名仍為舊名，本文件中的這些路徑照實際寫舊名。本功能分批施工中，進度見 `BACKLOG.md` 第 68 項。系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
+> 遠端倉庫：https://github.com/rt-wayne/infra_manager.git
 > 待辦見 `BACKLOG.md`；版本與變更歷史見 `CHANGELOG.md`；建置、設定、啟動與 DB 維護步驟見 `SETUP.md`。
 
 ## 專案概述
@@ -385,7 +385,7 @@
 - 否則寄一封給每位資訊治理（GOV）成員：列出所有已逾期帳號（單號、類別、帳號名稱、使用人、到期日、逾期天數，依到期日排序）；0 筆仍寄，內文 U13。不含已停用或已刪除帳號。週一漏跑則該週第一次執行補寄。
 - 無任何收件人時記 WARN log，結果照常成功。筆數＝列出的帳號數。
 
-**J03 緊急存取逾期通知**（預設每 15 分鐘；`im.acct.insp.job.j03.cron` 設 `-` 可單獨停用，仍受總開關管）
+**J03 緊急存取逾期通知**（預設每 15 分鐘；`infra.manager.job.j03.cron` 設 `-` 可單獨停用，仍受總開關管）
 
 - 以基準時間點算狀態（與清單、明細同一套算法），找出「逾期未補核准、且通知紀錄沒有（EMG_OVERDUE、該單號）任何一筆」的單，依補核准期限、單號排序，逐張寄 EMG_OVERDUE 給所有 EMG_DECIDE 持有人。寄前以同一基準時間點重讀該單，主管已處理（或單不存在）就略過，不計筆數也不算失敗。
 - 每案一次：該單號已有任何 EMG_OVERDUE 紀錄（成功、失敗、略過）就不再寄；失敗不自動重寄，要補寄得先刪紀錄（操作見 `SETUP.md` 第 6 節第 10 段）。通知紀錄的建立者＝SYSTEM。
@@ -630,15 +630,15 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 
 | 程式 | 路徑 | 技術 | 負責 | 不做 |
 |---|---|---|---|---|
-| 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/im_acct_insp`，API 根 `/im_acct_insp/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
-| 殼 jar | `im_acct_insp_web\im_acct_insp_web\` | Spring Boot；context `/im_acct_insp_web` | 提供前端靜態頁；把 `/im_acct_insp_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
+| 後端 API | `im_acct_insp\` | Spring Boot 4.1.1、Java 25、Maven Wrapper（Maven 3.9.16）、Jackson 3（`tools.jackson`）；context `/infra_manager`，API 根 `/infra_manager/api/v1` | 登入與 token、權限、資料範圍、業務規則、SQL、交易、附件存檔、排程、通知紀錄 | 畫面 |
+| 殼 jar | `im_acct_insp_web\im_acct_insp_web\` | Spring Boot；context `/infra_manager_web` | 提供前端靜態頁；把 `/infra_manager_web/api/v1/...` 原樣轉送到後端（Authorization、查詢字串、JSON、multipart 原始位元組、二進位下載；後端狀態碼與本文原樣回） | 不連 DB、不驗 token、不解析 payload、不開 CORS；本文超過 11 MB 直接回 413 E15 |
 | 前端 | `im_acct_insp_web\im_acct_insp_web_frontend\` | Vue 3.5＋TypeScript、Vite 8、Vitest、axios；Node 24 以上 | 畫面、送出前驗證、依權限碼顯示導覽與按鈕 | 最終權限判斷 |
 | DB | — | Oracle 19c，schema RD_USER | 本模組 23 張表 | — |
 
 ```
 瀏覽器（token 存 localStorage、各分頁共用，每個請求帶 Authorization: Bearer）
-  → 殼 jar /im_acct_insp_web/api/v1/...（RestTemplate 原樣轉送；連線逾時 5 秒、讀取逾時 120 秒）
-  → 後端 /im_acct_insp/api/v1/...（驗 token → 權限 → 業務 → SQL；UAT 中間經 Apache 轉發，見 SETUP.md 第 8 節）
+  → 殼 jar /infra_manager_web/api/v1/...（RestTemplate 原樣轉送；連線逾時 5 秒、讀取逾時 120 秒）
+  → 後端 /infra_manager/api/v1/...（驗 token → 權限 → 業務 → SQL；UAT 中間經 Apache 轉發，見 SETUP.md 第 8 節）
   → Oracle RD_USER
 ```
 
@@ -648,15 +648,15 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 - **時間**：業務時間由應用程式 Clock（Asia/Taipei）產生並以參數綁定寫入，SQL 不用 SYSDATE；比較日期時去掉時分秒。
 - **密碼**：PBKDF2WithHmacSHA256、salt 16 bytes、迭代 310,000、輸出 32 bytes，存成 `PBKDF2$310000$base64(salt)$base64(hash)`，常數時間比對。產生雜湊用 `tools\PwdHashTool.java`（`SETUP.md`）。
 - **token**：32 bytes 亂數，base64url 回前端；DB 只存 SHA-256（16 進位小寫 64 碼）。驗證通過即更新最後存取時間（節流為每分鐘最多寫一次）。閒置上限（`AcctConst.TOKEN_IDLE_MINUTES = TOKEN_MAX_HOURS * 60`，要縮短時改成分鐘數字）、8 小時、5 次與雜湊參數皆為程式常數。log 不記密碼、token、雜湊值。
-- **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/im_acct_insp/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
-- **安全標頭**：殼 jar `/im_acct_insp_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；`<style>` 區塊與行內程式仍不放行）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/im_acct_insp_web` 未加斜線時的 302 轉址、`/im_acct_insp_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
+- **API 不快取**：後端 `/api/**`（context 內路徑，即完整網址 `/infra_manager/api/**`）回應一律帶 `Cache-Control: no-store`（殼 jar 照抄給瀏覽器），避免按上一頁時讀到硬碟快取裡的舊身分，也不讓個資留在硬碟快取。Spring 找處理者之前就失敗的 405／406／415 與上傳超限 413 不帶（都是 POST 或前端不會發的請求）。
+- **安全標頭**：殼 jar `/infra_manager_web` 底下的所有回應（畫面、靜態檔、轉送後端的 API 回應、錯誤回應）一律帶 `Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; style-src-attr 'unsafe-inline'`（只准載入本站的程式、樣式、圖片與連線；HTML 的 style 屬性放行，因為附件以 blob 網址開新分頁時沿用本站 CSP，瀏覽器內建的 PDF／圖片檢視頁靠 style 屬性排版，被擋時 Edge 的 PDF 只剩約 150px 高、圖片不置中；`<style>` 區塊與行內程式仍不放行）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`；後端回應若帶同名標頭以後端為準。Tomcat 在進入應用程式前就送出的回應不帶（開 `/infra_manager_web` 未加斜線時的 302 轉址、`/infra_manager_web` 以外路徑的 404），兩者都沒有可執行內容。不帶 HSTS（正式環境改走 HTTPS 後再加，見 BACKLOG 第 34 項）。前端若引入外站資源、行內程式、`<style>` 區塊或 data: 圖片，要同步放寬 CSP：改 `SecurityHeadersConfig` 的 `CSP`、`SecurityHeadersConfigTest` 的預期值（測試刻意寫死字串，CSP 被誤改時才抓得到）與本段的值，否則畫面會被瀏覽器擋下。
 - **已知限制——允許任何網站嵌入**：依使用者裁示（2026-10-11）不帶 X-Frame-Options 與 frame-ancestors，任何網站都能用 iframe 嵌入本系統。新版瀏覽器（約 Chrome／Edge 115、Firefox 103 起）會把框內的 localStorage 依外層網站的「站」（同協定＋同一個可註冊網域，不看 port）分開存放：
   - 與本系統同站的網站嵌入時，框內沿用使用者原本的登入，可直接誘騙使用者在框內點擊（例如簽核按鈕）。同站範圍依開系統的網址而定：用 IP 或單段主機名開時，是同一台主機的其他服務（含其他 port）；用完整網域名（如 `xxx.pxmart.com.tw`）開時，是同協定、同屬 `pxmart.com.tw` 的網站。
   - 不同站的網站嵌入時，框內拿不到原本的登入；但外站仍可誘導使用者在框內重新登入，之後 token 留在「外站那一份」，8 小時內再造訪該外站時框內仍是登入狀態，可接著誘騙點擊，門檻較高。
   - 舊版瀏覽器或被企業政策關閉分開存放時，任何網站嵌入都能沿用原本的登入。
   - 本段為依瀏覽器行為推論，瀏覽器版本未查證，未實測。
 - **前端狀態**：`/me` 與代碼表由 `composables/useSession.ts` 共用；代碼表快取到登出、401 或重新登入時清除（`resetSession`）。
-- **log**：後端寫 `/home/tomcat/log/im_acct_insp/`、殼 jar 寫 `/home/tomcat/log/im_acct_insp_web/`（Windows 為啟動所在磁碟的同路徑），保留 30 天。
+- **log**：後端寫 `/home/tomcat/log/infra_manager/`（檔名 `infra_manager.yyyy-MM-dd.log`）、殼 jar 寫 `/home/tomcat/log/infra_manager_web/`（檔名 `infra_manager_web.yyyy-MM-dd.log`）（Windows 為啟動所在磁碟的同路徑），保留 30 天。
 - **DB 共用硬規則**：RD_USER 與既有「機房異動申請」模組共用；既有模組的表（IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等）本模組不可建立、刪除、修改或在程式引用；重疊概念一律另建 IM_ACCT_ 前綴的新表，人員一律參照 IM_ACCT_USER。
 
 **後端主要程式**（`im_acct_insp\src\main\java\com\mpx\im_acct_insp\`）
@@ -669,7 +669,7 @@ Vue 單頁應用，經瀏覽器操作。左側導覽、頁首、主內容三區�
 | dao | `UserDao`、`PermDao`、`LoginTokenDao`、`AdminLogDao`、`CodeDao`、`AcctDao`、`AcctReqDao`（帶條件狀態轉移 UPDATE）、`AcctHistDao`、`AttachDao`、`NotifyLogDao`、`JobRunDao`、`HomeDao`、`InspDao`（整體狀態 CASE SQL）、`DocSeqDao`、`DaoSupport` |
 | tools | `PwdHashTool`：從主控台讀密碼（不回顯、不收命令列參數）輸出 PWD_HASH 字串 |
 
-**前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/im_acct_insp_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
+**前端主要程式**（`im_acct_insp_web_frontend\src\`）：`api\http.ts`（axios，baseURL `/infra_manager_web/api/v1`，401 清 token）、`api\tokenStore.ts`（localStorage，key `infra_manager_web.token`、`infra_manager_web.identityChanged`；跨分頁同步 `watchOtherTabs`，`main.ts` 啟動時掛上）、`router\index.ts`（路由與 meta.need 權限碼）、`composables\useSession.ts`、`layouts\AppLayout.vue`（頁首、導覽）、`views\*View.vue`（各畫面）、`components\*Modal.vue`（各彈窗）、`utils\requestForm.ts`（表單模型與送出前驗證）、`utils\labels.ts`（代碼中文、狀態文字、操作人顯示）、`utils\attach.ts`（前端附件檢查）、`utils\perms.ts`、`utils\codes.ts`。
 
 **殼 jar**：`BackendForwarder` 共用轉送（去掉長度類 header；log 不記 Authorization 與本文）；7 個 Controller 路徑與後端一一對應，只呼叫 BackendForwarder；`config\SecurityHeadersConfig` 以過濾器為所有回應加安全標頭。
 
@@ -1035,7 +1035,7 @@ END
 
 ### API 規格
 
-後端根路徑 `/im_acct_insp/api/v1`；經殼 jar 為 `/im_acct_insp_web/api/v1`，路徑一一對應。以下各 API 路徑都省略根路徑。
+後端根路徑 `/infra_manager/api/v1`；經殼 jar 為 `/infra_manager_web/api/v1`，路徑一一對應。以下各 API 路徑都省略根路徑。
 
 **通則**
 
@@ -1197,23 +1197,23 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 | 檔案 | key | 用途 |
 |---|---|---|
-| `application.properties` | `spring.application.name` | Spring 專案名（不影響 log 落點） |
+| `application.properties` | `spring.application.name` | Spring 專案名，值 `infra_manager`（不影響 log 落點） |
 | | `server.port` | 後端監聽 port |
-| | `server.servlet.context-path` | 網址前綴，固定 `/im_acct_insp`（API 根 `/im_acct_insp/api/v1`）；UAT 的 Apache 轉發保留此前綴，少了會回 404 |
+| | `server.servlet.context-path` | 網址前綴，固定 `/infra_manager`（API 根 `/infra_manager/api/v1`）；UAT 的 Apache 轉發保留此前綴，少了會回 404 |
 | | `spring.servlet.multipart.max-file-size`、`spring.servlet.multipart.max-request-size` | 附件單檔與請求上限（未設定時程式預設 10MB／11MB） |
 | | `server.tomcat.max-swallow-size` | 讓超大附件能正常回 413，而不是被 Tomcat 直接斷線 |
 | | `spring.mail.host`、`spring.mail.port`、`spring.mail.properties.mail.smtp.*` | SMTP 主機、port、連線／讀取／寫入逾時；host 留空＝不實際寄信、只寫 log |
 | `config\host.properties` | `rt-api.domain`、`db.connect.api.port`、`db.connect.api.path` | DB 連線資訊 API 的協定＋主機、port、路徑 |
 | | `db.connect.api.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留（值可空） |
 | `config\database.properties` | `itflow.db.alias` | 本模組 23 張表所在 DB 的別名（連線資訊 API 認得的名稱）；所有 DAO 讀這個 key |
-| `config\environment.properties` | `im.acct.insp.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
-| | `im.acct.insp.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
-| | `im.acct.insp.job.j01.cron`、`im.acct.insp.job.j02.cron`、`im.acct.insp.job.j03.cron` | J01、J02、J03 觸發時間（Spring 六欄 cron，Asia/Taipei；設 `-` 可單獨停用該支） |
-| | `im.acct.insp.job.allow-base-date` | 是否允許手動執行時指定 baseDate（測試環境用） |
-| | `im.acct.insp.mail.from` | 寄件人；留空＝不實際寄信、只寫 log |
-| | `im.acct.insp.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
-| | `im.acct.insp.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
-| | `im.acct.insp.mail.site-url` | 系統網址（使用者開的前端網址，含 context，例 `http://主機:8787/im_acct_insp_web/`），信末「前往系統」連結用；留空＝不放連結；不是 `http://`／`https://` 開頭、格式不正確或沒有主機（含空白、雙引號等）時視同留空、啟動記 WARN；`#` 之後、結尾 `index.html` 與斜線會去掉 |
+| `config\environment.properties` | `infra.manager.attach.dir` | 附件根目錄絕對路徑（必填）；未設定或非絕對路徑時後端啟動失敗 |
+| | `infra.manager.job.enabled` | 是否啟用排程（關閉時手動 API 仍可用） |
+| | `infra.manager.job.j01.cron`、`infra.manager.job.j02.cron`、`infra.manager.job.j03.cron` | J01、J02、J03 觸發時間（Spring 六欄 cron，Asia/Taipei；設 `-` 可單獨停用該支） |
+| | `infra.manager.job.allow-base-date` | 是否允許手動執行時指定 baseDate（測試環境用） |
+| | `infra.manager.mail.from` | 寄件人；留空＝不實際寄信、只寫 log |
+| | `infra.manager.mail.allow-list` | 寄送名單（逗號分隔工號，半形或全形逗號皆可）；留空＝誰都不寄 |
+| | `infra.manager.mail.send-to-all` | true＝忽略寄送名單、寄給所有收件人（預設 false） |
+| | `infra.manager.mail.site-url` | 系統網址（使用者開的前端網址，含 context，例 `http://主機:8787/infra_manager_web/`），信末「前往系統」連結用；留空＝不放連結；不是 `http://`／`https://` 開頭、格式不正確或沒有主機（含空白、雙引號等）時視同留空、啟動記 WARN；`#` 之後、結尾 `index.html` 與斜線會去掉 |
 
 `environment.properties` 不存在時後端仍可啟動、缺 key 用程式預設值（附件根目錄除外）。
 
@@ -1221,10 +1221,10 @@ keyword 以 LIKE 比對 EMG_ID、APPLY_BY_NAME、TARGET_DESCR（跳脫同上）�
 
 | 檔案 | key | 用途 |
 |---|---|---|
-| `application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path` | 專案名、監聽 port、context（`/im_acct_insp_web`） |
+| `application.properties` | `spring.application.name`、`server.port`、`server.servlet.context-path` | 專案名（`infra_manager_web`）、監聽 port、context（`/infra_manager_web`） |
 | | `spring.servlet.multipart.enabled` | 須為關閉，multipart 本文才會原樣轉送給後端 |
 | | `server.tomcat.max-swallow-size` | 同後端 |
-| `config\host.properties` | `backend.api.domain`、`backend.api.port`、`im.acct.insp.path` | 後端 API 的協定＋主機（不帶 port）、port、根路徑（含後端 context，`/im_acct_insp/api/v1`，以 / 開頭、結尾不加 /） |
-| | `im.acct.insp.domain.path` | 由上面三個 key 組合，程式只讀這個；四個 key 都要保留 |
+| `config\host.properties` | `backend.api.domain`、`backend.api.port`、`infra.manager.path` | 後端 API 的協定＋主機（不帶 port）、port、根路徑（含後端 context，`/infra_manager/api/v1`，以 / 開頭、結尾不加 /） |
+| | `infra.manager.domain.path` | 由上面三個 key 組合（`${backend.api.domain}${backend.api.port}${infra.manager.path}`），程式只讀這個；四個 key 都要保留 |
 
-**前端**：無環境變數；API baseURL 固定為 `/im_acct_insp_web/api/v1`（與殼 jar 同源）。
+**前端**：無環境變數；API baseURL 固定為 `/infra_manager_web/api/v1`（與殼 jar 同源）。

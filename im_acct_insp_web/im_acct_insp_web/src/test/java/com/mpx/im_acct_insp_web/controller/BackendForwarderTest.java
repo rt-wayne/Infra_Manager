@@ -12,6 +12,9 @@ package com.mpx.im_acct_insp_web.controller;
 //           新增：multipart Content-Type（含 boundary）與二進位本文原樣轉、POST 查詢字串轉送、無本文不帶 Content-Type、
 //           二進位下載 Content-Type／Content-Disposition 照抄且去掉 Content-Length／Transfer-Encoding／Connection、
 //           本文超過 11 MB 回 413 E15 且不呼叫後端（宣告長度超過、chunked 實際超過兩種）、剛好 11 MB 照轉
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：模擬瀏覽器請求的網址改 /infra_manager_web（專案改名 infra_manager）
 // ============================================================
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,14 +64,14 @@ class BackendForwarderTest {
 	}
 
 	private static MockHttpServletRequest browser(String method, String query) {
-		MockHttpServletRequest req = new MockHttpServletRequest(method, "/im_acct_insp_web/api/v1/x");
+		MockHttpServletRequest req = new MockHttpServletRequest(method, "/infra_manager_web/api/v1/x");
 		req.setQueryString(query);
 		return req;
 	}
 
 	/** 模擬 chunked 上傳：不宣告長度 */
 	private static MockHttpServletRequest chunked(byte[] body) {
-		MockHttpServletRequest req = new MockHttpServletRequest("POST", "/im_acct_insp_web/api/v1/x") {
+		MockHttpServletRequest req = new MockHttpServletRequest("POST", "/infra_manager_web/api/v1/x") {
 			@Override
 			public long getContentLengthLong() {
 				return -1;

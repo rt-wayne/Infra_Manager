@@ -8,6 +8,8 @@
 	          validate 階段把 src/frontend（前端 build 產物）複製到 target/classes/static
 	          artifactId / name / description 內的 im_acct_insp_web 由產生器換成專案名
 	          jdk25 階段 3（規格 D-33、D-36、§15.2）：Spring Boot 4.1.1、Java 25；starter 改 webmvc＋restclient＋test
+	          2026-10-16 BACKLOG 第 68 項批 1（Claude Opus 5.5）：專案改名，artifactId／name／description 改 infra_manager_web
+	          （jar 檔名隨之變成 infra_manager_web-0.0.1-SNAPSHOT.jar）
 	============================================================
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -20,11 +22,11 @@
 		<relativePath/>
 	</parent>
 	<groupId>com.mpx</groupId>
-	<artifactId>im_acct_insp_web</artifactId>
+	<artifactId>infra_manager_web</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<packaging>jar</packaging>
-	<name>im_acct_insp_web</name>
-	<description>im_acct_insp_web - Spring Boot web shell (serves Vue build, forwards /api/v1 to backend API)</description>
+	<name>infra_manager_web</name>
+	<description>infra_manager_web - Spring Boot web shell (serves Vue build, forwards /api/v1 to backend API)</description>
 	<properties>
 		<java.version>25</java.version>
 	</properties>

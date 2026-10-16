@@ -16,6 +16,9 @@
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-11
 // 變更說明: BACKLOG 第 28 項：token 改存 localStorage（各分頁共用，本檔程式未改）；401 清 token 時其他分頁也會跟著回登入頁
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：baseURL 改 /infra_manager_web/api/v1（隨殼 jar context-path 改名）
 // ============================================================
 import axios from 'axios'
 import { errorMessage } from './errors'
@@ -48,7 +51,7 @@ export function serializeParams(params: Record<string, unknown>): string {
 }
 
 const http = axios.create({
-  baseURL: '/im_acct_insp_web/api/v1',
+  baseURL: '/infra_manager_web/api/v1',
   timeout: 120000,
   paramsSerializer: { serialize: serializeParams }
 })

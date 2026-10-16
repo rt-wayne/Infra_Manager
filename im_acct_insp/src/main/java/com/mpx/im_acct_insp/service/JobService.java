@@ -41,6 +41,10 @@ package com.mpx.im_acct_insp.service;
 //           只有 PARTIAL 且結束紀錄寫成功不帶例外名、整天一封；只套 J03，J01／J02 照舊每次寄；
 //           寄到了（jobFail 回 true）才記為今天已寄，SMTP 故障期間下一輪再寄；
 //           recoverStale 的補記信已以 RUN_ID 去重、不套；重啟後當天可能多一封（接受）
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：設定鍵前綴 im.acct.insp.* 改為 infra.manager.*（job.enabled、job.allow-base-date、
+//           job.j01／j02／j03.cron；專案改名 infra_manager）
 // ============================================================
 
 import java.time.Clock;
@@ -133,8 +137,8 @@ public class JobService {
 
 	public JobService(AcctDao acctDao, AcctHistDao acctHistDao, JobRunDao jobRunDao, NotifyLogDao notifyLogDao, EmgDao emgDao,
 			NotificationService notificationService, PermissionService perm, TransactionTemplate tx, Clock clock,
-			@Value("${im.acct.insp.job.enabled:true}") boolean enabled,
-			@Value("${im.acct.insp.job.allow-base-date:false}") boolean allowBaseDate) {
+			@Value("${infra.manager.job.enabled:true}") boolean enabled,
+			@Value("${infra.manager.job.allow-base-date:false}") boolean allowBaseDate) {
 		this.acctDao = acctDao;
 		this.acctHistDao = acctHistDao;
 		this.jobRunDao = jobRunDao;
@@ -152,17 +156,17 @@ public class JobService {
 	// 觸發
 	// ------------------------------------------------------------
 
-	@Scheduled(cron = "${im.acct.insp.job.j01.cron:0 10 0 * * *}", zone = ZONE)
+	@Scheduled(cron = "${infra.manager.job.j01.cron:0 10 0 * * *}", zone = ZONE)
 	public void scheduledJ01() {
 		scheduled(AcctConst.JOB_J01);
 	}
 
-	@Scheduled(cron = "${im.acct.insp.job.j02.cron:0 0 8 * * *}", zone = ZONE)
+	@Scheduled(cron = "${infra.manager.job.j02.cron:0 0 8 * * *}", zone = ZONE)
 	public void scheduledJ02() {
 		scheduled(AcctConst.JOB_J02);
 	}
 
-	@Scheduled(cron = "${im.acct.insp.job.j03.cron:0 */15 * * * *}", zone = ZONE)
+	@Scheduled(cron = "${infra.manager.job.j03.cron:0 */15 * * * *}", zone = ZONE)
 	public void scheduledJ03() {
 		scheduled(AcctConst.JOB_J03);
 	}

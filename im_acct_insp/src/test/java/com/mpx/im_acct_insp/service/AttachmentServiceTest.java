@@ -13,6 +13,9 @@ package com.mpx.im_acct_insp.service;
 // 修改日期: 2026-10-10
 // 變更說明: 補檢查順序測試（同前端選檔）：超過 10 MB 的 .exe 回 E14、空的 .exe 回 E14、無檔名的空 part 視同未上傳；
 //           檔名超過 255 字時空檔視同未上傳、超過 10 MB 回 E15，皆先於檔名欄寬 E11
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: BACKLOG 第 68 項批 1：設定鍵 infra.manager.attach.dir 與範例路徑 D:/home/infra_manager/attach（專案改名 infra_manager）
 // ============================================================
 
 import static com.mpx.im_acct_insp.service.RequestServiceTest.assertStatus;
@@ -113,14 +116,14 @@ class AttachmentServiceTest {
 
 	@Test
 	void 啟動檢查_空值_相對路徑_單反斜線被吃掉_啟動失敗() {
-		for (String bad : new String[] { "", " ", "attach", "home/im_acct_insp/attach", "D:homeim_acct_inspattach" }) {
+		for (String bad : new String[] { "", " ", "attach", "home/infra_manager/attach", "D:homeinfra_managerattach" }) {
 			AttachmentService s = new AttachmentService(fx.attachDao, fx.acctReqDao, fx.permissionService, fx.codeService, bad);
 			assertThatThrownBy(s::validateAttachDir).as("值=[%s]", bad).isInstanceOf(IllegalStateException.class)
 					.hasMessage(AttachmentService.MSG_ATTACH_DIR_INVALID);
 		}
 		AttachmentService nul = new AttachmentService(fx.attachDao, fx.acctReqDao, fx.permissionService, fx.codeService, null);
 		assertThatThrownBy(nul::validateAttachDir).isInstanceOf(IllegalStateException.class);
-		assertThat(AttachmentService.MSG_ATTACH_DIR_INVALID).contains("im.acct.insp.attach.dir", "絕對路徑", "D:/home/im_acct_insp/attach");
+		assertThat(AttachmentService.MSG_ATTACH_DIR_INVALID).contains("infra.manager.attach.dir", "絕對路徑", "D:/home/infra_manager/attach");
 	}
 
 	@Test
