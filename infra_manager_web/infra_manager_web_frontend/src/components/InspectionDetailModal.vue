@@ -9,6 +9,9 @@
   變更說明: v2.0（開發文件 spec_im_acct_insp_v2.0.md 第 4.14、8.3 節）：列出各項結果（大類／項目用快照名稱）、
             異常項目的處理資訊（處理人依 4.14：有代理身分顯示「{代理}（實際操作人：{實際}）」）；
             巡檢人員同規則；「標記已處理」只對有 INSP_RESOLVE 者顯示，處理方式必填（E10）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：處理說明輸入框上方加可見標籤「處理方式與結果 *」（原本只有 placeholder）
 -->
 <template>
   <BaseModal :title="`巡檢紀錄 — ${inspId}`" :sub="subText" wide @close="emit('close')">
@@ -29,7 +32,8 @@
               ✓ 已處理（{{ r.fixDate || '—' }}，{{ personText(r.fixByName, r.fixActAsName) }}）：{{ r.fixDescr }}
             </div>
             <div v-else-if="canResolve" class="fix-box">
-              <textarea v-model="notes[r.inspItemId]" rows="2" placeholder="請說明處理方式與結果" :aria-label="`${r.itemNameSnap} 處理方式與結果`"></textarea>
+              <label :for="`fix-${r.inspItemId}`" class="fix-label">處理方式與結果<span class="req-mark" title="必填">*</span></label>
+              <textarea :id="`fix-${r.inspItemId}`" v-model="notes[r.inspItemId]" rows="2" placeholder="請說明處理方式與結果" :aria-label="`${r.itemNameSnap} 處理方式與結果`"></textarea>
               <button type="button" class="btn btn-ok fix-btn" :disabled="busy" @click="fix(r.inspItemId)">標記已處理</button>
             </div>
           </template>
@@ -123,4 +127,5 @@ onMounted(load)
 .result-item .tag { font-size: 15px; }
 .fixed { margin-top: 4px; color: var(--green); font-size: 17px; }
 .fix-box { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.fix-label { color: var(--gray); font-size: 17px; }
 </style>

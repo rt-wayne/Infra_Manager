@@ -4,6 +4,9 @@
   變更說明: 新增：切換身分彈窗（開發文件 spec_im_acct_insp_v2.0.md 第 2.5、8.2 節）
             名單來自 GET /users（STATUS＝1、不含自己，實際使用者需 SYS_IMPERSONATE）；選人後 emit select，由版面呼叫切換
             名單載入失敗只 toast（U09），不顯示成沒有人可選
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：「切換為」標籤後加紅色 *
 -->
 <template>
   <BaseModal title="切換身分" sub="切換後畫面與權限完全等同所選的人；所有操作同時記錄您本人與代理身分。" close-text="取消" @close="emit('close')">
@@ -11,7 +14,7 @@
     <template v-else-if="users">
       <div v-if="users.length === 0" class="hint">目前沒有可切換的使用者</div>
       <div v-else class="field">
-        <label for="impTarget">切換為</label>
+        <label for="impTarget">切換為<span class="req-mark" title="必填">*</span></label>
         <select id="impTarget" v-model="target">
           <option value="" disabled>請選擇使用者</option>
           <option v-for="u in users" :key="u.userId" :value="u.userId">{{ optionText(u) }}</option>

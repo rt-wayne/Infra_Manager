@@ -22,6 +22,9 @@
   修改日期: 2026-10-13
   變更說明: BACKLOG 第 46 項 S6 回合 2：底部加「異常結案」（EMG_DECIDE、已退回、尚未結案；裁示⑥），開 EmergencyCloseModal（S6-④）；
             結案成功或 409 時與回報同一處理（關子彈窗、重載明細、emit changed）；結案彈窗開著時同樣忽略主彈窗關閉
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：退回原因的「必填」改為紅色 *
 -->
 <template>
   <BaseModal :title="`緊急存取 — ${emgId}`" :sub="subText" wide @close="closeMain">
@@ -112,7 +115,7 @@
 
   <BaseModal v-if="d && returning" :title="`退回 — ${emgId}`" sub="請填寫退回原因，將通知申請人；回報有帳號異動時，各帳號會標記審查異常。" close-text="取消" @close="closeSub">
     <div class="field">
-      <label for="emg-return-reason">退回原因（必填，500 字內）</label>
+      <label for="emg-return-reason">退回原因<span class="req-mark" title="必填">*</span>（500 字內）</label>
       <textarea id="emg-return-reason" v-model="returnReason" rows="3" placeholder="請填寫退回原因"></textarea>
       <div class="hint" :class="{ warn: reasonCount > REASON_MAX }">{{ reasonCount }} / {{ REASON_MAX }}</div>
     </div>

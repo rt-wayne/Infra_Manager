@@ -7,11 +7,15 @@
             回報只能一次、主管處理後不能再回報（⑧），彈窗副標寫明；不另開確認框。
             成功 toast 後 emit done；409（已回報、已處理或版本不符）toast 後同樣 emit done，由詳情彈窗關閉本彈窗並重載。
             送出中忽略關閉（同詳情彈窗：避免卸載後 emit 被丟掉）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：回報結果的「（必選）」改為紅色 *；回報說明有異動時標紅色 *、沒有異動時維持「選填」；
+            有異動時帳號選取器上方加「異動的帳號 *」
 -->
 <template>
   <BaseModal :title="`回報 — ${emg.emgId}`" :sub="MSG_SUB" wide close-text="取消" @close="close">
     <div class="field">
-      <label>回報結果（必選）</label>
+      <label>回報結果<span class="req-mark" title="必填">*</span></label>
       <div class="radio-row">
         <label><input v-model="typeCode" type="radio" name="emg-report-type" value="NONE" class="type-none" /> {{ EMG_REPORT_LABEL.NONE }}</label>
         <label><input v-model="typeCode" type="radio" name="emg-report-type" value="MODIFIED" class="type-modified" /> {{ EMG_REPORT_LABEL.MODIFIED }}</label>
@@ -19,12 +23,15 @@
     </div>
 
     <div class="field">
-      <label for="emg-report-descr">回報說明（{{ typeCode === 'MODIFIED' ? '必填' : '選填' }}，{{ DESCR_MAX }} 字內）</label>
+      <label for="emg-report-descr">回報說明<span v-if="typeCode === 'MODIFIED'" class="req-mark" title="必填">*</span>（{{ typeCode === 'MODIFIED' ? '' : '選填，' }}{{ DESCR_MAX }} 字內）</label>
       <textarea id="emg-report-descr" v-model="descr" rows="3" :placeholder="typeCode === 'MODIFIED' ? '請說明做了哪些異動' : '可補充說明（選填）'"></textarea>
       <div class="hint" :class="{ warn: descrCount > DESCR_MAX }">{{ descrCount }} / {{ DESCR_MAX }}</div>
     </div>
 
-    <EmgAcctPicker v-if="typeCode === 'MODIFIED'" v-model="picked" />
+    <div v-if="typeCode === 'MODIFIED'" class="field picker-field">
+      <label>異動的帳號<span class="req-mark" title="必填">*</span>（1～20 個）</label>
+      <EmgAcctPicker v-model="picked" />
+    </div>
 
     <template #actions>
       <button type="button" class="btn btn-primary confirm-report" :disabled="busy" @click="submit">{{ busy ? '送出中…' : '送出回報' }}</button>

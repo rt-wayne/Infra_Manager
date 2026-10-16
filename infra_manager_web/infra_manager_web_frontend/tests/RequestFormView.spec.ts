@@ -27,6 +27,10 @@
 // 修改日期: 2026-10-12
 // 變更說明: BACKLOG 第 42 項：申請類型提示依 ACC_LIST_FULL 切換（無權限不提帳號列表），以整句比對鎖定文字；
 //           補依操作鎖定類型、退件重送兩種提示的整句測試
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: 必填欄位醒目提醒：新增、門禁卡新增、停用三種情境的紅色 * 位置與 missingFields 一致，到期日 * 隨有效期限類型出現；
+//           停用／刪除原因欄名比對含 *
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -179,6 +183,36 @@ describe('RequestFormView', () => {
     expect(payload).not.toHaveProperty('applyTelNo')
     expect(payload).not.toHaveProperty('applyEmail')
     expect(payload).not.toHaveProperty('attachFileName')
+    w.unmount()
+  })
+
+  it('必填標示：新增時與 missingFields 同一組欄位標紅色 *，到期日 * 隨「指定到期日」出現；上方有圖例', async () => {
+    /** 有標紅色 * 的欄位 id（含本人確認勾選） */
+    const marked = (w: VueWrapper): string[] =>
+      w.findAll('label[for]').filter(l => l.find('.req-mark').exists()).map(l => l.attributes('for') as string)
+    const w = await mountForm()
+    expect(w.find('.req-legend').text()).toBe('* 為必填欄位')
+    expect(marked(w)).toEqual(['applyDept', 'catgId', 'acctName', 'sysName', 'holderName', 'applyReason'])
+    expect(w.find('.check-box.confirm .req-mark').exists()).toBe(true)
+    // 有效期限類型（無 for 的群組標籤）恆標；到期日只在指定到期日時標
+    expect(w.findAll('label').some(l => l.text() === '有效期限類型*')).toBe(true)
+    expect(w.find('label[for=expiryDate] .req-mark').exists()).toBe(false)
+    await w.find('input[name=expiry][value=DATE]').setValue(true)
+    expect(w.find('label[for=expiryDate] .req-mark').exists()).toBe(true)
+
+    // 門禁卡新增：無帳號名稱與所屬系統欄，門禁權限範圍改標
+    await w.find('#catgId').setValue('DOOR')
+    await flushPromises()
+    expect(marked(w)).toEqual(['applyDept', 'catgId', 'doorScope', 'holderName', 'applyReason'])
+    w.unmount()
+  })
+
+  it('必填標示：停用（有部門）只標原因；唯讀的申請單位、鎖定的類別與使用人不標', async () => {
+    useSession().me.value = makeMe({ deptName: '資訊處' })
+    lookupDetailMock.mockResolvedValue(ACCT)
+    const w = await mountForm('/requests/new?reqType=DISABLE&acctId=AR20261001-001&acctName=sa')
+    const marked = w.findAll('label[for]').filter(l => l.find('.req-mark').exists()).map(l => l.attributes('for'))
+    expect(marked).toEqual(['applyReason'])
     w.unmount()
   })
 
@@ -429,7 +463,7 @@ describe('RequestFormView', () => {
     expect(w.find('#accessTarget').exists()).toBe(false)
     expect(w.find('#expiryDate').exists()).toBe(false)
     expect(w.find('input[name=expiry]').exists()).toBe(false)
-    expect(w.find('label[for=applyReason]').text()).toBe('停用原因')
+    expect(w.find('label[for=applyReason]').text()).toBe('停用原因*')
     expect(w.find('.delete-warn').exists()).toBe(false)
     expect((w.find('#holderName').element as HTMLInputElement).disabled).toBe(true)
 
@@ -465,7 +499,7 @@ describe('RequestFormView', () => {
     lookupDetailMock.mockResolvedValue({ ...ACCT, acctStateCode: 'DISABLED' })
     const w = await mountForm('/requests/new?reqType=DELETE&acctId=AR20261001-001&acctName=sa')
     expect(w.find('.delete-warn').text()).toContain('刪除後此帳號將無法再啟用或異動，僅保留歷史紀錄供稽核查詢。')
-    expect(w.find('label[for=applyReason]').text()).toBe('刪除原因')
+    expect(w.find('label[for=applyReason]').text()).toBe('刪除原因*')
     expect(w.find('#expiryDate').exists()).toBe(false)
     await w.find('#isUniqueConf').setValue(true)
     await w.find('#applyDept').setValue('資訊處')

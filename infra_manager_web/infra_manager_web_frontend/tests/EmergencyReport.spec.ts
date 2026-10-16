@@ -10,6 +10,9 @@
 //           加入／重複不加／名稱為空不能加／滿 20 停用並提示／移除
 //           審查第一輪補：只填空白視同未填、碼點能過的案例（300 個 emoji、前後帶空白的 500 個 emoji）、
 //           沒有異動也限 500 字、連點只送一次、回報彈窗開著時忽略詳情彈窗關閉、改帳號說明以新陣列交回
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: 必填欄位醒目提醒：異動時回報說明改以紅色 *（.req-mark）判斷必填、不含「選填」
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -181,7 +184,8 @@ describe('回報彈窗', () => {
     await openReport(w)
     await w.find('.type-modified').setValue()
     expect(w.find('.emg-picker').exists()).toBe(true)
-    expect(w.find('label[for="emg-report-descr"]').text()).toContain('必填')
+    expect(w.find('label[for="emg-report-descr"] .req-mark').exists()).toBe(true)
+    expect(w.find('label[for="emg-report-descr"]').text()).not.toContain('選填')
 
     await w.find('.confirm-report').trigger('click')
     expect(lastToastMsg()).toBe('請加入至少一個受影響帳號')

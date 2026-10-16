@@ -12,20 +12,25 @@
             14 項都選完才能送出（未選完時按鈕停用並顯示尚餘項數）；異常說明必填（E10）；
             巡檢時間預設現在、不可晚於現在（輸入框 max＋送出前檢查）；送出格式 yyyy-MM-dd HH:mm:ss；
             巡檢人員依 4.14 顯示（切換中「{代理}（實際操作人：{實際}）」）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：上方加「* 為必填欄位」；巡檢時間、「二、巡檢項目」標題（每項都要選）加紅色 *；
+            異常說明的「（必填）」改為紅色 *
 -->
 <template>
   <main>
+    <p class="req-legend"><span class="req-mark">*</span> 為必填欄位</p>
     <section class="form-section">
       <h3>一、基本資料</h3>
       <div class="grid2">
         <div class="field"><label for="inspNo">巡檢單號</label><input id="inspNo" type="text" value="（送出後產生）" disabled /></div>
-        <div class="field"><label for="inspDate">巡檢時間</label><input id="inspDate" v-model="inspDate" type="datetime-local" :max="maxDate" /></div>
+        <div class="field"><label for="inspDate">巡檢時間<span class="req-mark" title="必填">*</span></label><input id="inspDate" v-model="inspDate" type="datetime-local" :max="maxDate" /></div>
         <div class="field"><label for="inspector">巡檢人員</label><input id="inspector" type="text" :value="inspectorText" disabled /></div>
       </div>
     </section>
 
     <section v-if="items.length > 0" class="form-section">
-      <h3>二、巡檢項目</h3>
+      <h3>二、巡檢項目<span class="req-mark" title="必填">*</span><span class="items-req">每一項都要選擇結果</span></h3>
       <template v-for="g in groups" :key="g.sectName">
         <div class="divider-lbl">{{ g.sectName }}</div>
         <div
@@ -44,7 +49,7 @@
             </div>
           </div>
           <div v-if="results[it.inspItemId]?.resultCode === 'EXCPT'" class="check-detail">
-            <label :for="`desc-${it.inspItemId}`">異常說明（必填）</label>
+            <label :for="`desc-${it.inspItemId}`">異常說明<span class="req-mark" title="必填">*</span></label>
             <textarea :id="`desc-${it.inspItemId}`" v-model="results[it.inspItemId].excptDescr" rows="2" placeholder="請填寫異常說明"></textarea>
           </div>
         </div>
@@ -174,4 +179,5 @@ onMounted(async () => {
 <style scoped>
 .check-item.unset { border-style: dashed; }
 .unset-count { font-size: 17px; }
+.items-req { margin-left: 8px; font-size: 17px; font-weight: 400; color: var(--gray); }
 </style>

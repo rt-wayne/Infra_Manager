@@ -7,11 +7,14 @@
             結案只能一次，彈窗副標寫明有異動時會寫帳號歷史並標審查異常；不另開確認框。
             成功 toast 後 emit done；409（已結案或版本不符）toast 後同樣 emit done，由詳情彈窗關閉本彈窗並重載。
             送出中忽略關閉（同回報彈窗：避免卸載後 emit 被丟掉）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：結案發現的「（必選）」、結案說明的「必填」改為紅色 *；有異動時帳號選取器上方加「異動的帳號 *」
 -->
 <template>
   <BaseModal :title="`異常結案 — ${emg.emgId}`" :sub="MSG_SUB" wide close-text="取消" @close="close">
     <div class="field">
-      <label>結案發現（必選）</label>
+      <label>結案發現<span class="req-mark" title="必填">*</span></label>
       <div class="radio-row">
         <label><input v-model="resultCode" type="radio" name="emg-close-result" value="NO_CHANGE" class="result-no-change" /> {{ EMG_CLOSE_RESULT_LABEL.NO_CHANGE }}</label>
         <label><input v-model="resultCode" type="radio" name="emg-close-result" value="CHANGED" class="result-changed" /> {{ EMG_CLOSE_RESULT_LABEL.CHANGED }}</label>
@@ -19,12 +22,15 @@
     </div>
 
     <div class="field">
-      <label for="emg-close-descr">結案說明（必填，{{ DESCR_MAX }} 字內）</label>
+      <label for="emg-close-descr">結案說明<span class="req-mark" title="必填">*</span>（{{ DESCR_MAX }} 字內）</label>
       <textarea id="emg-close-descr" v-model="descr" rows="3" :placeholder="descrPlaceholder"></textarea>
       <div class="hint" :class="{ warn: descrCount > DESCR_MAX }">{{ descrCount }} / {{ DESCR_MAX }}</div>
     </div>
 
-    <EmgAcctPicker v-if="resultCode === 'CHANGED'" v-model="picked" />
+    <div v-if="resultCode === 'CHANGED'" class="field picker-field">
+      <label>異動的帳號<span class="req-mark" title="必填">*</span>（1～20 個）</label>
+      <EmgAcctPicker v-model="picked" />
+    </div>
 
     <template #actions>
       <button type="button" class="btn btn-primary confirm-close" :disabled="busy" @click="submit">{{ busy ? '送出中…' : '確認結案' }}</button>

@@ -7,6 +7,9 @@
    AI版本  : Claude Fable 5 (claude-fable-5)
    修改日期: 2026-10-13
    變更說明: BACKLOG 第 46 項 S10：加 .tag-flag（紅色「審查異常」標籤，帳號列表與帳號詳情用）
+   AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+   修改日期: 2026-10-16
+   變更說明: 必填欄位醒目提醒：加 .req-mark（標籤後的紅色「*」）與 .req-legend（表單上方「* 為必填欄位」）
    ============================================================ */
 
 /* ---------- 外框 ---------- */
@@ -118,6 +121,9 @@ input:disabled, select:disabled, textarea:disabled { background: #f1f5f9; color:
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; }
 .field { margin-bottom: 12px; min-width: 0; }
 .field > label { display: block; color: var(--gray); margin-bottom: 4px; }
+/* 必填標示：標籤後紅色星號（title 供滑鼠懸停與報讀「必填」）；表單上方一行圖例 */
+.req-mark { color: var(--red); font-weight: 700; margin: 0 2px; }
+.req-legend { color: var(--gray); font-size: 17px; margin: 0 0 10px; }
 .field input[type=text], .field input[type=date], .field input[type=datetime-local], .field select, .field textarea { width: 100%; }
 .radio-row { display: flex; gap: 6px 18px; flex-wrap: wrap; }
 .radio-row label { display: flex; align-items: center; gap: 6px; font-size: 19px; color: var(--dark); min-height: 40px; }

@@ -10,6 +10,9 @@
             沒有 HTTP 回應（逾時、中斷）或 5xx 時改提示先到清單確認，避免重複送出（審查第 1 項）；
             此提示除 toast 外另在表單上方常駐、附清單連結（複審①②）
             文字欄不設 maxlength（避免貼上時靜默截斷），字數按字元算、超過計數變紅並於送出時擋下（審查第 2、3 項）
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：表單上方加「* 為必填欄位」；帳號類別、預估時長、帳號或系統、緊急事由標籤後加紅色 *
 -->
 <template>
   <main>
@@ -19,16 +22,17 @@
     </div>
     <section class="form-section">
       <h3>緊急存取內容</h3>
+      <p class="req-legend"><span class="req-mark">*</span> 為必填欄位</p>
       <div class="grid2">
         <div class="field">
-          <label for="emgCatg">帳號類別</label>
+          <label for="emgCatg">帳號類別<span class="req-mark" title="必填">*</span></label>
           <select id="emgCatg" v-model="form.catgId">
             <option value="" disabled>請選擇</option>
             <option v-for="c in catgOptions" :key="c.catgId" :value="c.catgId">{{ c.catgName }}{{ c.enabled ? '' : '（停用）' }}</option>
           </select>
         </div>
         <div class="field">
-          <label for="emgHours">預估時長</label>
+          <label for="emgHours">預估時長<span class="req-mark" title="必填">*</span></label>
           <select id="emgHours" v-model.number="form.expectHourQty">
             <option :value="0" disabled>請選擇</option>
             <option v-for="h in HOUR_OPTIONS" :key="h" :value="h">{{ h }} 小時</option>
@@ -40,11 +44,11 @@
         </div>
       </div>
       <div class="field">
-        <label for="emgTarget">帳號或系統<span class="counter" :class="{ over: targetLen > TARGET_MAX }">{{ targetLen }} / {{ TARGET_MAX }}</span></label>
+        <label for="emgTarget">帳號或系統<span class="req-mark" title="必填">*</span><span class="counter" :class="{ over: targetLen > TARGET_MAX }">{{ targetLen }} / {{ TARGET_MAX }}</span></label>
         <input id="emgTarget" v-model="form.targetDescr" type="text" placeholder="例如：ERP 正式機 DB 的 sys 帳號" autocomplete="off" />
       </div>
       <div class="field">
-        <label for="emgReason">緊急事由<span class="counter" :class="{ over: reasonLen > REASON_MAX }">{{ reasonLen }} / {{ REASON_MAX }}</span></label>
+        <label for="emgReason">緊急事由<span class="req-mark" title="必填">*</span><span class="counter" :class="{ over: reasonLen > REASON_MAX }">{{ reasonLen }} / {{ REASON_MAX }}</span></label>
         <textarea id="emgReason" v-model="form.applyReason" rows="4" placeholder="請說明為什麼需要緊急存取、預計做哪些操作"></textarea>
       </div>
       <div class="form-actions">

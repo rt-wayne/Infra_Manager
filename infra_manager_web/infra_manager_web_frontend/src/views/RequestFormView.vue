@@ -42,10 +42,15 @@
   修改日期: 2026-10-12
   變更說明: BACKLOG 第 42 項：新增時申請類型提示（.type-hint）依權限：無 ACC_LIST_FULL 只寫「請從帳號申請單列表」
             （導覽已不顯示「帳號列表」），有權限者照舊「帳號列表或帳號申請單列表」
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：上方加「* 為必填欄位」；必填欄標籤後加紅色 *（.req-mark），條件與 missingFields 一致、
+            隨申請類型／類別／有效期限類型即時出現或消失；唯讀或鎖定欄位不標；本人確認勾選也標
 -->
 <template>
   <main>
     <div v-if="banner" class="section-note">🎯 <span>{{ banner }}</span></div>
+    <p class="req-legend"><span class="req-mark">*</span> 為必填欄位</p>
 
     <section class="form-section">
       <h3>{{ secTitle('basic') }}</h3>
@@ -57,7 +62,7 @@
           <input id="applyTelNo" v-model="form.applyTelNo" type="text" placeholder="例：1234" disabled />
         </div>
         <div class="field">
-          <label for="applyDept">申請單位</label>
+          <label for="applyDept">申請單位<span v-if="!deptLocked" class="req-mark" title="必填">*</span></label>
           <input id="applyDept" v-model="form.applyDept" type="text" placeholder="請填寫申請單位" :disabled="deptLocked" />
         </div>
       </div>
@@ -82,14 +87,14 @@
 
       <div class="grid2">
         <div class="field">
-          <label for="catgId">帳號類別</label>
+          <label for="catgId">帳號類別<span v-if="!catgLocked" class="req-mark" title="必填">*</span></label>
           <select id="catgId" v-model="form.catgId" :disabled="catgLocked">
             <option v-for="c in catgOptions" :key="c.catgId" :value="c.catgId">{{ c.catgName }}</option>
           </select>
           <div v-if="catgDescr" class="hint">{{ catgDescr }}</div>
         </div>
         <div v-if="!doorAdd" class="field">
-          <label for="acctName">{{ isDoor ? '帳號名稱（卡號）' : '帳號名稱' }}</label>
+          <label for="acctName">{{ isDoor ? '帳號名稱（卡號）' : '帳號名稱' }}<span v-if="isAdd && !isDoor" class="req-mark" title="必填">*</span></label>
           <input
             id="acctName"
             v-model="form.acctName"
@@ -104,7 +109,7 @@
       <div v-if="isDoor" class="field door-fields">
         <div class="grid2">
           <div class="field">
-            <label for="doorScope">門禁權限範圍</label>
+            <label for="doorScope">門禁權限範圍<span v-if="!contentLocked" class="req-mark" title="必填">*</span></label>
             <select id="doorScope" v-model="form.doorScopeCode" :disabled="contentLocked">
               <option v-for="o in DOOR_SCOPE_OPTIONS" :key="o.value" :value="o.value">{{ o.label }}</option>
             </select>
@@ -119,7 +124,7 @@
         <div class="hint">ⓘ 機房只有一套門禁管制系統（機房門禁管制系統），不需另外填寫所屬系統/設備名稱。</div>
       </div>
       <div v-else class="field">
-        <label for="sysName">所屬系統/設備名稱</label>
+        <label for="sysName">所屬系統/設備名稱<span v-if="isAdd" class="req-mark" title="必填">*</span></label>
         <input id="sysName" v-model="form.sysName" type="text" placeholder="請填寫所屬系統或設備名稱" :disabled="identityLocked || contentLocked" />
       </div>
 
@@ -151,7 +156,7 @@
       <div class="hint top">服務帳號、廠商帳號的「申請人」與「實際使用人」通常不同，此處需獨立記錄以利稽核追蹤。</div>
       <div class="grid2">
         <div class="field">
-          <label for="holderName">實際使用人 / 保管人
+          <label for="holderName">實際使用人 / 保管人<span v-if="!contentLocked" class="req-mark" title="必填">*</span>
             <button v-if="!contentLocked" type="button" class="btn-link inline same-as" @click="copyApplicant">同申請人</button>
           </label>
           <input id="holderName" v-model="form.holderName" type="text" placeholder="請填寫實際使用人或保管人" :disabled="contentLocked" />
@@ -184,7 +189,7 @@
         <div v-else class="hint top">ⓘ 門禁卡沒有「唯讀／操作／管理員」這種分級，通行範圍已由上方「門禁權限範圍」決定，不需另外填寫。</div>
       </template>
       <div class="field">
-        <label for="applyReason">{{ reasonText.label }}</label>
+        <label for="applyReason">{{ reasonText.label }}<span class="req-mark" title="必填">*</span></label>
         <textarea id="applyReason" v-model="form.applyReason" rows="2" :placeholder="reasonText.placeholder"></textarea>
       </div>
     </section>
@@ -206,14 +211,14 @@
       <h3>{{ secTitle('expiry') }}</h3>
       <div class="grid2">
         <div class="field">
-          <label>有效期限類型</label>
+          <label>有效期限類型<span class="req-mark" title="必填">*</span></label>
           <div class="radio-row">
             <label><input v-model="form.expiryTypeCode" type="radio" name="expiry" value="PERM" /> 永久有效</label>
             <label><input v-model="form.expiryTypeCode" type="radio" name="expiry" value="DATE" /> 指定到期日</label>
           </div>
           <div v-if="suggestExpiry" class="hint warn suggest-expiry">ⓘ {{ MSG_SUGGEST_EXPIRY }}</div>
         </div>
-        <div class="field"><label for="expiryDate">到期日</label><input id="expiryDate" v-model="form.expiryDate" type="date" :min="today" :disabled="form.expiryTypeCode !== 'DATE'" /></div>
+        <div class="field"><label for="expiryDate">到期日<span v-if="form.expiryTypeCode === 'DATE'" class="req-mark" title="必填">*</span></label><input id="expiryDate" v-model="form.expiryDate" type="date" :min="today" :disabled="form.expiryTypeCode !== 'DATE'" /></div>
       </div>
     </section>
 
@@ -233,7 +238,7 @@
 
     <label class="check-box confirm">
       <input id="isUniqueConf" v-model="form.isUniqueConf" type="checkbox" />
-      <span>本人確認：此帳號為唯一識別，僅供本人／指定使用人使用，不會與他人共用或轉借（依存取控制管理程序書 5.3.4 條規定）。</span>
+      <span>本人確認<span class="req-mark" title="必填">*</span>：此帳號為唯一識別，僅供本人／指定使用人使用，不會與他人共用或轉借（依存取控制管理程序書 5.3.4 條規定）。</span>
     </label>
 
     <div class="form-actions">
@@ -346,6 +351,8 @@ const queryAcctName = q('acctName')
 const changeType: ReqTypeCode | null = !resubmitId && isReqType(queryType) && queryType !== 'ADD' && queryAcct ? queryType : null
 
 const isDoor = computed(() => form.catgId === DOOR_CATG_ID)
+/** 新增（含新增單退件重送）：帳號名稱、所屬系統才必填（同 missingFields） */
+const isAdd = computed(() => form.reqTypeCode === 'ADD')
 // 門禁卡新增：卡號待關卡 6 登記，表單不顯示帳號名稱欄（spec 4.9）
 const doorAdd = computed(() => isDoor.value && form.reqTypeCode === 'ADD')
 /** 停用、刪除：只能填申請單位與原因 */

@@ -14,6 +14,9 @@
             門禁卡新增卡號必填（E13）、執行說明選填，改 multipart 送出；
             verifyRejectCnt＞0 時回報與複驗彈窗顯示 U02；退件／複驗退回原因必填（E10）；
             明細彈窗內的按鈕依明細 actions[] 顯示，版本號以明細為準；欄位：單號、類型、標題、申請人、目前關卡、送出時間、操作
+  AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+  修改日期: 2026-10-16
+  變更說明: 必填欄位醒目提醒：退件／退回原因、門禁卡號、執行佐證附件標籤的「（必填）」改為紅色 *
 -->
 <template>
   <main>
@@ -105,7 +108,7 @@
     >
       <div v-if="reason.kind === 'verifyReject' && reason.todo.verifyRejectCnt > 0" class="note-box warn verify-hint">⚠️ {{ verifyRejectHint(reason.todo.verifyRejectReason) }}</div>
       <div class="field">
-        <label for="reason-text">{{ reason.kind === 'reject' ? '退件原因（必填）' : '退回原因（必填）' }}</label>
+        <label for="reason-text">{{ reason.kind === 'reject' ? '退件原因' : '退回原因' }}<span class="req-mark" title="必填">*</span></label>
         <textarea id="reason-text" v-model="reasonText" rows="3" :placeholder="reason.kind === 'reject' ? '請填寫退件原因' : '請填寫退回原因'"></textarea>
       </div>
       <template #actions>
@@ -120,13 +123,13 @@
       <template v-if="execNeedsCard">
         <div class="note-box">ⓘ 請實際持使用人識別證刷過卡鐘讀卡機，讀出卡鐘顯示的卡號後填入下方，卡號將成為此帳號的正式識別。</div>
         <div class="field exec-card">
-          <label for="exec-card">門禁卡號（必填）</label>
+          <label for="exec-card">門禁卡號<span class="req-mark" title="必填">*</span></label>
           <input id="exec-card" v-model="execCardNo" type="text" placeholder="請填寫卡鐘顯示的卡號" autocomplete="off" />
         </div>
       </template>
       <div v-else-if="execIsDoor" class="note-box">ⓘ 此為既有門禁卡的{{ label(REQ_TYPE_LABEL, exec.reqTypeCode) }}操作，不需要重新刷卡取號；請附上門禁系統操作截圖作為佐證。</div>
       <div class="field">
-        <label for="exec-file">執行佐證附件（必填，限 .pdf .doc .docx .jpg .png，10 MB 以內）</label>
+        <label for="exec-file">執行佐證附件<span class="req-mark" title="必填">*</span>（限 .pdf .doc .docx .jpg .png，10 MB 以內）</label>
         <input id="exec-file" ref="execFileInput" type="file" :accept="ATTACH_ACCEPT" @change="onExecFile" />
         <div v-if="execFile" class="hint exec-file-name">已選擇：{{ execFile.name }}（{{ fileSizeText(execFile.size) }}）</div>
       </div>

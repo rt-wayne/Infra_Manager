@@ -7,6 +7,9 @@
 //           結案彈窗：結案發現必選（未選時提示文字不偏向任一種）、結案說明兩種都必填（只填空白視同未填）、
 //           沒有異動不帶帳號、有異動須有帳號、字數按碼點、去頭尾空白（剛好 500 可送、501 擋）；切換結果保留已選帳號但「沒有異動」不送；成功 toast＋關彈窗＋重載＋emit changed；
 //           一般錯誤留在彈窗；409 關彈窗並重載；送出中忽略關閉、連點只送一次；結案彈窗開著時忽略詳情彈窗關閉
+// AI版本  : Claude Opus 5.5 (claude-opus-5-5)
+// 修改日期: 2026-10-16
+// 變更說明: 必填欄位醒目提醒：結案說明改以紅色 *（.req-mark）判斷必填
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -169,7 +172,7 @@ describe('結案彈窗', () => {
     await w.find('.result-no-change').setValue()
     expect(placeholder()).toBe('請說明如何確認沒有異動')
     expect(w.find('.emg-picker').exists()).toBe(false)
-    expect(w.find('label[for="emg-close-descr"]').text()).toContain('必填')
+    expect(w.find('label[for="emg-close-descr"] .req-mark').exists()).toBe(true)
     await w.find('.confirm-close').trigger('click')
     expect(lastToastMsg()).toBe('請填寫結案說明')
     await w.find('#emg-close-descr').setValue(' 　 ')
