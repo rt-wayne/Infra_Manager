@@ -29,7 +29,7 @@
 //           補依操作鎖定類型、退件重送兩種提示的整句測試
 // AI版本  : Claude Opus 5.5 (claude-opus-5-5)
 // 修改日期: 2026-10-16
-// 變更說明: 必填欄位醒目提醒：新增、門禁卡新增、停用三種情境的紅色 * 位置與 missingFields 一致，到期日 * 隨有效期限類型出現；
+// 變更說明: 必填欄位醒目提醒：新增、門禁卡新增、停用三種情境的紅色 * 位置與 missingFields 一致，到期日 * 隨有效期限類型出現、選回永久有效時消失；
 //           停用／刪除原因欄名比對含 *
 // ============================================================
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -199,6 +199,9 @@ describe('RequestFormView', () => {
     expect(w.find('label[for=expiryDate] .req-mark').exists()).toBe(false)
     await w.find('input[name=expiry][value=DATE]').setValue(true)
     expect(w.find('label[for=expiryDate] .req-mark').exists()).toBe(true)
+    // 選回永久有效：到期日 * 消失（也讓下方門禁卡段只比對類別造成的差異）
+    await w.find('input[name=expiry][value=PERM]').setValue(true)
+    expect(w.find('label[for=expiryDate] .req-mark').exists()).toBe(false)
 
     // 門禁卡新增：無帳號名稱與所屬系統欄，門禁權限範圍改標
     await w.find('#catgId').setValue('DOOR')

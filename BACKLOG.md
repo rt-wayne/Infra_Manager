@@ -14,13 +14,11 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 80 | 使用者 2026-10-16 要求兩個功能，未分階段、兩個功能單位，**兩個都已實作，待階段末審查與測試**：① 必填欄位醒目提醒 ② 帳號列表匯出 xlsx（前端 `write-excel-file` 4.1.1、`npm audit` 0 個漏洞；殼 jar CSP 加 `worker-src 'self' blob:`，使用者裁示，因套件壓縮大檔時以 blob 網址建背景執行緒）。規格見 PRD「畫面說明」必填標示段與 `/accounts` 路由列 | — |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 本任務審查起點：`0d85357`（動工時的 HEAD；工作區乾淨、未做快照）
-- 下一步：同一則訊息平行派 code-reviewer（範圍 `0d85357..HEAD`，含資安審查：CSP 放寬、新套件、匯出資料範圍）與 test-runner（前端 `npm test`、殼 jar `mvnw test`；可行時以殼 jar 開帳號列表實際匯出一次，驗 CSP 下大檔不被擋）
-- 已改動（未 commit）：無
-- 卡住／待確認：全域 hook `~/.claude/hooks/edit-tool-guard.cjs` 第 40 行已依使用者裁示調整（install／patch 只在指令開頭才擋），該目錄不在 git、改動未備份到遠端
+- 下一步：
+- 已改動（未 commit）：
+- 卡住／待確認：
 
 ## 僅記錄未拍板
 
@@ -73,8 +71,14 @@
 | 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 | 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `infra_manager_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。已知線索（2026-10-16）：jar 一律在開發機打包、由使用者人工交給 UAT 負責人；UAT 啟動參數帶 `--spring.config.additional-location=<共用 config 目錄>`，該目錄同名檔**有寫到的鍵**優先於 jar 內的值（逐鍵合併）——若 UAT 共用目錄的 `host.properties` 有那個鍵，改它重啟即可，否則要在開發機改 jar 內那份並重新打包。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
-| 81 | 帳號列表匯出的 ACC_EXPORT 只在前端判斷（決定按鈕顯示），沒有匯出 API、後端不檢查：檔案由瀏覽器用 `/accounts` 已查到的資料產生，那支 API 只檢查 ACC_LIST_FULL。目前只有 ACCT_REGISTRY 同時有兩碼，沒有實際落差；日後把兩碼拆給不同角色（例如只能看不能匯出）時，要改成後端產檔並檢查 ACC_EXPORT。第 80 項使用者裁示 ④A 時登記 | 2026-10-16 | — |
+| 81 | 帳號列表匯出沒有後端參與，兩個缺口：(1) ACC_EXPORT 只在前端判斷（決定按鈕顯示），沒有匯出 API、後端不檢查——檔案由瀏覽器用 `/accounts` 已查到的資料產生，那支 API 只檢查 ACC_LIST_FULL；目前只有 ACCT_REGISTRY 同時有兩碼，沒有實際落差，日後把兩碼拆給不同角色時要改成後端產檔並檢查 ACC_EXPORT。(2) 匯出不寫稽核紀錄，與 `~/.claude/security.md`「批量資料操作（匯出）必須記錄 audit log」衝突：清冊含特權帳號名稱、所屬系統、使用人且可離線流通，外流時查不到誰、何時匯出；補法是後端加輕量 API，前端匯出前呼叫，寫一筆 IM_ACCT_ADMIN_LOG（誰、何時、篩選條件、筆數）。第 80 項使用者裁示 ④A（前端產檔）時登記 (1)；code-reviewer 提出 (2)，使用者 2026-10-16 裁示維持現狀、併入本項 | 2026-10-16 | — |
 | 82 | `PRD.md` 權限碼段「階段 2、3 的權限碼只存在於資料，程式沒有對應功能」與現況不符：EMG_APPLY、EMG_VIEW_ALL、EMG_DECIDE 表上仍標階段 2，但緊急存取已上線（第 46 項）。第 80 項改 ACC_EXPORT 階段時發現，未改 | 2026-10-16 | — |
+| 83 | 帳號匯出 xlsx 公式注入殘留：字串一律寫成文字（sharedStrings），開檔不會執行；但帳號名稱、所屬系統、使用人是自由輸入，使用者在 Excel 對以 `=`／`+`／`-`／`@` 開頭的格子按 F2→Enter 或另存 CSV 再開時會被當公式。較窄修法：這幾欄寫成 `{ value, format: '@' }`（`write-excel-file` 的 `row.js:76` 支援），CSV 路徑仍擋不住。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
+| 84 | 帳號匯出在背景執行緒被擋時會卡在「匯出中…」不報錯：fflate 的 `wk` 只掛 `onmessage` 沒有 `onerror`，CSP 擋下時 Promise 永不結束（test-runner 實測對照組 25 秒逾時、無錯誤）。目前殼 jar CSP 已放行，只在另有更嚴的 CSP（例如 UAT Apache 另加標頭、公司瀏覽器原則）時發生。建議 `exportAccounts` 外包約 30 秒逾時（`Promise.race`）並 toast；同時修正 `SecurityHeadersConfig.java` 註解、PRD「安全標頭」段寫的「匯出失敗」（實際是卡住），以及 `AccountExport.spec.ts` 以 reject 模擬失敗的不真實案例。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
+| 85 | 申請表單必填星號測試只涵蓋新增、門禁卡新增、停用三種；異動（只標未鎖的申請單位、使用人、原因、有效期限）、門禁卡異動（門禁範圍有、卡號無）、重新啟用、新增單退件重送（類別不標、名稱與系統要標）、刪除都沒測；預期陣列手寫、未從 `missingFields` 推導，「與送出檢查一致」本身沒有被鎖住。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
+| 86 | 帳號列表畫面的帳號名稱、所屬系統、到期日三欄（第 80 項改用 `utils/accountExport.ts` 共用函式）沒有任何畫面測試，「畫面與檔案同一套文字」沒有測試守住（測試只驗檔案內容）。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
+| 87 | 必填星號 `<span class="req-mark" title="必填">*</span>` 的 `title` 多半不會被螢幕報讀器讀出，`app.css` 註解「供報讀必填」不精確；可改星號加 `aria-hidden="true"`＋視覺隱藏的「必填」文字，或在輸入框加 `aria-required`。內部系統，優先度低。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
+| 88 | 「* 為必填欄位」圖例位置不一致：緊急存取表單（`EmergencyFormView.vue:25`）放在區塊內 `<h3>` 下方，申請表單、巡檢表單放在整頁最上方；PRD 寫「三張表單上方」。第 80 項 code-reviewer 提出 | 2026-10-16 | — |
 | 79 | UAT 的附件根目錄（`infra.manager.attach.dir` 的值）目前設在哪、要不要隨改名搬到新目錄名；DB 的 `IM_ACCT_ATTACH.FILE_PATH` 存相對路徑，搬檔＋改設定值即可、不用動資料。改名部署時 SETUP 第 8 節寫「值可以維持原路徑」，不搬也能運作。第 68 項計畫待確認 2，結案時移入 | 2026-10-15 | — |
 
 ## 已拍板不做
