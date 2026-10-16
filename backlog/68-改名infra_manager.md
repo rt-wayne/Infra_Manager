@@ -70,7 +70,7 @@
   - `src\api\tokenStore.ts`（兩個 key）
   - `package.json`／`package-lock.json` 的 name
   - `tests\session.spec.ts`
-- **GitHub**：repo 改名為 `infra_manager`。本機沒有 GitHub CLI（`gh`），改名改由使用者在 GitHub 網頁 Settings 操作（repo 未封存，Repository name 欄位直接可改）；完成後 Claude 執行 `git remote set-url origin https://github.com/rt-wayne/infra_manager.git` 並 fetch 驗證，PRD 第 4 行同步。以 `curl https://api.github.com/repositories/<repo 編號>` 查名稱（本 repo 編號 1412912882，2026-10-16 查 `api.github.com/repos/rt-wayne/im_acct_insp` 取得）；以名稱查 API 改名後短時間會回 Not Found，是快取
+- **GitHub**：✅ 已於 2026-10-16 提前單獨完成（repo 已是 `rt-wayne/infra_manager`，本機 origin 與 PRD 第 4 行已更新；UAT 建置機不從 GitHub 抓程式，不受影響）。以下為當時做法記錄：repo 改名為 `infra_manager`。本機沒有 GitHub CLI（`gh`），改名改由使用者在 GitHub 網頁 Settings 操作（repo 未封存，Repository name 欄位直接可改）；完成後 Claude 執行 `git remote set-url origin https://github.com/rt-wayne/infra_manager.git` 並 fetch 驗證，PRD 第 4 行同步。以 `curl https://api.github.com/repositories/<repo 編號>` 查名稱（本 repo 編號 1412912882，2026-10-16 查 `api.github.com/repos/rt-wayne/im_acct_insp` 取得）；以名稱查 API 改名後短時間會回 Not Found，是快取
 - **文件**
   - PRD：網址、jar、log、設定鍵、repo 網址；加一句舊名 im_acct_insp
   - SETUP：第 2、3、4、7、8 節，並新增給負責人的「改名部署步驟」

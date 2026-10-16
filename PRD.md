@@ -1,7 +1,7 @@
 # im_acct_insp 帳號權限管理／機房巡檢系統
 
 > 系統現況以本檔為準；原始交付文件（`im_acct_insp_交接文件.md`、`帳號權限管理與機房巡檢_SA文件_v0.5.md`、`im_acct_insp_Table關係圖_v0.2.html`）僅供追溯。
-> 遠端倉庫：https://github.com/rt-wayne/im_acct_insp.git
+> 遠端倉庫：https://github.com/rt-wayne/infra_manager.git（2026-10-16 由 `im_acct_insp` 改名；程式內名稱改名中，見 `BACKLOG.md` 第 68 項）
 > 待辦見 `BACKLOG.md`；版本與變更歷史見 `CHANGELOG.md`；建置、設定、啟動與 DB 維護步驟見 `SETUP.md`。
 
 ## 專案概述
