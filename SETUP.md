@@ -411,18 +411,24 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/j
 專案由 `im_acct_insp` 改名為 `infra_manager`：網址前綴、jar 檔名、log 目錄與設定鍵都換了新名。UAT 從舊版換到這一版時照下列順序做一次；之後的換版回到上方平常流程。
 
 1. **新 jar 與設定檔要在同一次部署一起更新。** 程式只認新設定鍵 `infra.manager.*`，設定檔還是舊鍵 `im.acct.insp.*` 時：有預設值的鍵會默默退回預設、不報錯（例如寄件人變成留空＝只寫 log、不寄信，排程與寄送名單也回到預設）；附件根目錄沒有預設值，讀不到時後端直接啟動失敗。
-2. **建置機的設定檔**（不進 git，打包前確認）：
-   - 後端 `application.properties`：`spring.application.name=infra_manager`、`server.servlet.context-path=/infra_manager`
-   - 殼 jar `application.properties`：`spring.application.name=infra_manager_web`、`server.servlet.context-path=/infra_manager_web`
-   - 改完照第 3、4 節重新打包，產出 `infra_manager-0.0.1-SNAPSHOT.jar` 與 `infra_manager_web-0.0.1-SNAPSHOT.jar`。
-3. **UAT 後端 `config\environment.properties`**：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`）。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。另把 `infra.manager.mail.site-url` 的值改成新前端網址 `http://<主機>:<殼 jar port>/infra_manager_web/`，否則信末「前往系統」連結會指到舊網址。
-4. **UAT 殼 jar `config\host.properties`**：刪掉 `im.acct.insp.path`、`im.acct.insp.domain.path` 兩行，改成：
+2. **建置機的 `application.properties`**（不進 git，打包前改好）：
+   - 後端：`spring.application.name=infra_manager`、`server.servlet.context-path=/infra_manager`
+   - 殼 jar：`spring.application.name=infra_manager_web`、`server.servlet.context-path=/infra_manager_web`
+
+   第 3、4 步的兩個設定檔同樣會打進 jar，要一起改好再到第 5 步打包；先打包再改，jar 裡帶的仍是舊鍵，兩支 jar 都會啟動失敗。
+3. **後端 `config\environment.properties`**（建置機上打進 jar 的那份先改；UAT 共用 config 目錄若另有同名檔，也一併改）：所有 `im.acct.insp.` 開頭的鍵改成 `infra.manager.` 開頭，值不變（例 `im.acct.insp.mail.from=…` → `infra.manager.mail.from=…`）。附件根目錄 `infra.manager.attach.dir` 的值可以維持原路徑，不用搬檔（DB 存的是相對路徑）。另把 `infra.manager.mail.site-url` 的值改成新前端網址 `http://<主機>:<殼 jar port>/infra_manager_web/`，否則信末「前往系統」連結會指到舊網址。
+4. **殼 jar `config\host.properties`**（同第 3 步：建置機那份先改，共用 config 目錄若有同名檔也一併改）：刪掉 `im.acct.insp.path`、`im.acct.insp.domain.path` 兩行，改成：
    ```
    infra.manager.path=/infra_manager/api/v1
    infra.manager.domain.path=${backend.api.domain}${backend.api.port}${infra.manager.path}
    ```
    `backend.api.domain`、`backend.api.port` 不變。
-5. **共用 config 目錄檢查**：`grep -rn "im\.acct\.insp" <共用 config 目錄>` 應無輸出；有的話那幾行一起改成 `infra.manager.` 開頭。context-path 的兩項檢查照上方第二點做，`unzip` 那條應印出 `server.servlet.context-path=/infra_manager`。
+5. **打包與檢查**：照本文件第 3、4 節（後端、殼 jar 的建置）重新打包，產出 `infra_manager-0.0.1-SNAPSHOT.jar` 與 `infra_manager_web-0.0.1-SNAPSHOT.jar`。確認 jar 內已無舊鍵（排除 `#`／`!` 開頭的註解行；只印出現次數、不印設定值），兩條都應印出 `0`：
+   ```bash
+   unzip -p infra_manager-0.0.1-SNAPSHOT.jar BOOT-INF/classes/config/environment.properties | grep -v '^[[:space:]]*[#!]' | grep -c 'im\.acct\.insp'
+   unzip -p infra_manager_web-0.0.1-SNAPSHOT.jar BOOT-INF/classes/config/host.properties | grep -v '^[[:space:]]*[#!]' | grep -c 'im\.acct\.insp'
+   ```
+   共用 config 目錄：`grep -rn "im\.acct\.insp" <共用 config 目錄>` 應無輸出（`#` 開頭的註解行可忽略）；有的話那幾行一起改成 `infra.manager.` 開頭。context-path 的兩項檢查照上方第二點做，`unzip` 那條應印出 `server.servlet.context-path=/infra_manager`。
 6. **Apache 新增轉發規則**：`ProxyPass /infra_manager http://localhost:<後端 port>/infra_manager`；原本若有 `/im_acct_insp` 的 `ProxyPassReverse`，也比照新增一條 `/infra_manager` 的。舊的 `/im_acct_insp` 規則先留著，等第 9 步驗證通過後再移除。
 7. **建立新 log 目錄**：`/home/tomcat/log/infra_manager/`、`/home/tomcat/log/infra_manager_web/`，並給 tomcat 帳號寫入權限。舊 log 留在舊目錄 `/home/tomcat/log/im_acct_insp/`、`/home/tomcat/log/im_acct_insp_web/`，不用搬。
 8. **停掉舊版兩個 jar，改用新 jar 檔名啟動**：啟動指令照本節開頭的格式，只把 jar 換成 `infra_manager-0.0.1-SNAPSHOT.jar`、`infra_manager_web-0.0.1-SNAPSHOT.jar`，port 與其他參數不變。

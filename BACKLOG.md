@@ -14,12 +14,12 @@
 
 | ID | 摘要 | 詳情 |
 |----|------|------|
-| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 施工中 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
+| 68 | 專案改名 im_acct_insp → infra_manager（殼 jar infra_manager_web、前端 infra_manager_web_frontend），分兩批：批 1 對外可見＋設定鍵（網址前綴、jar 名、log 目錄、設定鍵前綴、分頁標題；GitHub repo 已於 2026-10-16 提前改名完成），批 2 內部搬家（目錄、Java 套件、DB 腳本檔名）；DB 表前綴 IM_ 與歷史記錄不動。使用者 2026-10-15 裁示；批 1 已完成（2026-10-16），批 2 未開工 | [backlog/68-改名infra_manager.md](backlog/68-改名infra_manager.md) |
 
 ### 交接狀態（每次停下回報時更新；無進行中項目時三欄留空）
-- 下一步：第 68 項批 1 程式與文件已 commit（2026-10-16）；階段末審查進行中——平行派 code-reviewer（起點 `4fc1f79`）與 test-runner（後端、殼 jar、前端測試＋重新打包啟動實測新網址）。通過後批 1 結案，再請使用者裁示第 68 項待確認 3（批 2 套件改名做法）後開批 2。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署
-- 已改動（未 commit）：後端 `pom.xml`（artifactId／name）、`logback-spring.xml`（LOG_DIR／檔名）、MailConfig、AttachmentService、JobService、MailAllowList、MailHtml 的設定鍵改 `infra.manager.*`（檔頭只加新變更說明、歷史條目原文保留；AppConfig 只有歷史條目提到舊鍵，不改）、測試 MailConfigContextTest、AttachmentServiceTest、JobAndNotifyTest；本機不進版控的後端 `application.properties`（application.name、context-path `/infra_manager`）與 `config\environment.properties`（鍵名改前綴；附件目錄的值刻意維持 `D:/home/im_acct_insp/attach`，目錄內有既有附件）。回合 2：殼 jar `pom.xml`、`logback-spring.xml`、BackendForwarder 與 package-info 的組合 key 改 `infra.manager.domain.path`、8 支 Controller 說明註解網址、BackendForwarderTest；本機殼 jar `application.properties`（context-path `/infra_manager_web`）與 `config\host.properties`（`infra.manager.path=/infra_manager/api/v1`）；前端 `vite.config.ts`（base、dev proxy；outDir 留批 2）、`http.ts`、`index.html`（標題「Infra Manager」）、`tokenStore.ts`、`package.json`／`package-lock.json`、`session.spec.ts`。四個本機設定檔改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）。程式改完但**尚未重新打包**，本機要重新 build 兩個 jar（前端先 `npm run build`）後才會用新網址；測試尚未跑
-- 卡住／待確認：無
+- 下一步：第 68 項批 1 已結案（2026-10-16，審查必須修正已修、測試全過）。批 2（內部搬家：目錄、Java 套件、DB 腳本檔名）動工前先請使用者裁示詳情檔待確認 3（套件改名做法）；開工時記下本階段起點。UAT 由負責人照 SETUP 第 8 節「改名部署步驟」部署（時程由負責人決定）
+- 已改動（未 commit）：無。本機不進版控的 4 個設定檔（後端 `application.properties`、`config\environment.properties`，殼 jar `application.properties`、`config\host.properties`）已改新名，改前原檔備份在 scratchpad `config-backup-68\`（換 session 會消失）；本機兩支 jar 已重新打包為新檔名
+- 卡住／待確認：UAT 兩支 jar 實際讀的 `environment.properties`、`host.properties` 是打進 jar 的那份還是共用 config 目錄的同名檔（需向 UAT 負責人確認；SETUP 修正寫法兩種情況都涵蓋，不卡修正）
 ## 僅記錄未拍板
 
 | ID | 摘要 | 提出日 | 詳情 |
@@ -69,6 +69,8 @@
 | 70 | `PRD.md` 第 11 行與第 660 行（DB 共用硬規則）把 IM_USER、IM_ROLE、IM_USER_ROLE_MAP、IM_APPR*、IM_ATTACH 等表寫成同 schema「既有『機房異動申請』模組」的表；實際上那些是開發 Infra_Manager_Java 時建的、沒有任何系統在用（原 Infra_Manager 資料存 JSON 檔，使用者 2026-10-15 說明）。「本模組不可建立、刪除、修改或引用」的規則目前無害，整併（第 69 項）開工時要改寫。第 69 項 architect 評估時發現 | 2026-10-15 | — |
 | 71 | `im_acct_insp\README.md` 第 10 節（業務程式概要）表格「排程」列只寫「J01、J02 的 cron」，漏了 J03（`infra.manager.job.j03.cron`）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
 | 72 | BACKLOG 項目以行號指涉 SETUP 位置已漂移：第 44 項寫「`SETUP.md` 第 71 行」（`npm run build` 那行實為第 69 行）、第 64 項寫「`SETUP.md` 第 26 行」（郵件主機名稱實為第 22 行）；第 68 項批 1 文件同步時 doc-writer 發現，未改 | 2026-10-16 | — |
+| 73 | `SETUP.md` 第 8 節「改名部署步驟」第 6 步新增 Apache `ProxyPass` 後沒寫要重載 Apache（例如 `apachectl -t` 檢查語法後重載，實際指令依 UAT 環境），第 9 步「移除舊規則」同樣；漏做時驗證會出現「直連通、經 Apache 404」，負責人會誤以為規則寫錯。第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
+| 74 | `SETUP.md` 第 8 節「改完 `host.properties` 要重啟殼 jar」（暗示不用重新打包）與 `im_acct_insp_web\README.md` 第 399 行「打包在 jar 內，改完要重新建置」互相矛盾；要先向 UAT 負責人確認 UAT 實際讀 jar 內那份還是共用 config 目錄的同名檔，再統一說法。批 1 之前就存在，第 68 項批 1 階段末 code-reviewer 發現 | 2026-10-16 | — |
 
 ## 已拍板不做
 
